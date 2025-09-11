@@ -3,31 +3,43 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-gray-700;
-  }
-
   body {
-    @apply bg-gray-900 text-gray-100;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Custom scrollbar styles */
-  ::-webkit-scrollbar {
+  /* Custom scrollbar styles - Dark */
+  .dark ::-webkit-scrollbar {
     @apply w-2 h-2;
   }
 
-  ::-webkit-scrollbar-track {
+  .dark ::-webkit-scrollbar-track {
     @apply bg-gray-800;
   }
 
-  ::-webkit-scrollbar-thumb {
+  .dark ::-webkit-scrollbar-thumb {
     @apply bg-gray-600 rounded;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
+  .dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+
+  /* Custom scrollbar styles - Light */
+  .light ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  .light ::-webkit-scrollbar-track {
+    @apply bg-gray-200;
+  }
+
+  .light ::-webkit-scrollbar-thumb {
+    @apply bg-gray-400 rounded;
+  }
+
+  .light ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-500;
   }
 
@@ -56,22 +68,38 @@
     @apply outline-none;
   }
 
-  *:focus-visible {
+  .dark *:focus-visible {
     @apply ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900;
+  }
+  
+  .light *:focus-visible {
+    @apply ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
   }
 }
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900;
+    @apply px-4 py-2 rounded font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+  }
+  
+  .dark .btn {
+    @apply focus-visible:ring-offset-gray-900;
+  }
+  
+  .light .btn {
+    @apply focus-visible:ring-offset-white;
   }
 
   .btn-primary {
     @apply bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500;
   }
 
-  .btn-secondary {
+  .dark .btn-secondary {
     @apply bg-gray-700 text-gray-100 hover:bg-gray-600 focus-visible:ring-gray-500;
+  }
+  
+  .light .btn-secondary {
+    @apply bg-gray-200 text-gray-900 hover:bg-gray-300 focus-visible:ring-gray-500;
   }
 
   .btn-success {
@@ -82,44 +110,84 @@
     @apply bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500;
   }
 
-  .btn-ghost {
+  .dark .btn-ghost {
     @apply bg-transparent text-gray-300 hover:bg-gray-800 focus-visible:ring-gray-500;
   }
+  
+  .light .btn-ghost {
+    @apply bg-transparent text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-500;
+  }
 
-  .input {
+  .dark .input {
     @apply px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
   }
-
-  .label {
-    @apply block text-sm font-medium text-gray-300 mb-1;
+  
+  .light .input {
+    @apply px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
   }
 
-  .card {
+  .dark .label {
+    @apply block text-sm font-medium text-gray-300 mb-1;
+  }
+  
+  .light .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+
+  .dark .card {
     @apply bg-gray-800 rounded-lg border border-gray-700 shadow-lg;
+  }
+  
+  .light .card {
+    @apply bg-white rounded-lg border border-gray-200 shadow-lg;
   }
 
   .sidebar-item {
     @apply flex items-center px-3 py-2 text-sm rounded transition-colors duration-150 cursor-pointer;
   }
 
-  .sidebar-item:hover {
+  .dark .sidebar-item:hover {
     @apply bg-gray-800;
   }
+  
+  .light .sidebar-item:hover {
+    @apply bg-gray-100;
+  }
 
-  .sidebar-item.active {
+  .dark .sidebar-item.active {
     @apply bg-gray-700 text-white;
+  }
+  
+  .light .sidebar-item.active {
+    @apply bg-gray-200 text-gray-900;
   }
 
   .tab {
-    @apply px-4 py-2 text-sm font-medium text-gray-400 border-b-2 border-transparent transition-colors duration-150 cursor-pointer;
+    @apply px-4 py-2 text-sm font-medium border-b-2 border-transparent transition-colors duration-150 cursor-pointer;
   }
 
-  .tab:hover {
+  .dark .tab {
+    @apply text-gray-400;
+  }
+  
+  .light .tab {
+    @apply text-gray-600;
+  }
+
+  .dark .tab:hover {
     @apply text-gray-200;
   }
+  
+  .light .tab:hover {
+    @apply text-gray-800;
+  }
 
-  .tab.active {
+  .dark .tab.active {
     @apply text-white border-blue-500;
+  }
+  
+  .light .tab.active {
+    @apply text-gray-900 border-blue-600;
   }
 
   .pr-state-badge {
@@ -154,8 +222,12 @@
     @apply text-gray-500 select-none;
   }
 
-  .comment-thread {
+  .dark .comment-thread {
     @apply bg-gray-800 border-l-4 border-blue-500 rounded p-3 my-2;
+  }
+  
+  .light .comment-thread {
+    @apply bg-gray-50 border-l-4 border-blue-500 rounded p-3 my-2;
   }
 
   .comment-resolved {

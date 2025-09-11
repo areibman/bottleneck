@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface UIState {
   sidebarOpen: boolean;
@@ -9,6 +10,7 @@ interface UIState {
   activeView: 'list' | 'detail';
   diffView: 'unified' | 'split';
   showWhitespace: boolean;
+  theme: 'light' | 'dark';
   
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
@@ -16,13 +18,16 @@ interface UIState {
   toggleKeyboardShortcuts: () => void;
   toggleDiffView: () => void;
   toggleWhitespace: () => void;
+  toggleTheme: () => void;
   selectPR: (prId: string) => void;
   deselectPR: (prId: string) => void;
   clearSelection: () => void;
   setActiveView: (view: 'list' | 'detail') => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
   sidebarOpen: true,
   rightPanelOpen: false,
   commandPaletteOpen: false,
@@ -31,6 +36,7 @@ export const useUIStore = create<UIState>((set) => ({
   activeView: 'list',
   diffView: 'unified',
   showWhitespace: false,
+  theme: 'dark',
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
@@ -40,6 +46,9 @@ export const useUIStore = create<UIState>((set) => ({
     diffView: state.diffView === 'unified' ? 'split' : 'unified' 
   })),
   toggleWhitespace: () => set((state) => ({ showWhitespace: !state.showWhitespace })),
+  toggleTheme: () => set((state) => ({ 
+    theme: state.theme === 'dark' ? 'light' : 'dark' 
+  })),
   
   selectPR: (prId) => set((state) => {
     const newSet = new Set(state.selectedPRs);
@@ -55,4 +64,10 @@ export const useUIStore = create<UIState>((set) => ({
   
   clearSelection: () => set({ selectedPRs: new Set() }),
   setActiveView: (view) => set({ activeView: view }),
-}));
+    }),
+    {
+      name: 'ui-storage',
+      partialize: (state) => ({ theme: state.theme }), // Only persist theme
+    }
+  )
+);

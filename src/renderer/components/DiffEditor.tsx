@@ -21,7 +21,7 @@ interface DiffEditorProps {
 }
 
 export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
-  const { diffView, showWhitespace, toggleDiffView, toggleWhitespace } = useUIStore();
+  const { diffView, showWhitespace, toggleDiffView, toggleWhitespace, theme } = useUIStore();
   const [originalContent, setOriginalContent] = useState('');
   const [modifiedContent, setModifiedContent] = useState('');
   const [showCommentForm, setShowCommentForm] = useState<number | null>(null);
@@ -131,7 +131,12 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="bg-gray-800 border-b border-gray-700 p-3 flex items-center justify-between">
+      <div className={cn(
+        "p-3 flex items-center justify-between border-b",
+        theme === 'dark' 
+          ? "bg-gray-800 border-gray-700" 
+          : "bg-gray-50 border-gray-200"
+      )}>
         <div className="flex items-center space-x-3">
           <h3 className="font-mono text-sm">{file.filename}</h3>
           <div className="flex items-center space-x-2 text-xs">
@@ -151,7 +156,10 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
           
           <button
             onClick={toggleWhitespace}
-            className={cn('btn btn-ghost p-2 text-sm', showWhitespace && 'bg-gray-700')}
+            className={cn(
+              'btn btn-ghost p-2 text-sm', 
+              showWhitespace && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
+            )}
             title="Toggle whitespace"
           >
             W
@@ -174,7 +182,7 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
             original={originalContent}
             modified={modifiedContent}
             language={language}
-            theme="vs-dark"
+            theme={theme === 'dark' ? "vs-dark" : "vs"}
             options={{
               readOnly: true,
               renderSideBySide: true,
@@ -205,7 +213,7 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
           <Editor
             value={modifiedContent}
             language={language}
-            theme="vs-dark"
+            theme={theme === 'dark' ? "vs-dark" : "vs"}
             options={{
               readOnly: true,
               renderWhitespace: showWhitespace ? 'all' : 'none',
@@ -276,12 +284,21 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
 
         {/* Comment overlay */}
         {showCommentForm !== null && (
-          <div className="absolute top-16 right-4 w-96 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-4 z-10">
+          <div className={cn(
+            "absolute top-16 right-4 w-96 rounded-lg shadow-lg p-4 z-10 border",
+            theme === 'dark' 
+              ? "bg-gray-800 border-gray-700" 
+              : "bg-white border-gray-200"
+          )}>
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-semibold">Add comment</h4>
               <button
                 onClick={() => setShowCommentForm(null)}
-                className="text-gray-400 hover:text-white"
+                className={cn(
+                  theme === 'dark' 
+                    ? "text-gray-400 hover:text-white" 
+                    : "text-gray-600 hover:text-gray-900"
+                )}
               >
                 ×
               </button>
@@ -313,7 +330,12 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
         {/* Inline comments */}
         {comments.length > 0 && (
           <div className="absolute bottom-4 left-4 right-4 max-h-48 overflow-y-auto">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
+            <div className={cn(
+              "rounded-lg p-3 border",
+              theme === 'dark' 
+                ? "bg-gray-800 border-gray-700" 
+                : "bg-white border-gray-200"
+            )}>
               <h4 className="text-sm font-semibold mb-2 flex items-center">
                 <MessageSquare className="w-4 h-4 mr-1" />
                 Comments ({comments.length})
@@ -329,12 +351,18 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
                       />
                       <span className="font-medium">{comment.user.login}</span>
                       {comment.line && (
-                        <span className="text-xs text-gray-500">
+                        <span className={cn(
+                          "text-xs",
+                          theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                        )}>
                           Line {comment.line}
                         </span>
                       )}
                     </div>
-                    <div className="text-gray-300 ml-7">{comment.body}</div>
+                    <div className={cn(
+                      "ml-7",
+                      theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                    )}>{comment.body}</div>
                   </div>
                 ))}
               </div>

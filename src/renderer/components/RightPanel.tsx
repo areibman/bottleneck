@@ -18,7 +18,7 @@ interface RightPanelProps {
 }
 
 export default function RightPanel({ className }: RightPanelProps) {
-  const { toggleRightPanel } = useUIStore();
+  const { toggleRightPanel, theme } = useUIStore();
   const [activeTab, setActiveTab] = React.useState<'checks' | 'participants' | 'labels' | 'files'>('checks');
 
   // Mock data - would come from PR context
@@ -62,20 +62,35 @@ export default function RightPanel({ className }: RightPanelProps) {
   };
 
   return (
-    <aside className={cn('bg-gray-800 border-l border-gray-700 flex flex-col overflow-hidden', className)}>
+    <aside className={cn(
+      'flex flex-col overflow-hidden border-l',
+      theme === 'dark' 
+        ? 'bg-gray-800 border-gray-700' 
+        : 'bg-gray-50 border-gray-200',
+      className
+    )}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
+      <div className={cn(
+        "flex items-center justify-between p-4 border-b",
+        theme === 'dark' ? "border-gray-700" : "border-gray-200"
+      )}>
         <h2 className="text-sm font-semibold">Details</h2>
         <button
           onClick={toggleRightPanel}
-          className="p-1 hover:bg-gray-700 rounded transition-colors"
+          className={cn(
+            "p-1 rounded transition-colors",
+            theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
+          )}
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-700">
+      <div className={cn(
+        "flex border-b",
+        theme === 'dark' ? "border-gray-700" : "border-gray-200"
+      )}>
         <button
           onClick={() => setActiveTab('checks')}
           className={cn('tab flex-1', activeTab === 'checks' && 'active')}
@@ -117,7 +132,10 @@ export default function RightPanel({ className }: RightPanelProps) {
                   <span className="text-sm">{check.name}</span>
                 </div>
                 {check.duration && (
-                  <span className="text-xs text-gray-500">{check.duration}</span>
+                  <span className={cn(
+                    "text-xs",
+                    theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                  )}>{check.duration}</span>
                 )}
               </div>
             ))}
@@ -136,7 +154,10 @@ export default function RightPanel({ className }: RightPanelProps) {
                   />
                   <div>
                     <div className="text-sm">{participant.login}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className={cn(
+                      "text-xs",
+                      theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                    )}>
                       {participant.role === 'author' && 'Author'}
                       {participant.approved && 'Approved'}
                       {participant.requested && 'Review requested'}
@@ -169,7 +190,10 @@ export default function RightPanel({ className }: RightPanelProps) {
           <div className="space-y-2">
             {files.map((file) => (
               <div key={file.path} className="text-sm">
-                <div className="font-mono text-xs text-gray-300 truncate">
+                <div className={cn(
+                  "font-mono text-xs truncate",
+                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                )}>
                   {file.path}
                 </div>
                 <div className="flex items-center space-x-2 mt-1">

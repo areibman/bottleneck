@@ -14,6 +14,9 @@ import { PullRequest, Comment, Review } from '../services/github';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../utils/cn';
 import { useAuthStore } from '../stores/authStore';
+import { useUIStore } from '../stores/uiStore';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ConversationTabProps {
   pr: PullRequest;
@@ -24,6 +27,7 @@ interface ConversationTabProps {
 
 export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: ConversationTabProps) {
   const { user, token } = useAuthStore();
+  const { theme } = useUIStore();
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reviewType, setReviewType] = useState<'comment' | 'approve' | 'request_changes'>('comment');
@@ -96,12 +100,26 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
               <div className="flex-1">
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold">{pr.user.login}</span>
-                  <span className="text-sm text-gray-500">
+                  <span className={cn(
+                    "text-sm",
+                    theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                  )}>
                     opened this pull request {formatDistanceToNow(new Date(pr.created_at), { addSuffix: true })}
                   </span>
                 </div>
-                <div className="prose prose-invert max-w-none">
-                  {pr.body || <em className="text-gray-500">No description provided</em>}
+                <div className={cn(
+                  "max-w-none prose break-words",
+                  "prose-pre:whitespace-pre-wrap"
+                )}>
+                  {pr.body ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {pr.body}
+                    </ReactMarkdown>
+                  ) : (
+                    <em className={cn(
+                      theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                    )}>No description provided</em>
+                  )}
                 </div>
               </div>
             </div>
@@ -111,11 +129,20 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
           <div className="card p-4 mb-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <GitCommit className="w-5 h-5 text-gray-400" />
+                <GitCommit className={cn(
+                  "w-5 h-5",
+                  theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                )} />
                 <span className="text-sm">
-                  <span className="font-mono bg-gray-700 px-2 py-1 rounded">{pr.head.ref}</span>
+                  <span className={cn(
+                    "font-mono px-2 py-1 rounded",
+                    theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
+                  )}>{pr.head.ref}</span>
                   <span className="mx-2">→</span>
-                  <span className="font-mono bg-gray-700 px-2 py-1 rounded">{pr.base.ref}</span>
+                  <span className={cn(
+                    "font-mono px-2 py-1 rounded",
+                    theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
+                  )}>{pr.base.ref}</span>
                 </span>
               </div>
               
@@ -141,7 +168,10 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
           {pr.labels.length > 0 && (
             <div className="card p-4 mb-6">
               <div className="flex items-center space-x-3">
-                <Tag className="w-5 h-5 text-gray-400" />
+                <Tag className={cn(
+                  "w-5 h-5",
+                  theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                )} />
                 <div className="flex flex-wrap gap-2">
                   {pr.labels.map((label) => (
                     <span
@@ -163,12 +193,18 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
           {/* Participants */}
           <div className="card p-4 mb-6">
             <div className="flex items-center space-x-3">
-              <Users className="w-5 h-5 text-gray-400" />
+              <Users className={cn(
+                "w-5 h-5",
+                theme === 'dark' ? "text-gray-400" : "text-gray-600"
+              )} />
               <div className="flex -space-x-2">
                 <img
                   src={pr.user.avatar_url}
                   alt={pr.user.login}
-                  className="w-8 h-8 rounded-full border-2 border-gray-800"
+                  className={cn(
+                    "w-8 h-8 rounded-full border-2",
+                    theme === 'dark' ? "border-gray-800" : "border-white"
+                  )}
                   title={`Author: ${pr.user.login}`}
                 />
                 {pr.assignees.map((assignee) => (
@@ -176,7 +212,10 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                     key={assignee.login}
                     src={assignee.avatar_url}
                     alt={assignee.login}
-                    className="w-8 h-8 rounded-full border-2 border-gray-800"
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2",
+                      theme === 'dark' ? "border-gray-800" : "border-white"
+                    )}
                     title={`Assignee: ${assignee.login}`}
                   />
                 ))}
@@ -185,7 +224,10 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                     key={reviewer.login}
                     src={reviewer.avatar_url}
                     alt={reviewer.login}
-                    className="w-8 h-8 rounded-full border-2 border-gray-800"
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2",
+                      theme === 'dark' ? "border-gray-800" : "border-white"
+                    )}
                     title={`Reviewer: ${reviewer.login}`}
                   />
                 ))}
@@ -214,12 +256,19 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                           {(item as Review).state === 'COMMENTED' && 'reviewed'}
                         </span>
                       )}
-                      <span className="text-sm text-gray-500">
+                      <span className={cn(
+                        "text-sm",
+                        theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                      )}>
                         {formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}
                       </span>
                     </div>
-                    <div className="text-gray-300">
-                      {item.body || <em className="text-gray-500">No comment</em>}
+                    <div className={cn(
+                      theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                    )}>
+                      {item.body || <em className={cn(
+                        theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                      )}>No comment</em>}
                     </div>
                   </div>
                 </div>
@@ -250,7 +299,9 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                         onClick={() => setReviewType('comment')}
                         className={cn(
                           'px-3 py-1 rounded text-sm',
-                          reviewType === 'comment' ? 'bg-gray-700' : 'hover:bg-gray-800'
+                          reviewType === 'comment' 
+                            ? (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
+                            : (theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
                         )}
                       >
                         Comment
@@ -259,7 +310,9 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                         onClick={() => setReviewType('approve')}
                         className={cn(
                           'px-3 py-1 rounded text-sm',
-                          reviewType === 'approve' ? 'bg-green-900' : 'hover:bg-gray-800'
+                          reviewType === 'approve' 
+                            ? (theme === 'dark' ? 'bg-green-900' : 'bg-green-100')
+                            : (theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
                         )}
                       >
                         Approve
@@ -268,7 +321,9 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                         onClick={() => setReviewType('request_changes')}
                         className={cn(
                           'px-3 py-1 rounded text-sm',
-                          reviewType === 'request_changes' ? 'bg-red-900' : 'hover:bg-gray-800'
+                          reviewType === 'request_changes' 
+                            ? (theme === 'dark' ? 'bg-red-900' : 'bg-red-100')
+                            : (theme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
                         )}
                       >
                         Request changes

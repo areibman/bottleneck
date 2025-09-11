@@ -5,7 +5,8 @@
     "moduleResolution": "node",
     "noEmit": false,
     "allowImportingTsExtensions": false,
+    "rootDir": "src/main",
     "outDir": "dist/main"
   },
-  "include": ["src/main/**/*", "src/shared/**/*", "src/preload/**/*"]
+  "include": ["src/main/**/*"]
 }

@@ -22,11 +22,13 @@ import { GitHubAPI, PullRequest, File, Comment, Review } from '../services/githu
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../utils/cn';
 import { mockPullRequests, mockFiles, mockComments, mockReviews } from '../mockData';
+import { useUIStore } from '../stores/uiStore';
 
 export default function PRDetailView() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
   const navigate = useNavigate();
   const { token } = useAuthStore();
+  const { theme } = useUIStore();
   
   const [activeTab, setActiveTab] = useState<'conversation' | 'files'>('files');
   const [pr, setPR] = useState<PullRequest | null>(null);
@@ -122,7 +124,9 @@ export default function PRDetailView() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Loading pull request...</div>
+        <div className={cn(
+          theme === 'dark' ? "text-gray-400" : "text-gray-600"
+        )}>Loading pull request...</div>
       </div>
     );
   }
@@ -130,7 +134,9 @@ export default function PRDetailView() {
   if (!pr) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Pull request not found</div>
+        <div className={cn(
+          theme === 'dark' ? "text-gray-400" : "text-gray-600"
+        )}>Pull request not found</div>
       </div>
     );
   }
@@ -147,12 +153,20 @@ export default function PRDetailView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
+      <div className={cn(
+        "p-4 border-b",
+        theme === 'dark' 
+          ? "bg-gray-800 border-gray-700" 
+          : "bg-gray-50 border-gray-200"
+      )}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-3">
             <button
               onClick={() => navigate('/pulls')}
-              className="p-1 hover:bg-gray-700 rounded transition-colors"
+              className={cn(
+                "p-1 rounded transition-colors",
+                theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
+              )}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -170,7 +184,10 @@ export default function PRDetailView() {
               
               <h1 className="text-lg font-semibold">
                 {pr.title}
-                <span className="ml-2 text-sm text-gray-500">#{pr.number}</span>
+                <span className={cn(
+                  "ml-2 text-sm",
+                  theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                )}>#{pr.number}</span>
               </h1>
             </div>
           </div>
@@ -200,7 +217,10 @@ export default function PRDetailView() {
         </div>
         
         {/* PR Info */}
-        <div className="flex items-center space-x-4 text-sm text-gray-400">
+        <div className={cn(
+          "flex items-center space-x-4 text-sm",
+          theme === 'dark' ? "text-gray-400" : "text-gray-600"
+        )}>
           <div className="flex items-center space-x-2">
             <img
               src={pr.user.avatar_url}
@@ -225,14 +245,20 @@ export default function PRDetailView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-700">
+      <div className={cn(
+        "flex border-b",
+        theme === 'dark' ? "border-gray-700" : "border-gray-200"
+      )}>
         <button
           onClick={() => setActiveTab('conversation')}
           className={cn('tab', activeTab === 'conversation' && 'active')}
         >
           <MessageSquare className="w-4 h-4 mr-1" />
           Conversation
-          <span className="ml-2 px-1.5 py-0.5 bg-gray-700 rounded text-xs">
+          <span className={cn(
+            "ml-2 px-1.5 py-0.5 rounded text-xs",
+            theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
+          )}>
             {comments.length + reviews.length}
           </span>
         </button>
@@ -242,7 +268,10 @@ export default function PRDetailView() {
         >
           <FileDiff className="w-4 h-4 mr-1" />
           Files changed
-          <span className="ml-2 px-1.5 py-0.5 bg-gray-700 rounded text-xs">
+          <span className={cn(
+            "ml-2 px-1.5 py-0.5 rounded text-xs",
+            theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
+          )}>
             {files.length}
           </span>
         </button>
@@ -260,8 +289,16 @@ export default function PRDetailView() {
         ) : (
           <>
             {/* File list */}
-            <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto">
-              <div className="p-3 border-b border-gray-700">
+            <div className={cn(
+              "w-80 border-r overflow-y-auto",
+              theme === 'dark' 
+                ? "bg-gray-800 border-gray-700" 
+                : "bg-gray-50 border-gray-200"
+            )}>
+              <div className={cn(
+                "p-3 border-b",
+                theme === 'dark' ? "border-gray-700" : "border-gray-200"
+              )}>
                 <input
                   type="text"
                   placeholder="Filter files..."
@@ -269,7 +306,10 @@ export default function PRDetailView() {
                 />
               </div>
               
-              <div className="divide-y divide-gray-700">
+              <div className={cn(
+                "divide-y",
+                theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
+              )}>
                 {files.map((file) => {
                   const isSelected = selectedFile?.filename === file.filename;
                   const isViewed = viewedFiles.has(file.filename);
@@ -278,14 +318,20 @@ export default function PRDetailView() {
                     <div
                       key={file.filename}
                       className={cn(
-                        'px-3 py-2 cursor-pointer hover:bg-gray-700 transition-colors',
-                        isSelected && 'bg-gray-700'
+                        'px-3 py-2 cursor-pointer transition-colors',
+                        theme === 'dark' 
+                          ? 'hover:bg-gray-700' 
+                          : 'hover:bg-gray-100',
+                        isSelected && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100')
                       )}
                       onClick={() => setSelectedFile(file)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          <FileDiff className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <FileDiff className={cn(
+                            "w-4 h-4 flex-shrink-0",
+                            theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                          )} />
                           <span className="text-sm truncate font-mono">
                             {file.filename}
                           </span>
@@ -293,7 +339,10 @@ export default function PRDetailView() {
                         
                         <div className="flex items-center space-x-2 ml-2">
                           {isViewed && (
-                            <Eye className="w-3 h-3 text-gray-500" />
+                            <Eye className={cn(
+                              "w-3 h-3",
+                              theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                            )} />
                           )}
                           <div className="flex items-center space-x-1 text-xs">
                             <span className="text-green-400">+{file.additions}</span>

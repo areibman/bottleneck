@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+require('dotenv').config();
 
 // First, build main and preload once
 console.log('Building main and preload scripts...');
@@ -50,7 +51,12 @@ vite.stdout.on('data', (data) => {
       const electron = spawn('electron', ['.'], {
         stdio: 'inherit',
         shell: true,
-        env: { ...process.env, NODE_ENV: 'development' }
+        env: { 
+          ...process.env, 
+          NODE_ENV: 'development',
+          GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
+          GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET
+        }
       });
       
       electron.on('close', () => {

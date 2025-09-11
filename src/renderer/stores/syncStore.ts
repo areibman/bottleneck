@@ -116,18 +116,40 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     });
 
     try {
-      const token = await window.electron.auth.getToken();
+      let token: string | null = null;
+      
+      // Check if we're using electron or dev mode
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        // In dev mode, get token from auth store
+        const { useAuthStore } = await import('./authStore');
+        const authStore = useAuthStore.getState();
+        token = authStore.token;
+      }
+      
       if (!token) throw new Error('Not authenticated');
 
-      const { GitHubAPI } = await import('../services/github');
-      const api = new GitHubAPI(token);
-      
-      // Fetch PR details
-      const pr = await api.getPullRequest(owner, repo, number);
-      
-      // Update in store
-      const prStore = usePRStore.getState();
-      prStore.updatePR(pr);
+      // For dev mode, just find and return the mock PR
+      if (token === 'dev-token') {
+        const { mockPullRequests } = await import('../mockData');
+        const pr = mockPullRequests.find(p => p.number === number);
+        if (pr) {
+          // Update in store
+          const prStore = usePRStore.getState();
+          prStore.updatePR(pr);
+        }
+      } else {
+        const { GitHubAPI } = await import('../services/github');
+        const api = new GitHubAPI(token);
+        
+        // Fetch PR details
+        const pr = await api.getPullRequest(owner, repo, number);
+        
+        // Update in store
+        const prStore = usePRStore.getState();
+        prStore.updatePR(pr);
+      }
       
       set({ 
         isSyncing: false,

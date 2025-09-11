@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { GitHubAPI, PullRequest, Repository } from '../services/github';
+import { mockPullRequests } from '../mockData';
 
 interface PRGroup {
   id: string;
@@ -45,11 +46,30 @@ export const usePRStore = create<PRState>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const token = await window.electron.auth.getToken();
+      let token: string | null = null;
+      
+      // Check if we're using electron or dev mode
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        // In dev mode, get token from auth store
+        const authStore = require('./authStore').useAuthStore.getState();
+        token = authStore.token;
+      }
+      
       if (!token) throw new Error('Not authenticated');
       
-      const api = new GitHubAPI(token);
-      const prs = await api.getPullRequests(owner, repo, 'all');
+      let prs: PullRequest[];
+      
+      // Use mock data for dev token
+      if (token === 'dev-token') {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        prs = mockPullRequests as PullRequest[];
+      } else {
+        const api = new GitHubAPI(token);
+        prs = await api.getPullRequests(owner, repo, 'all');
+      }
       
       const prMap = new Map<string, PullRequest>();
       prs.forEach(pr => {
@@ -64,8 +84,10 @@ export const usePRStore = create<PRState>((set, get) => ({
       // Auto-group PRs after fetching
       get().groupPRsByPrefix();
       
-      // Store in database
-      await get().storePRsInDB(prs, owner, repo);
+      // Store in database (skip for dev mode)
+      if (token !== 'dev-token' && window.electron) {
+        await get().storePRsInDB(prs, owner, repo);
+      }
     } catch (error) {
       set({ 
         error: (error as Error).message,
@@ -78,19 +100,64 @@ export const usePRStore = create<PRState>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const token = await window.electron.auth.getToken();
-      if (!token) throw new Error('Not authenticated');
+      let token: string | null = null;
       
-      const api = new GitHubAPI(token);
-      const repos = await api.getRepositories();
+      // Check if we're using electron or dev mode
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        // In dev mode, get token from auth store
+        const authStore = require('./authStore').useAuthStore.getState();
+        token = authStore.token;
+      }
+      
+      if (!token) {
+        set({ loading: false });
+        return;
+      }
+      
+      let repos: Repository[];
+      
+      // Use mock repositories for dev token
+      if (token === 'dev-token') {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 300));
+        repos = [
+          {
+            id: 1,
+            owner: 'dev-user',
+            name: 'bottleneck',
+            full_name: 'dev-user/bottleneck',
+            description: 'Fast GitHub PR review and branch management',
+            default_branch: 'main',
+            private: false,
+            clone_url: 'https://github.com/dev-user/bottleneck.git'
+          },
+          {
+            id: 2,
+            owner: 'dev-user',
+            name: 'sample-project',
+            full_name: 'dev-user/sample-project',
+            description: 'A sample project for testing',
+            default_branch: 'main',
+            private: false,
+            clone_url: 'https://github.com/dev-user/sample-project.git'
+          }
+        ];
+      } else {
+        const api = new GitHubAPI(token);
+        repos = await api.getRepositories();
+      }
       
       set({ 
         repositories: repos,
         loading: false 
       });
       
-      // Store in database
-      await get().storeReposInDB(repos);
+      // Store in database (skip for dev mode)
+      if (token !== 'dev-token' && window.electron) {
+        await get().storeReposInDB(repos);
+      }
     } catch (error) {
       set({ 
         error: (error as Error).message,

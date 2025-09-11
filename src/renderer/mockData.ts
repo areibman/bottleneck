@@ -167,16 +167,16 @@ export const mockPullRequests = [
   // Add more mock PRs with prefix patterns for grouping
   {
     id: 5,
-    number: 38,
-    title: 'cursor/fix-header-alignment',
-    body: 'AI-generated fix for header alignment issue.',
+    number: 1255,
+    title: 'Fix local development setup issues',
+    body: 'AI-generated fix for local dev environment.',
     state: 'open' as const,
     draft: false,
     merged: false,
     mergeable: true,
     merge_commit_sha: null,
     head: {
-      ref: 'cursor/fix-header-alignment',
+      ref: 'cursor/fix-local-dev-1',
       sha: 'vwx234',
       repo: {
         name: 'bottleneck',
@@ -207,16 +207,16 @@ export const mockPullRequests = [
   },
   {
     id: 6,
-    number: 37,
-    title: 'cursor/fix-button-styles',
-    body: 'AI-generated fix for button styling issues.',
+    number: 1254,
+    title: 'Fix local development environment configuration',
+    body: 'AI-generated fix for dev config issues.',
     state: 'open' as const,
     draft: false,
     merged: false,
     mergeable: true,
     merge_commit_sha: null,
     head: {
-      ref: 'cursor/fix-button-styles',
+      ref: 'cursor/fix-local-dev-2',
       sha: 'yz1567',
       repo: {
         name: 'bottleneck',
@@ -242,6 +242,128 @@ export const mockPullRequests = [
     ],
     created_at: new Date(Date.now() - 5400000).toISOString(),
     updated_at: new Date(Date.now() - 2700000).toISOString(),
+    closed_at: null,
+    merged_at: null
+  },
+  {
+    id: 7,
+    number: 1253,
+    title: 'Fix local development server startup',
+    body: 'AI-generated fix for server startup issues.',
+    state: 'open' as const,
+    draft: false,
+    merged: false,
+    mergeable: true,
+    merge_commit_sha: null,
+    head: {
+      ref: 'cursor/fix-local-dev-3',
+      sha: 'abc890',
+      repo: {
+        name: 'bottleneck',
+        owner: { login: 'dev-user' }
+      }
+    },
+    base: {
+      ref: 'main',
+      sha: 'def456',
+      repo: {
+        name: 'bottleneck',
+        owner: { login: 'dev-user' }
+      }
+    },
+    user: {
+      login: 'cursor-ai',
+      avatar_url: 'https://github.com/github.png'
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: 'ai-generated', color: '7057ff' }
+    ],
+    created_at: new Date(Date.now() - 7200000).toISOString(),
+    updated_at: new Date(Date.now() - 3600000).toISOString(),
+    closed_at: null,
+    merged_at: null
+  },
+  {
+    id: 8,
+    number: 1252,
+    title: 'Update UI components for better accessibility',
+    body: 'AI-generated improvements for accessibility.',
+    state: 'open' as const,
+    draft: false,
+    merged: false,
+    mergeable: true,
+    merge_commit_sha: null,
+    head: {
+      ref: 'cursor/update-ui-accessibility',
+      sha: 'def123',
+      repo: {
+        name: 'bottleneck',
+        owner: { login: 'dev-user' }
+      }
+    },
+    base: {
+      ref: 'main',
+      sha: 'def456',
+      repo: {
+        name: 'bottleneck',
+        owner: { login: 'dev-user' }
+      }
+    },
+    user: {
+      login: 'cursor-ai',
+      avatar_url: 'https://github.com/github.png'
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: 'ai-generated', color: '7057ff' },
+      { name: 'accessibility', color: '0366d6' }
+    ],
+    created_at: new Date(Date.now() - 9000000).toISOString(),
+    updated_at: new Date(Date.now() - 4500000).toISOString(),
+    closed_at: null,
+    merged_at: null
+  },
+  {
+    id: 9,
+    number: 1251,
+    title: 'Update UI components for mobile responsiveness',
+    body: 'AI-generated mobile responsive improvements.',
+    state: 'open' as const,
+    draft: false,
+    merged: false,
+    mergeable: true,
+    merge_commit_sha: null,
+    head: {
+      ref: 'cursor/update-ui-mobile',
+      sha: 'ghi456',
+      repo: {
+        name: 'bottleneck',
+        owner: { login: 'dev-user' }
+      }
+    },
+    base: {
+      ref: 'main',
+      sha: 'def456',
+      repo: {
+        name: 'bottleneck',
+        owner: { login: 'dev-user' }
+      }
+    },
+    user: {
+      login: 'cursor-ai',
+      avatar_url: 'https://github.com/github.png'
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: 'ai-generated', color: '7057ff' },
+      { name: 'ui/ux', color: 'fbca04' }
+    ],
+    created_at: new Date(Date.now() - 10800000).toISOString(),
+    updated_at: new Date(Date.now() - 5400000).toISOString(),
     closed_at: null,
     merged_at: null
   }
@@ -330,3 +452,4 @@ export const mockReviews = [
     commit_id: 'abc123'
   }
 ];
+

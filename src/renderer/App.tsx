@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useUIStore } from './stores/uiStore';
+import { usePRStore } from './stores/prStore';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import RightPanel from './components/RightPanel';
@@ -14,8 +15,9 @@ import { setupKeyboardShortcuts } from './utils/keyboard';
 import { cn } from './utils/cn';
 
 function App() {
-  const { isAuthenticated, checkAuth } = useAuthStore();
-  const { sidebarOpen, rightPanelOpen } = useUIStore();
+  const { isAuthenticated, checkAuth, token } = useAuthStore();
+  const { sidebarOpen, rightPanelOpen, theme } = useUIStore();
+  const { fetchRepositories } = usePRStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,10 +31,20 @@ function App() {
     }
   }, [checkAuth]);
 
+  // Fetch repositories when authenticated
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      fetchRepositories();
+    }
+  }, [isAuthenticated, token, fetchRepositories]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900">
-        <div className="text-white">Loading...</div>
+      <div className={cn(
+        "flex items-center justify-center h-screen",
+        theme === 'dark' ? "bg-gray-900 dark" : "bg-white light"
+      )}>
+        <div className={theme === 'dark' ? "text-white" : "text-gray-900"}>Loading...</div>
       </div>
     );
   }
@@ -42,7 +54,10 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
+    <div className={cn(
+      "flex flex-col h-screen",
+      theme === 'dark' ? "bg-gray-900 text-gray-100 dark" : "bg-white text-gray-900 light"
+    )}>
       <TopBar />
       
       <div className="flex flex-1 overflow-hidden">
