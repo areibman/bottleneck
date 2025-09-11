@@ -1,0 +1,29 @@
+{
+  "name": "bottleneck",
+  "version": "0.0.1",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite --config vite.renderer.config.ts",
+    "dev:electron": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "build": "vite build --config vite.renderer.config.ts && electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron": "^28.1.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.0.1",
+    "cross-env": "^7.0.0",
+    "electron-builder": "^24.8.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.2.0",
+    "vite-tsconfig-paths": "^4.2.0"
+  }
+}
