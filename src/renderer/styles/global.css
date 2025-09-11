@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-700;
+  }
+
+  body {
+    @apply bg-gray-900 text-gray-100;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar styles */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-800;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-600 rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+
+  /* Monaco editor overrides */
+  .monaco-editor {
+    @apply rounded;
+  }
+
+  .monaco-editor .margin {
+    @apply bg-gray-800;
+  }
+
+  /* Diff highlighting for unified view */
+  .diff-addition {
+    background-color: rgba(34, 197, 94, 0.1) !important;
+    border-left: 3px solid #22c55e;
+  }
+
+  .diff-deletion {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+    border-left: 3px solid #ef4444;
+  }
+
+  /* Keyboard focus styles */
+  *:focus {
+    @apply outline-none;
+  }
+
+  *:focus-visible {
+    @apply ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-700 text-gray-100 hover:bg-gray-600 focus-visible:ring-gray-500;
+  }
+
+  .btn-success {
+    @apply bg-green-600 text-white hover:bg-green-700 focus-visible:ring-green-500;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-gray-300 hover:bg-gray-800 focus-visible:ring-gray-500;
+  }
+
+  .input {
+    @apply px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-300 mb-1;
+  }
+
+  .card {
+    @apply bg-gray-800 rounded-lg border border-gray-700 shadow-lg;
+  }
+
+  .sidebar-item {
+    @apply flex items-center px-3 py-2 text-sm rounded transition-colors duration-150 cursor-pointer;
+  }
+
+  .sidebar-item:hover {
+    @apply bg-gray-800;
+  }
+
+  .sidebar-item.active {
+    @apply bg-gray-700 text-white;
+  }
+
+  .tab {
+    @apply px-4 py-2 text-sm font-medium text-gray-400 border-b-2 border-transparent transition-colors duration-150 cursor-pointer;
+  }
+
+  .tab:hover {
+    @apply text-gray-200;
+  }
+
+  .tab.active {
+    @apply text-white border-blue-500;
+  }
+
+  .pr-state-badge {
+    @apply px-2 py-1 text-xs font-semibold rounded;
+  }
+
+  .pr-state-open {
+    @apply bg-green-900 text-green-200;
+  }
+
+  .pr-state-closed {
+    @apply bg-red-900 text-red-200;
+  }
+
+  .pr-state-merged {
+    @apply bg-purple-900 text-purple-200;
+  }
+
+  .pr-state-draft {
+    @apply bg-gray-700 text-gray-300;
+  }
+
+  .diff-addition {
+    @apply bg-green-900 bg-opacity-30;
+  }
+
+  .diff-deletion {
+    @apply bg-red-900 bg-opacity-30;
+  }
+
+  .diff-line-number {
+    @apply text-gray-500 select-none;
+  }
+
+  .comment-thread {
+    @apply bg-gray-800 border-l-4 border-blue-500 rounded p-3 my-2;
+  }
+
+  .comment-resolved {
+    @apply opacity-60 border-gray-600;
+  }
+}
+
+@layer utilities {
+  .animate-slide-in {
+    animation: slideIn 0.2s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .drag {
+    -webkit-app-region: drag;
+  }
+}

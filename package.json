@@ -1,0 +1,88 @@
+{
+  "name": "bottleneck",
+  "version": "0.1.0",
+  "description": "Fast GitHub PR review and branch management",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:main": "tsc -w -p tsconfig.main.json",
+    "dev:preload": "tsc -w -p tsconfig.preload.json",
+    "dev:renderer": "vite",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:preload": "tsc -p tsconfig.preload.json",
+    "build:renderer": "vite build",
+    "electron": "electron .",
+    "start": "npm run build && npm run electron",
+    "dist": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "electron",
+    "github",
+    "pr",
+    "review"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.3",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11",
+    "vite-plugin-electron": "^0.15.5",
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vite-plugin-monaco-editor": "^1.1.0"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@octokit/auth-oauth-app": "^7.0.1",
+    "@octokit/auth-oauth-device": "^6.0.1",
+    "@octokit/rest": "^20.0.2",
+    "@tanstack/react-query": "^5.17.9",
+    "clsx": "^2.1.0",
+    "date-fns": "^3.2.0",
+    "electron-store": "^8.1.0",
+    "framer-motion": "^10.18.0",
+    "lucide-react": "^0.312.0",
+    "monaco-editor": "^0.45.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.2",
+    "simple-git": "^3.22.0",
+    "sqlite3": "^5.1.7",
+    "zustand": "^4.4.7"
+  },
+  "build": {
+    "appId": "com.bottleneck.app",
+    "productName": "Bottleneck",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

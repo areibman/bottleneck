@@ -1,0 +1,72 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./src/renderer/**/*.{js,jsx,ts,tsx}",
+    "./src/renderer/index.html",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        gray: {
+          900: '#0d1117',
+          800: '#161b22',
+          700: '#21262d',
+          600: '#30363d',
+          500: '#484f58',
+          400: '#6e7681',
+          300: '#8b949e',
+          200: '#c9d1d9',
+          100: '#f0f6fc',
+        },
+        blue: {
+          900: '#051d4d',
+          800: '#0c2d6b',
+          700: '#0d419d',
+          600: '#0969da',
+          500: '#218bff',
+          400: '#54aeff',
+          300: '#80ccff',
+          200: '#b1dfff',
+        },
+        green: {
+          900: '#033a16',
+          800: '#04505e',
+          700: '#044f1e',
+          600: '#0a7534',
+          500: '#1a7f37',
+          400: '#2ea043',
+          300: '#5fd075',
+          200: '#8fdb9f',
+        },
+        red: {
+          900: '#4d0519',
+          800: '#6b0c2d',
+          700: '#9d0d41',
+          600: '#da0969',
+          500: '#ff218b',
+          400: '#ff54ae',
+          300: '#ff80cc',
+          200: '#ffb1df',
+        },
+        purple: {
+          900: '#2d1d4d',
+          800: '#3e2d6b',
+          700: '#5a419d',
+          600: '#8256d0',
+          500: '#a475f9',
+          400: '#bf95ff',
+          300: '#d2b3ff',
+          200: '#e6d6ff',
+        },
+      },
+      fontFamily: {
+        mono: ['SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+      },
+      animation: {
+        'spin-slow': 'spin 2s linear infinite',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+    },
+  },
+  plugins: [],
+}
