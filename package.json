@@ -14,10 +14,16 @@
     "dist": "npm run build && npm run package",
     "postinstall": "electron-builder install-app-deps"
   },
-  "keywords": ["github", "pull-request", "code-review", "electron"],
+  "keywords": [
+    "github",
+    "pull-request",
+    "code-review",
+    "electron"
+  ],
   "author": "Bottleneck Team",
   "license": "MIT",
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
@@ -38,17 +44,17 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
-    "@octokit/rest": "^20.0.0",
     "@octokit/auth-oauth-device": "^5.0.0",
+    "@octokit/rest": "^20.0.0",
     "better-sqlite3": "^9.2.0",
-    "nodegit": "^0.28.0-alpha.11",
+    "clsx": "^2.0.0",
+    "date-fns": "^2.30.0",
+    "lucide-react": "^0.263.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.15.0",
-    "zustand": "^4.4.0",
-    "date-fns": "^2.30.0",
-    "clsx": "^2.0.0",
-    "lucide-react": "^0.263.0"
+    "simple-git": "^3.20.0",
+    "zustand": "^4.4.0"
   },
   "build": {
     "appId": "com.bottleneck.app",

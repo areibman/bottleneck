@@ -112,22 +112,27 @@ export const RightPanel: React.FC = () => {
 };
 
 const ChecksTab: React.FC<{ pr: any }> = ({ pr }) => {
-  const checks = [
+  const checks: Array<{
+    name: string;
+    status: 'success' | 'pending' | 'failure' | 'error';
+    description: string;
+    details: string;
+  }> = [
     {
       name: 'CI / Build',
-      status: 'success' as const,
+      status: 'success',
       description: 'All checks passed',
       details: '2 of 2 checks passed'
     },
     {
       name: 'Code Quality',
-      status: 'success' as const,
+      status: 'success',
       description: 'No issues found',
       details: 'Lint, type check, and security scan passed'
     },
     {
       name: 'Tests',
-      status: 'pending' as const,
+      status: 'pending',
       description: 'Running tests...',
       details: 'Unit tests and integration tests in progress'
     }
@@ -139,7 +144,7 @@ const ChecksTab: React.FC<{ pr: any }> = ({ pr }) => {
         <div key={index} className="p-3 bg-[#0d1117] rounded border border-[#30363d]">
           <div className="flex items-center gap-3 mb-2">
             {check.status === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
-            {check.status === 'failure' && <XCircle className="w-5 h-5 text-red-500" />}
+            {(check.status === 'failure' || check.status === 'error') && <XCircle className="w-5 h-5 text-red-500" />}
             {check.status === 'pending' && <Clock className="w-5 h-5 text-yellow-500" />}
             <div className="flex-1">
               <h4 className="text-sm font-medium">{check.name}</h4>

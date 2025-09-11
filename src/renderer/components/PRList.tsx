@@ -55,7 +55,7 @@ export const PRList: React.FC = () => {
     setSelectedPR(pr);
   };
 
-  const handlePRToggle = (prId: string, event: React.MouseEvent) => {
+  const handlePRToggle = (prId: string, event: React.ChangeEvent<HTMLInputElement>) => {
     event.stopPropagation();
     const newSelected = new Set(selectedPRs);
     if (newSelected.has(prId)) {

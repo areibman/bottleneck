@@ -1,11 +1,12 @@
-import * as Git from 'nodegit';
+import { simpleGit, SimpleGit } from 'simple-git';
 import * as path from 'path';
 import * as fs from 'fs';
 
 export class GitService {
   public async clone(url: string, localPath: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await Git.Clone.clone(url, localPath);
+      const git = simpleGit();
+      await git.clone(url, localPath);
       return { success: true };
     } catch (error) {
       console.error('Git clone failed:', error);
@@ -18,9 +19,8 @@ export class GitService {
 
   public async checkout(repoPath: string, branch: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const repo = await Git.Repository.open(repoPath);
-      const ref = await Git.Reference.lookup(repo, `refs/heads/${branch}`);
-      await repo.checkoutRef(ref);
+      const git = simpleGit(repoPath);
+      await git.checkout(branch);
       return { success: true };
     } catch (error) {
       console.error('Git checkout failed:', error);
@@ -33,29 +33,22 @@ export class GitService {
 
   public async getBranches(repoPath: string): Promise<{ local: string[]; remote: string[] }> {
     try {
-      const repo = await Git.Repository.open(repoPath);
+      const git = simpleGit(repoPath);
+      const branches = await git.branch(['-a']);
+      
       const localBranches: string[] = [];
       const remoteBranches: string[] = [];
 
-      // Get local branches
-      const localRefs = await repo.getReferences(Git.Reference.TYPE.LISTALL);
-      for (const ref of localRefs) {
-        if (ref.isBranch()) {
-          const name = ref.name().replace('refs/heads/', '');
-          localBranches.push(name);
-        }
-      }
-
-      // Get remote branches
-      const remoteRefs = await repo.getReferences(Git.Reference.TYPE.LISTALL);
-      for (const ref of remoteRefs) {
-        if (ref.isRemote()) {
-          const name = ref.name().replace('refs/remotes/origin/', '');
-          if (name !== 'HEAD') {
-            remoteBranches.push(name);
+      branches.all.forEach(branch => {
+        if (branch.startsWith('remotes/')) {
+          const remoteBranch = branch.replace('remotes/origin/', '');
+          if (remoteBranch !== 'HEAD') {
+            remoteBranches.push(remoteBranch);
           }
+        } else if (!branch.includes('HEAD')) {
+          localBranches.push(branch);
         }
-      }
+      });
 
       return { local: localBranches, remote: remoteBranches };
     } catch (error) {
@@ -66,45 +59,9 @@ export class GitService {
 
   public async getDiff(repoPath: string, base: string, head: string): Promise<string> {
     try {
-      const repo = await Git.Repository.open(repoPath);
-      
-      // Get the base and head commits
-      const baseCommit = await repo.getCommit(base);
-      const headCommit = await repo.getCommit(head);
-
-      // Generate diff
-      const diff = await Git.Diff.treeToTree(repo, baseCommit, headCommit, {
-        flags: Git.Diff.OPTION.INCLUDE_UNTRACKED,
-      });
-
-      const patches = await diff.patches();
-      let diffText = '';
-
-      for (const patch of patches) {
-        const hunks = await patch.hunks();
-        for (const hunk of hunks) {
-          const lines = await hunk.lines();
-          for (const line of lines) {
-            const content = line.content();
-            const origin = line.origin();
-            const lineNumber = line.newLineno();
-            const oldLineNumber = line.oldLineno();
-            
-            let prefix = ' ';
-            if (origin === Git.Diff.LINE.ADDITION) {
-              prefix = '+';
-            } else if (origin === Git.Diff.LINE.DELETION) {
-              prefix = '-';
-            } else if (origin === Git.Diff.LINE.CONTEXT) {
-              prefix = ' ';
-            }
-
-            diffText += `${prefix}${content}`;
-          }
-        }
-      }
-
-      return diffText;
+      const git = simpleGit(repoPath);
+      const diff = await git.diff([`${base}...${head}`]);
+      return diff;
     } catch (error) {
       console.error('Failed to generate diff:', error);
       return '';
@@ -118,33 +75,15 @@ export class GitService {
     untracked: string[];
   }> {
     try {
-      const repo = await Git.Repository.open(repoPath);
-      const status = await repo.getStatus();
+      const git = simpleGit(repoPath);
+      const status = await git.status();
       
-      const modified: string[] = [];
-      const added: string[] = [];
-      const deleted: string[] = [];
-      const untracked: string[] = [];
-
-      for (const file of status) {
-        const filePath = file.path();
-        const statusFlags = file.status();
-
-        if (statusFlags & Git.Status.STATUS.WT_MODIFIED) {
-          modified.push(filePath);
-        }
-        if (statusFlags & Git.Status.STATUS.INDEX_ADDED) {
-          added.push(filePath);
-        }
-        if (statusFlags & Git.Status.STATUS.WT_DELETED) {
-          deleted.push(filePath);
-        }
-        if (statusFlags & Git.Status.STATUS.WT_NEW) {
-          untracked.push(filePath);
-        }
-      }
-
-      return { modified, added, deleted, untracked };
+      return {
+        modified: status.modified,
+        added: status.created,
+        deleted: status.deleted,
+        untracked: status.not_added
+      };
     } catch (error) {
       console.error('Failed to get git status:', error);
       return { modified: [], added: [], deleted: [], untracked: [] };
@@ -153,16 +92,8 @@ export class GitService {
 
   public async pull(repoPath: string, branch: string = 'main'): Promise<{ success: boolean; error?: string }> {
     try {
-      const repo = await Git.Repository.open(repoPath);
-      const remote = await repo.getRemote('origin');
-      
-      await remote.fetch();
-      
-      const remoteBranch = await repo.getBranch(`origin/${branch}`);
-      const localBranch = await repo.getBranch(branch);
-      
-      await repo.mergeBranches(branch, `origin/${branch}`);
-      
+      const git = simpleGit(repoPath);
+      await git.pull('origin', branch);
       return { success: true };
     } catch (error) {
       console.error('Git pull failed:', error);
@@ -175,7 +106,8 @@ export class GitService {
 
   public async isGitRepository(path: string): Promise<boolean> {
     try {
-      await Git.Repository.open(path);
+      const git = simpleGit(path);
+      await git.status();
       return true;
     } catch {
       return false;

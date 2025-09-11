@@ -38,7 +38,7 @@ class BottleneckApp {
 
     // Load the renderer
     if (process.env.NODE_ENV === 'development') {
-      this.mainWindow.loadURL('http://localhost:3000');
+      this.mainWindow.loadURL('http://localhost:3001');
       this.mainWindow.webContents.openDevTools();
     } else {
       this.mainWindow.loadFile(path.join(__dirname, 'index.html'));
@@ -67,7 +67,7 @@ class BottleneckApp {
       return await this.githubService.getRepositories();
     });
 
-    ipcMain.handle('github:get-prs', async (_, repo: string, state: string) => {
+    ipcMain.handle('github:get-prs', async (_, repo: string, state: 'open' | 'closed' | 'all') => {
       return await this.githubService.getPullRequests(repo, state);
     });
 
@@ -87,7 +87,7 @@ class BottleneckApp {
       return await this.githubService.createReview(repo, prNumber, review);
     });
 
-    ipcMain.handle('github:merge-pr', async (_, repo: string, prNumber: number, mergeMethod: string) => {
+    ipcMain.handle('github:merge-pr', async (_, repo: string, prNumber: number, mergeMethod: 'merge' | 'squash' | 'rebase') => {
       return await this.githubService.mergePullRequest(repo, prNumber, mergeMethod);
     });
 
