@@ -1,0 +1,73 @@
+{
+  "name": "bottleneck",
+  "version": "0.1.0",
+  "description": "Fast, reliable GitHub pull request review and branch management",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsc -p tsconfig.main.json && electron dist/main.js",
+    "dev:renderer": "webpack serve --config webpack.renderer.config.js",
+    "build": "node scripts/build.js",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
+    "package": "electron-builder",
+    "dist": "npm run build && npm run package",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": ["github", "pull-request", "code-review", "electron"],
+  "author": "Bottleneck Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.2.0",
+    "css-loader": "^6.8.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.0",
+    "eslint": "^8.45.0",
+    "html-webpack-plugin": "^5.5.0",
+    "style-loader": "^3.3.0",
+    "ts-loader": "^9.4.0",
+    "typescript": "^5.1.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@octokit/rest": "^20.0.0",
+    "@octokit/auth-oauth-device": "^5.0.0",
+    "better-sqlite3": "^9.2.0",
+    "nodegit": "^0.28.0-alpha.11",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.15.0",
+    "zustand": "^4.4.0",
+    "date-fns": "^2.30.0",
+    "clsx": "^2.0.0",
+    "lucide-react": "^0.263.0"
+  },
+  "build": {
+    "appId": "com.bottleneck.app",
+    "productName": "Bottleneck",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
