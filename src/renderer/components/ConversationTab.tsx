@@ -16,8 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../utils/cn';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Markdown } from './Markdown';
 
 interface ConversationTabProps {
   pr: PullRequest;
@@ -108,14 +107,9 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                     opened this pull request {formatDistanceToNow(new Date(pr.created_at), { addSuffix: true })}
                   </span>
                 </div>
-                <div className={cn(
-                  "max-w-none prose break-words",
-                  "prose-pre:whitespace-pre-wrap"
-                )}>
+                <div>
                   {pr.body ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {pr.body}
-                    </ReactMarkdown>
+                    <Markdown content={pr.body} />
                   ) : (
                     <em className={cn(
                       theme === 'dark' ? "text-gray-500" : "text-gray-600"
@@ -267,7 +261,7 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                     <div className={cn(
                       theme === 'dark' ? "text-gray-300" : "text-gray-700"
                     )}>
-                      {item.body || <em className={cn(
+                      {item.body ? <Markdown content={item.body} /> : <em className={cn(
                         theme === 'dark' ? "text-gray-500" : "text-gray-600"
                       )}>No comment</em>}
                     </div>

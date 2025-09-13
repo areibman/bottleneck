@@ -17,12 +17,13 @@ interface PRState {
   pullRequests: Map<string, PullRequest>;
   repositories: Repository[];
   selectedRepo: Repository | null;
+  loadedRepos: Set<string>;
   filters: string[];
   groups: PRGroup[];
   loading: boolean;
   error: string | null;
   
-  fetchPullRequests: (owner: string, repo: string) => Promise<void>;
+  fetchPullRequests: (owner: string, repo: string, force?: boolean) => Promise<void>;
   fetchRepositories: () => Promise<void>;
   setSelectedRepo: (repo: Repository | null) => void;
   setFilter: (filter: string) => void;
@@ -31,18 +32,34 @@ interface PRState {
   groupPRsByPrefix: () => void;
   updatePR: (pr: PullRequest) => void;
   bulkUpdatePRs: (prs: PullRequest[]) => void;
+  storePRsInDB: (prs: PullRequest[], owner: string, repo: string) => Promise<void>;
+  storeReposInDB: (repos: Repository[]) => Promise<void>;
 }
 
 export const usePRStore = create<PRState>((set, get) => ({
   pullRequests: new Map(),
   repositories: [],
   selectedRepo: null,
+  loadedRepos: new Set(),
   filters: ['open'],
   groups: [],
   loading: false,
   error: null,
 
-  fetchPullRequests: async (owner: string, repo: string) => {
+  fetchPullRequests: async (owner: string, repo: string, force = false) => {
+    const repoFullName = `${owner}/${repo}`;
+    
+    // Skip if already loading
+    if (get().loading) {
+      return;
+    }
+    
+    // Skip if already loaded (unless forced)
+    if (get().loadedRepos.has(repoFullName) && !force) {
+      // Still have data, just return without setting loading
+      return;
+    }
+
     set({ loading: true, error: null });
     
     try {
@@ -81,6 +98,8 @@ export const usePRStore = create<PRState>((set, get) => ({
         loading: false 
       });
       
+      get().loadedRepos.add(repoFullName);
+
       // Auto-group PRs after fetching
       get().groupPRsByPrefix();
       
@@ -281,7 +300,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       [owner, repo]
     );
     
-    if (!repoResult.success || repoResult.data.length === 0) return;
+    if (!repoResult.success || !repoResult.data || repoResult.data.length === 0) return;
     
     const repoId = repoResult.data[0].id;
     

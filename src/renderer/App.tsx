@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useUIStore } from './stores/uiStore';
@@ -13,6 +13,8 @@ import BranchesView from './views/BranchesView';
 import SettingsView from './views/SettingsView';
 import TerminalView from './views/TerminalView';
 import AuthView from './views/AuthView';
+import IssuesView from './views/IssuesView';
+import IssueDetailView from './views/IssueDetailView';
 import { setupKeyboardShortcuts } from './utils/keyboard';
 import { cn } from './utils/cn';
 
@@ -68,7 +70,7 @@ function App() {
       <TopBar />
       
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar className={cn('transition-all duration-200', {
+        <Sidebar className={cn({
           'w-64': sidebarOpen,
           'w-0': !sidebarOpen,
         })} />
@@ -79,12 +81,14 @@ function App() {
             <Route path="/pulls" element={<PRListView />} />
             <Route path="/pulls/:owner/:repo/:number" element={<PRDetailView />} />
             <Route path="/branches" element={<BranchesView />} />
+            <Route path="/issues" element={<IssuesView />} />
+            <Route path="/issues/:owner/:repo/:number" element={<IssueDetailView />} />
             <Route path="/settings" element={<SettingsView />} />
             <Route path="/terminal" element={<TerminalView />} />
           </Routes>
         </main>
         
-        <RightPanel className={cn('transition-all duration-200', {
+        <RightPanel className={cn({
           'w-80': rightPanelOpen,
           'w-0': !rightPanelOpen,
         })} />

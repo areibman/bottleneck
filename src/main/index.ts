@@ -9,6 +9,7 @@ import { GitOperations } from './git';
 import { TerminalManager } from './terminal';
 import { createMenu } from './menu';
 import Store from 'electron-store';
+import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 
 const isDev = process.env.NODE_ENV === 'development';
 const store = new Store();
@@ -88,6 +89,13 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
+    
+    // Enable additional DevTools features
+    mainWindow.webContents.on('devtools-opened', () => {
+      console.log('DevTools opened - Performance profiler should be available');
+      // The Performance tab should be available in the DevTools
+      // You can access it via the "Performance" tab in DevTools
+    });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
@@ -110,6 +118,21 @@ function createWindow() {
 
 // App event handlers
 app.whenReady().then(async () => {
+  // Install DevTools Extensions
+  if (isDev) {
+    // Install React Developer Tools
+    try {
+      const name = await installExtension(REACT_DEVELOPER_TOOLS);
+      console.log(`Added Extension: ${name}`);
+    } catch (err) {
+      console.log('An error occurred installing extensions: ', err);
+    }
+    
+    // The Chrome DevTools Performance Profiler is built-in
+    // It will be available in the Performance tab of DevTools
+    console.log('Chrome DevTools Performance Profiler is available in the Performance tab');
+  }
+
   // Initialize database
   database = new Database();
   await database.initialize();
