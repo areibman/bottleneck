@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  GitBranch, 
-  Plus, 
-  Trash2, 
+import {
+  GitBranch,
+  Plus,
+  Trash2,
   GitMerge,
   RefreshCw,
   Terminal,
   ArrowUpDown,
-  Search
+  Search,
+  FolderOpen,
+  HardDrive,
+  Globe
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -144,6 +147,7 @@ export default function BranchesView() {
                 onClick={selectRepository}
                 className="btn btn-primary text-sm"
               >
+                <FolderOpen className="w-4 h-4 mr-2" />
                 Select Repository
               </button>
             )}
@@ -176,12 +180,14 @@ export default function BranchesView() {
                   onClick={() => setShowLocal(!showLocal)}
                   className={cn('btn btn-ghost text-sm', showLocal && 'bg-gray-700')}
                 >
+                  <HardDrive className="w-4 h-4 mr-2" />
                   Local
                 </button>
                 <button
                   onClick={() => setShowRemote(!showRemote)}
                   className={cn('btn btn-ghost text-sm', showRemote && 'bg-gray-700')}
                 >
+                  <Globe className="w-4 h-4 mr-2" />
                   Remote
                 </button>
               </div>
@@ -200,6 +206,7 @@ export default function BranchesView() {
               onClick={selectRepository}
               className="btn btn-primary"
             >
+              <FolderOpen className="w-4 h-4 mr-2" />
               Select Repository
             </button>
           </div>

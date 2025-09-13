@@ -58,15 +58,10 @@ export default function TopBar() {
         <div className="relative no-drag">
           <button
             onClick={() => setRepoMenuOpen(!repoMenuOpen)}
-            className={cn(
-              "flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors",
-              theme === 'dark' 
-                ? "bg-gray-700 hover:bg-gray-600" 
-                : "bg-white hover:bg-gray-100 border border-gray-300"
-            )}
+            className="btn btn-secondary text-sm"
           >
-            <GitBranch className="w-4 h-4" />
-            <span className="max-w-[200px] truncate">
+            <GitBranch className="w-4 h-4 mr-2" />
+            <span className="max-w-[200px] truncate mr-2">
               {selectedRepo ? selectedRepo.full_name : 'Select Repository'}
             </span>
             <ChevronDown className="w-3 h-3" />

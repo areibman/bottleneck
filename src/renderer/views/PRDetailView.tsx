@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import {
   ArrowLeft,
   GitPullRequest,
   GitMerge,
@@ -291,8 +291,8 @@ export default function PRDetailView() {
             {/* File list */}
             <div className={cn(
               "w-80 border-r overflow-y-auto",
-              theme === 'dark' 
-                ? "bg-gray-800 border-gray-700" 
+              theme === 'dark'
+                ? "bg-gray-800 border-gray-700"
                 : "bg-gray-50 border-gray-200"
             )}>
               <div className={cn(
@@ -305,7 +305,7 @@ export default function PRDetailView() {
                   className="input w-full text-sm"
                 />
               </div>
-              
+
               <div className={cn(
                 "divide-y",
                 theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
@@ -313,14 +313,14 @@ export default function PRDetailView() {
                 {files.map((file) => {
                   const isSelected = selectedFile?.filename === file.filename;
                   const isViewed = viewedFiles.has(file.filename);
-                  
+
                   return (
                     <div
                       key={file.filename}
                       className={cn(
                         'px-3 py-2 cursor-pointer transition-colors',
-                        theme === 'dark' 
-                          ? 'hover:bg-gray-700' 
+                        theme === 'dark'
+                          ? 'hover:bg-gray-700'
                           : 'hover:bg-gray-100',
                         isSelected && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100')
                       )}
@@ -336,7 +336,7 @@ export default function PRDetailView() {
                             {file.filename}
                           </span>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2 ml-2">
                           {isViewed && (
                             <Eye className={cn(
@@ -355,7 +355,7 @@ export default function PRDetailView() {
                 })}
               </div>
             </div>
-            
+
             {/* Diff viewer */}
             <div className="flex-1 overflow-hidden">
               {selectedFile && (

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  GitPullRequest, 
-  GitBranch, 
-  Settings, 
+import {
+  GitPullRequest,
+  GitBranch,
+  Settings,
+  Terminal,
   Search,
   ChevronDown,
   ChevronRight,
@@ -107,6 +108,7 @@ export default function Sidebar({ className }: SidebarProps) {
     { path: '/pulls', icon: GitPullRequest, label: 'Pull Requests' },
     { path: '/branches', icon: GitBranch, label: 'Branches' },
     { path: '/settings', icon: Settings, label: 'Settings' },
+    { path: '/terminal', icon: Terminal, label: 'Terminal' },
   ];
 
   // Calculate real counts from actual PR data

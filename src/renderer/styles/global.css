@@ -75,19 +75,44 @@
   .light *:focus-visible {
     @apply ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
   }
+
+  /* Global button and input borders and sizing */
+  .dark button:not(.btn) {
+    @apply border border-gray-500/70 px-4 py-1.5 rounded-lg;
+  }
+
+  .dark input:not(.input) {
+    @apply border border-gray-500/80 px-4 py-1.5 rounded-lg;
+  }
+
+  .light button:not(.btn) {
+    @apply border border-gray-200 px-4 py-1.5 rounded-lg;
+  }
+
+  .light input:not(.input) {
+    @apply border border-gray-200 px-4 py-1.5 rounded-lg;
+  }
+
+  .light select {
+    @apply border border-gray-200 px-4 py-1.5 rounded-lg;
+  }
+
+  .dark select {
+    @apply border border-gray-500/70 px-4 py-1.5 rounded-lg;
+  }
 }
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply px-4 py-1.5 rounded-lg font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 flex items-center justify-center whitespace-nowrap border;
   }
   
   .dark .btn {
-    @apply focus-visible:ring-offset-gray-900;
+    @apply focus-visible:ring-offset-gray-900 border-gray-500/70;
   }
   
   .light .btn {
-    @apply focus-visible:ring-offset-white;
+    @apply focus-visible:ring-offset-white border-gray-200;
   }
 
   .btn-primary {
@@ -119,11 +144,11 @@
   }
 
   .dark .input {
-    @apply px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
+    @apply px-4 py-1.5 bg-gray-800 border border-gray-500/80 rounded-lg text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
   }
-  
+
   .light .input {
-    @apply px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
+    @apply px-4 py-1.5 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-150;
   }
 
   .dark .label {

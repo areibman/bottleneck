@@ -32,6 +32,28 @@ const electronAPI = {
     getVersion: () => ipcRenderer.invoke('app:get-version'),
   },
 
+  // Terminal operations
+  terminal: {
+    spawn: (cwd?: string) => ipcRenderer.invoke('terminal:spawn', cwd),
+    write: (data: string) => ipcRenderer.send('terminal:write', data),
+    kill: () => ipcRenderer.invoke('terminal:kill'),
+    resize: (cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', cols, rows),
+    restart: (cwd?: string) => ipcRenderer.invoke('terminal:restart', cwd),
+    health: () => ipcRenderer.invoke('terminal:health'),
+    onData: (callback: (data: string) => void) => {
+      ipcRenderer.on('terminal:data', (_event, data) => callback(data));
+    },
+    offData: () => {
+      ipcRenderer.removeAllListeners('terminal:data');
+    },
+  },
+
+  // Settings operations
+  settings: {
+    get: (key?: string) => ipcRenderer.invoke('settings:get', key),
+    set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value),
+  },
+
   // IPC event listeners
   on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
     const validChannels = [

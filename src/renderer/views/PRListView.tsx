@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  GitPullRequest, 
-  GitMerge, 
-  Check, 
-  X, 
+import {
+  GitPullRequest,
+  GitMerge,
+  Check,
+  X,
   Clock,
   MessageSquare,
   ChevronDown,
@@ -12,7 +12,9 @@ import {
   Filter,
   MoreHorizontal,
   Bot,
-  User
+  User,
+  Tag,
+  UserCheck
 } from 'lucide-react';
 import { usePRStore } from '../stores/prStore';
 import { useUIStore } from '../stores/uiStore';
@@ -385,10 +387,10 @@ export default function PRListView() {
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
               className={cn(
-                "text-sm px-3 py-2 rounded-md transition-colors",
+                "text-sm px-4 py-1.5 rounded-lg transition-colors border",
                 theme === 'dark'
-                  ? "bg-gray-700 border-gray-600 text-white"
-                  : "bg-white border-gray-300 text-gray-900 border"
+                  ? "bg-gray-700 border-gray-500/70 text-white"
+                  : "bg-white border-gray-200 text-gray-900"
               )}
             >
               <option value="updated">Recently updated</option>
@@ -400,10 +402,10 @@ export default function PRListView() {
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value as any)}
               className={cn(
-                "text-sm px-3 py-2 rounded-md transition-colors",
+                "text-sm px-4 py-1.5 rounded-lg transition-colors border",
                 theme === 'dark'
-                  ? "bg-gray-700 border-gray-600 text-white"
-                  : "bg-white border-gray-300 text-gray-900 border"
+                  ? "bg-gray-700 border-gray-500/70 text-white"
+                  : "bg-white border-gray-200 text-gray-900"
               )}
             >
               <option value="none">No grouping</option>
@@ -450,12 +452,15 @@ export default function PRListView() {
                 Merge
               </button>
               <button className="btn btn-secondary text-sm">
+                <X className="w-3 h-3 mr-1" />
                 Close
               </button>
               <button className="btn btn-secondary text-sm">
+                <Tag className="w-3 h-3 mr-1" />
                 Add Label
               </button>
               <button className="btn btn-secondary text-sm">
+                <UserCheck className="w-3 h-3 mr-1" />
                 Request Review
               </button>
             </div>
