@@ -63,6 +63,36 @@ export interface Repository {
   clone_url: string;
 }
 
+export interface Issue {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  user: {
+    login: string;
+    avatar_url: string;
+  };
+  labels: Array<{
+    name: string;
+    color: string;
+  }>;
+  assignees: Array<{
+    login: string;
+    avatar_url: string;
+  }>;
+  comments: number;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  repository?: {
+    owner: {
+      login: string;
+    };
+    name: string;
+  };
+}
+
 export interface Comment {
   id: number;
   body: string;
@@ -72,13 +102,13 @@ export interface Comment {
   };
   created_at: string;
   updated_at: string;
+  html_url: string;
   path?: string;
   line?: number;
   side?: 'LEFT' | 'RIGHT';
   start_line?: number;
   start_side?: 'LEFT' | 'RIGHT';
   in_reply_to_id?: number;
-  html_url: string;
 }
 
 export interface Review {
@@ -113,11 +143,6 @@ export class GitHubAPI {
     });
   }
 
-  async getCurrentUser() {
-    const { data } = await this.octokit.users.getAuthenticated();
-    return data;
-  }
-
   async getRepositories(page = 1, perPage = 100) {
     const { data } = await this.octokit.repos.listForAuthenticatedUser({
       page,
@@ -145,7 +170,7 @@ export class GitHubAPI {
       per_page: 100,
     });
     
-    return data as PullRequest[];
+    return data as unknown as PullRequest[];
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {
@@ -156,6 +181,31 @@ export class GitHubAPI {
     });
     
     return data as PullRequest;
+  }
+
+  async getIssue(owner: string, repo: string, issueNumber: number) {
+    const { data } = await this.octokit.issues.get({
+      owner,
+      repo,
+      issue_number: issueNumber,
+    });
+    
+    return data as Issue;
+  }
+
+  async getIssues(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
+    const { data } = await this.octokit.issues.listForRepo({
+      owner,
+      repo,
+      state,
+      per_page: 100,
+    });
+    
+    // Filter out pull requests - GitHub API returns both issues and PRs from this endpoint
+    // Pull requests have a pull_request property
+    const issues = data.filter(item => !('pull_request' in item));
+    
+    return issues as Issue[];
   }
 
   async getPullRequestFiles(owner: string, repo: string, pullNumber: number) {
@@ -350,5 +400,61 @@ export class GitHubAPI {
     });
     
     return data.items;
+  }
+
+  async getIssueComments(owner: string, repo: string, issueNumber: number): Promise<Comment[]> {
+    const { data } = await this.octokit.issues.listComments({
+      owner,
+      repo,
+      issue_number: issueNumber,
+    });
+    
+    return data as Comment[];
+  }
+
+  async createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<Comment> {
+    const { data } = await this.octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      body,
+    });
+    
+    return data as Comment;
+  }
+
+  async updateIssue(owner: string, repo: string, issueNumber: number, body: string): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      body,
+    });
+    
+    return data as Issue;
+  }
+
+  async updateIssueComment(owner: string, repo: string, commentId: number, body: string): Promise<Comment> {
+    const { data } = await this.octokit.issues.updateComment({
+      owner,
+      repo,
+      comment_id: commentId,
+      body,
+    });
+    
+    return data as Comment;
+  }
+
+  async deleteIssueComment(owner: string, repo: string, commentId: number): Promise<void> {
+    await this.octokit.issues.deleteComment({
+      owner,
+      repo,
+      comment_id: commentId,
+    });
+  }
+
+  async getCurrentUser() {
+    const { data } = await this.octokit.users.getAuthenticated();
+    return data;
   }
 }

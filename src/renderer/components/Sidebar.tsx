@@ -11,7 +11,8 @@ import {
   Plus,
   FolderOpen,
   Bot,
-  User
+  User,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { usePRStore } from '../stores/prStore';
@@ -105,6 +106,7 @@ export default function Sidebar({ className }: SidebarProps) {
 
   const navItems = [
     { path: '/pulls', icon: GitPullRequest, label: 'Pull Requests' },
+    { path: '/issues', icon: AlertCircle, label: 'Issues' },
     { path: '/branches', icon: GitBranch, label: 'Branches' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ];

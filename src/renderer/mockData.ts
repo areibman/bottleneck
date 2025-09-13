@@ -453,3 +453,65 @@ export const mockReviews = [
   }
 ];
 
+export const mockIssues = [
+  {
+    id: 1,
+    number: 101,
+    title: 'Fix login button alignment',
+    body: 'The login button is misaligned on the welcome screen.',
+    state: 'open',
+    user: {
+      login: 'design-team',
+      avatar_url: 'https://avatars.githubusercontent.com/u/12346',
+    },
+    labels: [
+      { name: 'bug', color: 'd73a4a' },
+      { name: 'ui', color: 'a2eeef' },
+    ],
+    assignees: [
+      {
+        login: 'reibs',
+        avatar_url: 'https://avatars.githubusercontent.com/u/12345',
+      },
+    ],
+    comments: 2,
+    created_at: '2023-10-07T10:00:00Z',
+    updated_at: '2023-10-07T11:30:00Z',
+    closed_at: null,
+  },
+  {
+    id: 2,
+    number: 102,
+    title: 'Add dark mode support',
+    body: 'Implement a toggle for dark mode in the settings.',
+    state: 'open',
+    user: {
+      login: 'product-manager',
+      avatar_url: 'https://avatars.githubusercontent.com/u/12347',
+    },
+    labels: [{ name: 'feature', color: '28a745' }],
+    assignees: [],
+    comments: 5,
+    created_at: '2023-10-08T14:00:00Z',
+    updated_at: '2023-10-08T15:20:00Z',
+    closed_at: null,
+  },
+  {
+    id: 3,
+    number: 98,
+    title: 'Update documentation for API v2',
+    body: 'The documentation needs to be updated to reflect the new API v2 changes.',
+    state: 'closed',
+    user: {
+      login: 'dev-rel',
+      avatar_url: 'https://avatars.githubusercontent.com/u/12348',
+    },
+    labels: [{ name: 'documentation', color: '0075ca' }],
+    assignees: [],
+    comments: 1,
+    created_at: '2023-09-25T18:00:00Z',
+    updated_at: '2023-09-28T10:00:00Z',
+    closed_at: '2023-09-28T10:00:00Z',
+  },
+];
+

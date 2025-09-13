@@ -55,11 +55,11 @@ export default function TopBar() {
       {/* Repository selector - offset from window controls */}
       <div className="flex items-center space-x-4 ml-20">
         {/* Repository Selector */}
-        <div className="relative no-drag">
+        <div className="relative">
           <button
             onClick={() => setRepoMenuOpen(!repoMenuOpen)}
             className={cn(
-              "flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors",
+              "flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors no-drag",
               theme === 'dark' 
                 ? "bg-gray-700 hover:bg-gray-600" 
                 : "bg-white hover:bg-gray-100 border border-gray-300"
@@ -131,11 +131,11 @@ export default function TopBar() {
       </div>
 
       {/* Center area - Command palette trigger */}
-      <div className="flex-1 flex justify-center no-drag">
+      <div className="flex-1 flex justify-center">
         <button
           onClick={toggleCommandPalette}
           className={cn(
-            "flex items-center space-x-2 px-4 py-1.5 rounded-md text-sm transition-colors",
+            "flex items-center space-x-2 px-4 py-1.5 rounded-md text-sm transition-colors no-drag",
             theme === 'dark' 
               ? "bg-gray-700 hover:bg-gray-600 text-gray-300" 
               : "bg-white hover:bg-gray-100 text-gray-700 border border-gray-300"
@@ -151,12 +151,12 @@ export default function TopBar() {
       </div>
 
       {/* Right side actions */}
-      <div className="flex items-center space-x-3 no-drag">
+      <div className="flex items-center space-x-3">
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
           className={cn(
-            "p-2 rounded transition-colors",
+            "p-2 rounded transition-colors no-drag",
             theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
           )}
           title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
@@ -174,7 +174,7 @@ export default function TopBar() {
             onClick={syncAll}
             disabled={isSyncing}
             className={cn(
-              'p-2 rounded transition-colors',
+              'p-2 rounded transition-colors no-drag',
               theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100',
               isSyncing && 'opacity-50 cursor-not-allowed'
             )}
@@ -192,7 +192,7 @@ export default function TopBar() {
 
         {/* Notifications */}
         <button className={cn(
-          "relative p-2 rounded transition-colors",
+          "relative p-2 rounded transition-colors no-drag",
           theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
         )}>
           <Bell className="w-4 h-4" />
@@ -204,7 +204,7 @@ export default function TopBar() {
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className={cn(
-              "flex items-center space-x-2 p-1.5 rounded transition-colors",
+              "flex items-center space-x-2 p-1.5 rounded transition-colors no-drag",
               theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
             )}
           >
