@@ -63,7 +63,7 @@ function App() {
       <TopBar />
       
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar className={cn('transition-all duration-200', {
+        <Sidebar className={cn({
           'w-64': sidebarOpen,
           'w-0': !sidebarOpen,
         })} />
@@ -80,7 +80,7 @@ function App() {
           </Routes>
         </main>
         
-        <RightPanel className={cn('transition-all duration-200', {
+        <RightPanel className={cn({
           'w-80': rightPanelOpen,
           'w-0': !rightPanelOpen,
         })} />
