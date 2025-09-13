@@ -233,6 +233,106 @@
   .comment-resolved {
     @apply opacity-60 border-gray-600;
   }
+
+  /* Markdown code block styles for better contrast */
+  .markdown-content pre {
+    @apply font-mono text-sm;
+  }
+
+  /* Light mode code block styles with improved contrast */
+  .light .markdown-content pre {
+    @apply bg-gray-50 text-gray-900 border border-gray-200;
+  }
+
+  .light .markdown-content pre code {
+    @apply text-gray-900 bg-transparent p-0;
+  }
+
+  /* Dark mode code block styles */
+  .dark .markdown-content pre {
+    @apply bg-gray-800 text-gray-100 border border-gray-700;
+  }
+
+  .dark .markdown-content pre code {
+    @apply text-gray-100 bg-transparent p-0;
+  }
+
+  /* Inline code styles */
+  .light .markdown-content :not(pre) > code {
+    @apply bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-sm font-medium border border-gray-200;
+  }
+
+  .dark .markdown-content :not(pre) > code {
+    @apply bg-gray-800 text-gray-200 px-1.5 py-0.5 rounded text-sm font-medium border border-gray-700;
+  }
+
+  /* Code block cursor styles */
+  .markdown-content pre *,
+  .markdown-content pre code,
+  .markdown-content pre code * {
+    cursor: text !important;
+  }
+
+  /* Prevent button flickering */
+  .group:hover .group-hover\:opacity-100 {
+    transition-delay: 0ms;
+  }
+
+  /* Syntax highlighting token colors for light mode */
+  .light .markdown-content .token.comment,
+  .light .markdown-content .token.prolog,
+  .light .markdown-content .token.doctype,
+  .light .markdown-content .token.cdata {
+    @apply text-gray-600;
+  }
+
+  .light .markdown-content .token.punctuation {
+    @apply text-gray-700;
+  }
+
+  .light .markdown-content .token.property,
+  .light .markdown-content .token.tag,
+  .light .markdown-content .token.boolean,
+  .light .markdown-content .token.number,
+  .light .markdown-content .token.constant,
+  .light .markdown-content .token.symbol,
+  .light .markdown-content .token.deleted {
+    @apply text-blue-700;
+  }
+
+  .light .markdown-content .token.selector,
+  .light .markdown-content .token.attr-name,
+  .light .markdown-content .token.string,
+  .light .markdown-content .token.char,
+  .light .markdown-content .token.builtin,
+  .light .markdown-content .token.inserted {
+    @apply text-green-700;
+  }
+
+  .light .markdown-content .token.operator,
+  .light .markdown-content .token.entity,
+  .light .markdown-content .token.url,
+  .light .markdown-content .language-css .token.string,
+  .light .markdown-content .style .token.string {
+    @apply text-orange-700;
+  }
+
+  .light .markdown-content .token.atrule,
+  .light .markdown-content .token.attr-value,
+  .light .markdown-content .token.keyword {
+    @apply text-purple-700;
+  }
+
+  .light .markdown-content .token.function,
+  .light .markdown-content .token.class-name {
+    @apply text-pink-700;
+  }
+
+  .light .markdown-content .token.regex,
+  .light .markdown-content .token.important,
+  .light .markdown-content .token.variable {
+    @apply text-orange-700;
+  }
 }
 
 @layer utilities {
