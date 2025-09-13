@@ -66,6 +66,7 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.21.2",
+    "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^2.1.0",
     "remark-gfm": "^4.0.1",
     "simple-git": "^3.22.0",
