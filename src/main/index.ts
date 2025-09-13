@@ -86,7 +86,16 @@ function createWindow() {
   // Load the app
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools();
+    
+    // Open DevTools with Performance tab available
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    
+    // Enable additional DevTools features
+    mainWindow.webContents.on('devtools-opened', () => {
+      console.log('DevTools opened - Performance profiler should be available');
+      // The Performance tab should be available in the DevTools
+      // You can access it via the "Performance" tab in DevTools
+    });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
@@ -109,14 +118,19 @@ function createWindow() {
 
 // App event handlers
 app.whenReady().then(async () => {
-  // Install React DevTools
+  // Install DevTools Extensions
   if (isDev) {
+    // Install React Developer Tools
     try {
       const name = await installExtension(REACT_DEVELOPER_TOOLS);
-      console.log(`Added Extension:  ${name}`);
+      console.log(`Added Extension: ${name}`);
     } catch (err) {
-      console.log('An error occurred: ', err);
+      console.log('An error occurred installing extensions: ', err);
     }
+    
+    // The Chrome DevTools Performance Profiler is built-in
+    // It will be available in the Performance tab of DevTools
+    console.log('Chrome DevTools Performance Profiler is available in the Performance tab');
   }
 
   // Initialize database
