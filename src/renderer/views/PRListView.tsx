@@ -34,7 +34,7 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
   return (
     <div
       className={cn(
-        'px-4 py-3 transition-colors cursor-pointer',
+        'px-4 py-3 cursor-pointer',
         theme === 'dark' 
           ? 'hover:bg-gray-800' 
           : 'hover:bg-gray-100',
@@ -246,6 +246,18 @@ export default function PRListView() {
     return prefixWords.join(' ');
   }, []);
 
+  // Cache date parsing in a separate map to avoid modifying objects
+  const parsedDates = useMemo(() => {
+    const dateMap = new Map();
+    pullRequests.forEach((pr, key) => {
+      dateMap.set(key, {
+        updated: new Date(pr.updated_at).getTime(),
+        created: new Date(pr.created_at).getTime()
+      });
+    });
+    return dateMap;
+  }, [pullRequests]);
+
   const getFilteredPRs = useMemo(() => {
     let prs = Array.from(pullRequests.values());
     
@@ -260,13 +272,18 @@ export default function PRListView() {
       });
     }
     
-    // Sort
+    // Sort using cached dates from the map
     prs.sort((a, b) => {
+      const aKey = `${a.base.repo.owner.login}/${a.base.repo.name}#${a.number}`;
+      const bKey = `${b.base.repo.owner.login}/${b.base.repo.name}#${b.number}`;
+      const aDates = parsedDates.get(aKey) || { updated: 0, created: 0 };
+      const bDates = parsedDates.get(bKey) || { updated: 0, created: 0 };
+      
       switch (sortBy) {
         case 'updated':
-          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+          return bDates.updated - aDates.updated;
         case 'created':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return bDates.created - aDates.created;
         case 'title':
           return a.title.localeCompare(b.title);
         default:
@@ -275,35 +292,43 @@ export default function PRListView() {
     });
     
     return prs;
-  }, [pullRequests, filters, sortBy]);
+  }, [pullRequests, parsedDates, filters, sortBy]);
+
+  // Pre-compute PR metadata for grouping
+  const prsWithMetadata = useMemo(() => {
+    return getFilteredPRs.map(pr => ({
+      pr,
+      agent: getAgentFromPR(pr),
+      titlePrefix: getTitlePrefix(pr.title),
+      author: pr.user?.login || 'unknown',
+      labelNames: pr.labels?.map((label: any) => label.name) || []
+    }));
+  }, [getFilteredPRs, getAgentFromPR, getTitlePrefix]);
 
   // Group PRs by agent and then by title prefix
   const groupedPRs = useMemo(() => {
     if (groupBy === 'none') {
-      return { ungrouped: getFilteredPRs };
+      return { ungrouped: prsWithMetadata.map(item => item.pr) };
     }
     
     const groups: Record<string, Record<string, any[]>> = {};
     
     if (groupBy === 'agent') {
       // Group by agent first
-      getFilteredPRs.forEach(pr => {
-        const agent = getAgentFromPR(pr);
+      prsWithMetadata.forEach(({ pr, agent, titlePrefix }) => {
         if (!groups[agent]) {
           groups[agent] = {};
         }
         
         // Sub-group by title prefix within agent
-        const prefix = getTitlePrefix(pr.title);
-        if (!groups[agent][prefix]) {
-          groups[agent][prefix] = [];
+        if (!groups[agent][titlePrefix]) {
+          groups[agent][titlePrefix] = [];
         }
-        groups[agent][prefix].push(pr);
+        groups[agent][titlePrefix].push(pr);
       });
     } else if (groupBy === 'author') {
       // Group by author
-      getFilteredPRs.forEach(pr => {
-        const author = pr.user?.login || 'unknown';
+      prsWithMetadata.forEach(({ pr, author }) => {
         if (!groups[author]) {
           groups[author] = { all: [] };
         }
@@ -311,10 +336,9 @@ export default function PRListView() {
       });
     } else if (groupBy === 'label') {
       // Group by labels
-      getFilteredPRs.forEach(pr => {
-        if (pr.labels?.length > 0) {
-          pr.labels.forEach((label: any) => {
-            const labelName = label.name;
+      prsWithMetadata.forEach(({ pr, labelNames }) => {
+        if (labelNames.length > 0) {
+          labelNames.forEach((labelName: string) => {
             if (!groups[labelName]) {
               groups[labelName] = { all: [] };
             }
@@ -330,7 +354,7 @@ export default function PRListView() {
     }
     
     return groups;
-  }, [getFilteredPRs, groupBy, getAgentFromPR, getTitlePrefix]);
+  }, [prsWithMetadata, groupBy]);
 
   const toggleGroup = useCallback((groupKey: string) => {
     setCollapsedGroups(prev => {

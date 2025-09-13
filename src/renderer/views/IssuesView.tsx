@@ -25,7 +25,7 @@ const IssueItem = React.memo(({ issue, onIssueClick, theme }: {
   return (
     <div
       className={cn(
-        'px-4 py-3 transition-colors cursor-pointer',
+        'px-4 py-3 cursor-pointer',
         theme === 'dark' 
           ? 'hover:bg-gray-800' 
           : 'hover:bg-gray-100',
@@ -123,16 +123,33 @@ export default function IssuesView() {
     }
   }, [selectedRepo, fetchIssues]);
 
+  // Cache date parsing in a separate map to avoid modifying objects
+  const parsedDates = useMemo(() => {
+    const dateMap = new Map();
+    issues.forEach((issue, key) => {
+      dateMap.set(key, {
+        updated: new Date(issue.updated_at).getTime(),
+        created: new Date(issue.created_at).getTime()
+      });
+    });
+    return dateMap;
+  }, [issues]);
+
   const filteredIssues = useMemo(() => {
     let issuesArray = Array.from(issues.values());
     
-    // Sort
+    // Sort using cached dates from the map
     issuesArray.sort((a, b) => {
+      const aKey = `${a.repository?.owner.login || ''}/${a.repository?.name || ''}#${a.number}`;
+      const bKey = `${b.repository?.owner.login || ''}/${b.repository?.name || ''}#${b.number}`;
+      const aDates = parsedDates.get(aKey) || { updated: 0, created: 0 };
+      const bDates = parsedDates.get(bKey) || { updated: 0, created: 0 };
+      
       switch (sortBy) {
         case 'updated':
-          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+          return bDates.updated - aDates.updated;
         case 'created':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return bDates.created - aDates.created;
         case 'comments':
           return b.comments - a.comments;
         default:
@@ -141,7 +158,7 @@ export default function IssuesView() {
     });
     
     return issuesArray;
-  }, [issues, sortBy]);
+  }, [issues, parsedDates, sortBy]);
 
   const handleIssueClick = useCallback((issue: Issue) => {
     if (selectedRepo) {

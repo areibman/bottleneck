@@ -32,6 +32,8 @@ interface PRState {
   groupPRsByPrefix: () => void;
   updatePR: (pr: PullRequest) => void;
   bulkUpdatePRs: (prs: PullRequest[]) => void;
+  storePRsInDB: (prs: PullRequest[], owner: string, repo: string) => Promise<void>;
+  storeReposInDB: (repos: Repository[]) => Promise<void>;
 }
 
 export const usePRStore = create<PRState>((set, get) => ({
@@ -46,7 +48,15 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   fetchPullRequests: async (owner: string, repo: string, force = false) => {
     const repoFullName = `${owner}/${repo}`;
+    
+    // Skip if already loading
+    if (get().loading) {
+      return;
+    }
+    
+    // Skip if already loaded (unless forced)
     if (get().loadedRepos.has(repoFullName) && !force) {
+      // Still have data, just return without setting loading
       return;
     }
 
@@ -290,7 +300,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       [owner, repo]
     );
     
-    if (!repoResult.success || repoResult.data.length === 0) return;
+    if (!repoResult.success || !repoResult.data || repoResult.data.length === 0) return;
     
     const repoId = repoResult.data[0].id;
     

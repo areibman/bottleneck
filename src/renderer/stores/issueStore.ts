@@ -20,7 +20,15 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   fetchIssues: async (owner: string, repo: string, force = false) => {
     const repoFullName = `${owner}/${repo}`;
+    
+    // Skip if already loading
+    if (get().loading) {
+      return;
+    }
+    
+    // Skip if already loaded (unless forced)
     if (get().loadedRepos.has(repoFullName) && !force) {
+      // Still have data, just return without setting loading
       return;
     }
 
