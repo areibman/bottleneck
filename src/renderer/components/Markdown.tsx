@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { Components } from 'react-markdown';
 import { cn } from '../utils/cn';
 import { useUIStore } from '../stores/uiStore';
@@ -15,6 +16,35 @@ const MarkdownRenderer = memo(({ content, theme }: { content: string; theme: 'li
   
   // Custom components for ReactMarkdown
   const components: Components = {
+    // Custom image rendering with proper sizing and dark mode support
+    img({ node, ...props }: any) {
+      return (
+        <img 
+          {...props} 
+          className={cn(
+            "max-w-full h-auto rounded",
+            theme === 'dark' ? "opacity-90" : ""
+          )}
+          loading="lazy"
+        />
+      );
+    },
+    // Custom link rendering
+    a({ node, children, ...props }: any) {
+      return (
+        <a 
+          {...props}
+          className={cn(
+            "text-blue-600 hover:text-blue-700 underline",
+            theme === 'dark' ? "text-blue-400 hover:text-blue-300" : ""
+          )}
+          target={props.href?.startsWith('http') ? '_blank' : undefined}
+          rel={props.href?.startsWith('http') ? 'noopener noreferrer' : undefined}
+        >
+          {children}
+        </a>
+      );
+    },
     // Custom code block rendering
     code({ node, className, children, ...props }: any) {
       const inline = !className?.startsWith('language-');
@@ -63,7 +93,6 @@ const MarkdownRenderer = memo(({ content, theme }: { content: string; theme: 'li
         // Base prose styles
         "prose-headings:font-semibold",
         "prose-p:leading-relaxed",
-        "prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline",
         // Remove default pre/code styles since we're using custom components
         "[&>pre]:contents",
         // Table styles
@@ -81,6 +110,7 @@ const MarkdownRenderer = memo(({ content, theme }: { content: string; theme: 'li
     >
       <ReactMarkdown 
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={components}
       >
         {content}
