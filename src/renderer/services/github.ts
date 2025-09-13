@@ -63,6 +63,30 @@ export interface Repository {
   clone_url: string;
 }
 
+export interface Issue {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  user: {
+    login: string;
+    avatar_url: string;
+  };
+  labels: Array<{
+    name: string;
+    color: string;
+  }>;
+  assignees: Array<{
+    login: string;
+    avatar_url: string;
+  }>;
+  comments: number;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+}
+
 export interface Comment {
   id: number;
   body: string;
@@ -156,6 +180,27 @@ export class GitHubAPI {
     });
     
     return data as PullRequest;
+  }
+
+  async getIssue(owner: string, repo: string, issueNumber: number) {
+    const { data } = await this.octokit.issues.get({
+      owner,
+      repo,
+      issue_number: issueNumber,
+    });
+    
+    return data as Issue;
+  }
+
+  async getIssues(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
+    const { data } = await this.octokit.issues.listForRepo({
+      owner,
+      repo,
+      state,
+      per_page: 100,
+    });
+    
+    return data as Issue[];
   }
 
   async getPullRequestFiles(owner: string, repo: string, pullNumber: number) {

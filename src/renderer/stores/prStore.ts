@@ -17,12 +17,13 @@ interface PRState {
   pullRequests: Map<string, PullRequest>;
   repositories: Repository[];
   selectedRepo: Repository | null;
+  loadedRepos: Set<string>;
   filters: string[];
   groups: PRGroup[];
   loading: boolean;
   error: string | null;
   
-  fetchPullRequests: (owner: string, repo: string) => Promise<void>;
+  fetchPullRequests: (owner: string, repo: string, force?: boolean) => Promise<void>;
   fetchRepositories: () => Promise<void>;
   setSelectedRepo: (repo: Repository | null) => void;
   setFilter: (filter: string) => void;
@@ -37,12 +38,18 @@ export const usePRStore = create<PRState>((set, get) => ({
   pullRequests: new Map(),
   repositories: [],
   selectedRepo: null,
+  loadedRepos: new Set(),
   filters: ['open'],
   groups: [],
   loading: false,
   error: null,
 
-  fetchPullRequests: async (owner: string, repo: string) => {
+  fetchPullRequests: async (owner: string, repo: string, force = false) => {
+    const repoFullName = `${owner}/${repo}`;
+    if (get().loadedRepos.has(repoFullName) && !force) {
+      return;
+    }
+
     set({ loading: true, error: null });
     
     try {
@@ -81,6 +88,8 @@ export const usePRStore = create<PRState>((set, get) => ({
         loading: false 
       });
       
+      get().loadedRepos.add(repoFullName);
+
       // Auto-group PRs after fetching
       get().groupPRsByPrefix();
       

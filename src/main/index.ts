@@ -8,6 +8,7 @@ import { GitHubAuth } from './auth';
 import { GitOperations } from './git';
 import { createMenu } from './menu';
 import Store from 'electron-store';
+import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 
 const isDev = process.env.NODE_ENV === 'development';
 const store = new Store();
@@ -108,6 +109,16 @@ function createWindow() {
 
 // App event handlers
 app.whenReady().then(async () => {
+  // Install React DevTools
+  if (isDev) {
+    try {
+      const name = await installExtension(REACT_DEVELOPER_TOOLS);
+      console.log(`Added Extension:  ${name}`);
+    } catch (err) {
+      console.log('An error occurred: ', err);
+    }
+  }
+
   // Initialize database
   database = new Database();
   await database.initialize();
