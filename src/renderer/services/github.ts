@@ -85,6 +85,12 @@ export interface Issue {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  repository?: {
+    owner: {
+      login: string;
+    };
+    name: string;
+  };
 }
 
 export interface Comment {
@@ -195,7 +201,11 @@ export class GitHubAPI {
       per_page: 100,
     });
     
-    return data as Issue[];
+    // Filter out pull requests - GitHub API returns both issues and PRs from this endpoint
+    // Pull requests have a pull_request property
+    const issues = data.filter(item => !('pull_request' in item));
+    
+    return issues as Issue[];
   }
 
   async getPullRequestFiles(owner: string, repo: string, pullNumber: number) {
