@@ -86,9 +86,7 @@ function createWindow() {
   // Load the app
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
-    
-    // Open DevTools with Performance tab available
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.webContents.openDevTools();
     
     // Enable additional DevTools features
     mainWindow.webContents.on('devtools-opened', () => {
