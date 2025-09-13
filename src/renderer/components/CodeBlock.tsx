@@ -1,9 +1,22 @@
-import { useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useState, memo, lazy, Suspense } from 'react';
 import { Check, Copy, WrapText, Hash, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useUIStore } from '../stores/uiStore';
+
+// Lazy load the heavy syntax highlighter and styles together
+const SyntaxHighlighterAsync = lazy(async () => {
+  const [{ Prism }, { oneDark, oneLight }] = await Promise.all([
+    import('react-syntax-highlighter'),
+    import('react-syntax-highlighter/dist/esm/styles/prism')
+  ]);
+  
+  // Return a component that handles the theme internally
+  return {
+    default: ({ theme, ...props }: any) => (
+      <Prism style={theme === 'dark' ? oneDark : oneLight} {...props} />
+    )
+  };
+});
 
 interface CodeBlockProps {
   code: string;
@@ -13,7 +26,8 @@ interface CodeBlockProps {
   className?: string;
 }
 
-export function CodeBlock({ 
+// Memoize the entire component to prevent unnecessary re-renders
+export const CodeBlock = memo(function CodeBlock({ 
   code, 
   language = 'plaintext', 
   filename,
@@ -193,29 +207,38 @@ export function CodeBlock({
         "relative overflow-auto cursor-text select-text",
         wordWrap ? "whitespace-pre-wrap break-words" : ""
       )}>
-        <SyntaxHighlighter
-          language={normalizedLanguage}
-          style={theme === 'dark' ? oneDark : oneLight}
-          showLineNumbers={showLines}
-          customStyle={{
-            margin: 0,
-            padding: '1rem',
-            background: 'transparent',
-            fontSize: '0.875rem',
-            lineHeight: '1.5',
-            cursor: 'text',
-          }}
-          lineNumberStyle={{
-            minWidth: '2.5em',
-            paddingRight: '1em',
-            color: theme === 'dark' ? '#4a5568' : '#9ca3af',
-            userSelect: 'none',
-          }}
-          wrapLines={wordWrap}
-          wrapLongLines={wordWrap}
-        >
-          {displayCode}
-        </SyntaxHighlighter>
+        <Suspense fallback={
+          <pre className={cn(
+            "p-4 text-sm leading-relaxed overflow-auto",
+            theme === 'dark' ? "text-gray-300" : "text-gray-700"
+          )}>
+            <code>{displayCode}</code>
+          </pre>
+        }>
+          <SyntaxHighlighterAsync
+            theme={theme}
+            language={normalizedLanguage}
+            showLineNumbers={showLines}
+            customStyle={{
+              margin: 0,
+              padding: '1rem',
+              background: 'transparent',
+              fontSize: '0.875rem',
+              lineHeight: '1.5',
+              cursor: 'text',
+            }}
+            lineNumberStyle={{
+              minWidth: '2.5em',
+              paddingRight: '1em',
+              color: theme === 'dark' ? '#4a5568' : '#9ca3af',
+              userSelect: 'none',
+            }}
+            wrapLines={wordWrap}
+            wrapLongLines={wordWrap}
+          >
+            {displayCode}
+          </SyntaxHighlighterAsync>
+        </Suspense>
         
         {/* Expand button if collapsed */}
         {collapsed && (
@@ -236,4 +259,4 @@ export function CodeBlock({
       </div>
     </div>
   );
-}
+});

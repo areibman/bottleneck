@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Components } from 'react-markdown';
@@ -9,8 +10,8 @@ interface MarkdownProps {
   content: string;
 }
 
-export function Markdown({ content }: MarkdownProps) {
-  const { theme } = useUIStore();
+// Internal component that does the actual rendering
+const MarkdownRenderer = memo(({ content, theme }: { content: string; theme: 'light' | 'dark' }) => {
   
   // Custom components for ReactMarkdown
   const components: Components = {
@@ -86,4 +87,10 @@ export function Markdown({ content }: MarkdownProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+// Export the main component that subscribes to theme
+export const Markdown = memo(({ content }: MarkdownProps) => {
+  const theme = useUIStore(state => state.theme); // Only subscribe to theme changes
+  return <MarkdownRenderer content={content} theme={theme} />;
+});
