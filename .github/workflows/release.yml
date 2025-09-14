@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-release:
+    name: Build and draft release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20]
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+      ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Package app
+        run: npx electron-builder --publish always | cat
+
+      - name: Generate checksums
+        run: |
+          mkdir -p checksums
+          set -e
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            for f in release/*; do
+              if [ -f "$f" ]; then
+                sha256sum "$f" >> checksums/windows-SHA256SUMS.txt
+              fi
+            done
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            for f in release/*; do
+              if [ -f "$f" ]; then
+                shasum -a 256 "$f" >> checksums/macos-SHA256SUMS.txt
+              fi
+            done
+          else
+            for f in release/*; do
+              if [ -f "$f" ]; then
+                sha256sum "$f" >> checksums/linux-SHA256SUMS.txt
+              fi
+            done
+          fi
+        shell: bash
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ matrix.os }}
+          path: checksums/*-SHA256SUMS.txt
+
+  attach-checksums:
+    name: Attach checksums to release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download checksum artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: checksums-*
+          path: checksums
+          merge-multiple: true
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            checksums/*-SHA256SUMS.txt
+          draft: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+

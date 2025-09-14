@@ -16,6 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "types": ["node"],
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
@@ -24,6 +25,6 @@
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/main/**/*"],
   "exclude": ["node_modules", "dist"]
 }

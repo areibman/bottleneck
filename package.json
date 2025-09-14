@@ -67,6 +67,7 @@
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.3.8",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
@@ -83,6 +84,10 @@
     "sqlite3": "^5.1.7",
     "zustand": "^4.4.7"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/REPO.git"
+  },
   "build": {
     "appId": "com.bottleneck.app",
     "productName": "Bottleneck",
@@ -93,14 +98,65 @@
       "dist/**/*",
       "node_modules/**/*"
     ],
+    "asar": true,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "draft": true
+      }
+    ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "gatekeeperAssess": false
     },
     "linux": {
-      "target": "AppImage"
+      "category": "Utility",
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "snap",
+        "tar.gz"
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "msi",
+        "zip"
+      ],
+      "publisherName": [
+        "Your Company, Inc."
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": true
+    },
+    "snap": {
+      "grade": "stable",
+      "confinement": "strict"
     }
   }
 }

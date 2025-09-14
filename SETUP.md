@@ -125,3 +125,26 @@ bottleneck/
 ## Contributing
 
 See README.md for contribution guidelines.
+
+## Release Credentials & Signing
+
+To enable automated builds and signed artifacts in CI, configure the following secrets in your GitHub repository settings:
+
+- `GH_TOKEN` – a GitHub personal access token with `repo` scope (used by electron-builder to upload release assets)
+- `CSC_LINK` – base64-encoded code signing certificate (Windows/macOS) or URL to certificate file
+- `CSC_KEY_PASSWORD` – password for the code signing certificate
+- `APPLE_ID` – Apple ID email used for notarization
+- `APPLE_APP_SPECIFIC_PASSWORD` – App-specific password for the Apple ID
+- `APPLE_TEAM_ID` – Apple Developer Team ID
+- `APPLE_ID_PASSWORD` – Optional alias for app-specific password (some actions expect this)
+- `SNAPCRAFT_STORE_CREDENTIALS` – For publishing snaps (optional)
+
+For macOS notarization you must enable hardened runtime and provide entitlements. This repo includes default entitlements in `build/entitlements.mac.plist` and `build/entitlements.mac.inherit.plist`.
+
+For Windows signing, provide a `.p12`/`.pfx` certificate via `CSC_LINK` and its password via `CSC_KEY_PASSWORD`. If not available, CI can still produce unsigned artifacts, but release acceptance criteria require signed builds.
+
+## Versioning & Releases
+
+- Tag a release using semantic versioning, e.g. `v1.2.3`
+- CI will build matrices for Windows, macOS, and Linux and upload assets to a draft GitHub Release
+- Release notes are generated automatically from commits/PRs

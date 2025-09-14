@@ -2,6 +2,43 @@
 
 Fast GitHub PR review and branch management - A native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for power-review workflows.
 
+## Installation
+
+Official builds are distributed via GitHub Releases. Download the latest for your platform:
+
+- Windows: `.exe` (NSIS installer), `.msi`, portable `.zip`
+- macOS: `.dmg` and `.zip` (Universal for Intel and Apple Silicon)
+- Linux: `.AppImage`, `.deb`, `.rpm`, `.snap`, `.tar.gz`
+
+Checksums (SHA256) are provided with each release.
+
+## Updates
+
+The app integrates with an auto-updater. Stable releases update from the latest published GitHub Release. Pre-releases (beta) will receive beta updates when running a beta version.
+
+To manually check for updates:
+
+1. Open the app
+2. Go to Settings → Updates → Check for updates
+
+If an update is downloaded, it will be installed on quit.
+
+## System Requirements
+
+- Windows 10 or later (x64)
+- macOS 12+ (Universal)
+- Linux glibc-based distro (x64); for `.deb` Ubuntu 20.04+, for `.rpm` Fedora 35+
+
+## Troubleshooting
+
+- If launch fails on Linux, ensure the AppImage is executable: `chmod +x Bottleneck-*.AppImage`
+- On macOS, if blocked by Gatekeeper, right-click the app and choose Open the first time
+- Corporate proxies may block update checks; configure system proxy settings
+
+## Release Notes
+
+Release notes are auto-generated from merged PRs and conventional commits. See each release on GitHub for details.
+
 ## Features
 
 - ⚡ **Lightning Fast** - Near-instant navigation, diff rendering, and branch checkout
