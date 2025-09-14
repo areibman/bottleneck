@@ -1,0 +1,411 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-beta.*'
+      - 'v*.*.*-alpha.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_notes: ${{ steps.notes.outputs.notes }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        id: notes
+        uses: release-drafter/release-drafter@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: ${{ steps.version.outputs.version }}
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || github.event.inputs.prerelease == 'true' }}
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Bottleneck ${{ steps.version.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: true
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || github.event.inputs.prerelease == 'true' }}
+
+  build-windows:
+    needs: prepare-release
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm run rebuild
+
+      - name: Update version
+        run: |
+          $version = "${{ needs.prepare-release.outputs.version }}".TrimStart('v')
+          $packageJson = Get-Content package.json | ConvertFrom-Json
+          $packageJson.version = $version
+          $packageJson | ConvertTo-Json -Depth 10 | Set-Content package.json
+
+      - name: Build application
+        run: npm run build
+
+      - name: Sign Windows binaries
+        if: env.WINDOWS_CERTIFICATE != ''
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$env:WINDOWS_CERTIFICATE" | base64 -d > certificate.pfx
+          # Sign the executable using Windows SDK signtool
+          # This would require Windows SDK to be installed in the runner
+
+      - name: Package for Windows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          npx electron-builder --win --${{ matrix.arch }} --publish never
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem release/*.exe, release/*.msi, release/*.zip | ForEach-Object {
+            $hash = Get-FileHash $_.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLower())  $($_.Name)" | Out-File -FilePath "$($_.FullName).sha256" -Encoding ASCII
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}-binaries
+          path: |
+            release/*.exe
+            release/*.msi
+            release/*.zip
+            release/*.sha256
+            release/*.blockmap
+            release/latest*.yml
+
+      - name: Upload to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: release/Bottleneck-Setup-${{ needs.prepare-release.outputs.version }}-${{ matrix.arch }}.exe
+          asset_name: Bottleneck-Setup-${{ needs.prepare-release.outputs.version }}-${{ matrix.arch }}.exe
+          asset_content_type: application/octet-stream
+
+  build-macos:
+    needs: prepare-release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64, universal]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm run rebuild
+
+      - name: Update version
+        run: |
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          VERSION="${VERSION#v}"
+          npm version $VERSION --no-git-tag-version
+
+      - name: Build application
+        run: npm run build
+
+      - name: Import certificates
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          MACOS_DEVELOPER_ID: ${{ secrets.MACOS_DEVELOPER_ID }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Import certificate from secrets
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Package for macOS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "${{ matrix.arch }}" = "universal" ]; then
+            npx electron-builder --mac --universal --publish never
+          else
+            npx electron-builder --mac --${{ matrix.arch }} --publish never
+          fi
+
+      - name: Notarize macOS app
+        if: env.APPLE_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Notarize the app
+          xcrun notarytool submit release/*.dmg \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+      - name: Generate checksums
+        run: |
+          cd release
+          for file in *.dmg *.zip; do
+            if [ -f "$file" ]; then
+              shasum -a 256 "$file" > "$file.sha256"
+            fi
+          done
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-binaries
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.sha256
+            release/*.blockmap
+            release/latest*.yml
+
+      - name: Upload to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: release/Bottleneck-${{ needs.prepare-release.outputs.version }}-${{ matrix.arch }}.dmg
+          asset_name: Bottleneck-${{ needs.prepare-release.outputs.version }}-${{ matrix.arch }}.dmg
+          asset_content_type: application/octet-stream
+
+  build-linux:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64, armv7l]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm fakeroot dpkg
+
+      - name: Install Snapcraft
+        if: matrix.arch == 'x64'
+        uses: samuelmeuli/action-snapcraft@v2
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm run rebuild
+
+      - name: Update version
+        run: |
+          VERSION="${{ needs.prepare-release.outputs.version }}"
+          VERSION="${VERSION#v}"
+          npm version $VERSION --no-git-tag-version
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package for Linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx electron-builder --linux --${{ matrix.arch }} --publish never
+
+      - name: Build Snap package
+        if: matrix.arch == 'x64'
+        run: |
+          npx electron-builder --linux snap --x64 --publish never
+
+      - name: Generate checksums
+        run: |
+          cd release
+          for file in *.AppImage *.deb *.rpm *.snap *.tar.gz; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" > "$file.sha256"
+            fi
+          done
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}-binaries
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.snap
+            release/*.tar.gz
+            release/*.sha256
+            release/*.blockmap
+            release/latest*.yml
+
+      - name: Upload AppImage to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: release/Bottleneck-${{ needs.prepare-release.outputs.version }}-${{ matrix.arch }}.AppImage
+          asset_name: Bottleneck-${{ needs.prepare-release.outputs.version }}-${{ matrix.arch }}.AppImage
+          asset_content_type: application/octet-stream
+
+  finalize-release:
+    needs: [prepare-release, build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create consolidated checksums file
+        run: |
+          echo "# SHA256 Checksums for Bottleneck ${{ needs.prepare-release.outputs.version }}" > checksums.txt
+          echo "" >> checksums.txt
+          find artifacts -name "*.sha256" -type f | while read file; do
+            cat "$file" >> checksums.txt
+          done
+
+      - name: Upload checksums to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare-release.outputs.upload_url }}
+          asset_path: checksums.txt
+          asset_name: checksums-${{ needs.prepare-release.outputs.version }}.txt
+          asset_content_type: text/plain
+
+      - name: Publish release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: '${{ needs.prepare-release.outputs.release_id }}',
+              draft: false
+            });
+
+      - name: Link PR to Issue
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Find PRs that were merged for this release
+            const { data: commits } = await github.rest.repos.compareCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              base: 'main',
+              head: context.sha
+            });
+            
+            // Comment on issue #14
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 14,
+              body: `✅ Automated release pipeline has been set up and deployed with version ${{ needs.prepare-release.outputs.version }}!\n\nRelease: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare-release.outputs.version }}`
+            });
