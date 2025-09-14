@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+          - os: windows-latest
+            platform: win32
+            arch: ia32
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Install electron-builder
+        run: npm install --save-dev electron-builder@latest
+
+      - name: Build for Windows
+        if: matrix.platform == 'win32'
+        run: npx electron-builder --win --x64 --ia32 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build for macOS
+        if: matrix.platform == 'darwin'
+        run: npx electron-builder --mac --x64 --arm64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Build for Linux
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux --x64 --arm64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}-build
+          path: |
+            release/
+            !release/mac/
+            !release/win-unpacked/
+            !release/linux-unpacked/
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Generating changelog from $PREVIOUS_TAG to $GITHUB_REF_NAME"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD)
+          else
+            echo "No previous tag found, generating full changelog"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --max-count=50)
+          fi
+          
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate checksums
+        run: |
+          find artifacts -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.snap" -o -name "*.zip" -o -name "*.tar.gz" | while read file; do
+            echo "Generating checksum for $file"
+            sha256sum "$file" >> checksums.txt
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## What's Changed
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Downloads
+            
+            ### Windows
+            - **Installer (.exe)**: Download the Windows installer for easy installation
+            - **MSI Package**: Download the MSI package for enterprise deployment
+            - **Portable (.zip)**: Download the portable version that doesn't require installation
+            
+            ### macOS
+            - **DMG**: Download the macOS disk image for Intel and Apple Silicon Macs
+            - **ZIP**: Download the ZIP archive for manual installation
+            
+            ### Linux
+            - **AppImage**: Download the portable AppImage (works on most Linux distributions)
+            - **DEB Package**: Download the Debian/Ubuntu package
+            - **RPM Package**: Download the Red Hat/Fedora package
+            - **Snap Package**: Download the Snap package
+            - **TAR.GZ**: Download the compressed archive
+            
+            ## Verification
+            
+            All downloads are signed and verified. You can verify the integrity of the downloads using the checksums below:
+            
+            ```
+            ${{ steps.checksums.outputs.content }}
+            ```
+            
+            ## Installation Instructions
+            
+            ### Windows
+            1. Download the `.exe` installer
+            2. Run the installer and follow the setup wizard
+            3. The app will be installed to your Program Files directory
+            
+            ### macOS
+            1. Download the `.dmg` file
+            2. Open the DMG and drag Bottleneck to your Applications folder
+            3. You may need to allow the app in System Preferences > Security & Privacy
+            
+            ### Linux
+            1. **AppImage**: Make executable (`chmod +x`) and run
+            2. **DEB**: Install with `sudo dpkg -i bottleneck_*.deb`
+            3. **RPM**: Install with `sudo rpm -i bottleneck_*.rpm`
+            4. **Snap**: Install with `sudo snap install bottleneck_*.snap --dangerous`
+            
+            ## Auto-Updates
+            
+            Bottleneck includes automatic update functionality. The app will check for updates on startup and notify you when a new version is available.
+          files: |
+            artifacts/*/release/*
+            checksums.txt
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    needs: [build, release]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify on success
+        if: needs.release.result == 'success'
+        run: |
+          echo "✅ Release ${{ github.ref_name }} published successfully!"
+          echo "🔗 View release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+      
+      - name: Notify on failure
+        if: needs.release.result == 'failure'
+        run: |
+          echo "❌ Release ${{ github.ref_name }} failed!"
+          echo "Check the workflow logs for details."

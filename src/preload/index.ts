@@ -54,6 +54,17 @@ const electronAPI = {
     set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value),
   },
 
+  // Updater operations
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:check-for-updates'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download-update'),
+    installUpdate: () => ipcRenderer.invoke('updater:install-update'),
+    setAutoUpdateEnabled: (enabled: boolean) => ipcRenderer.invoke('updater:set-auto-update-enabled', enabled),
+    isAutoUpdateEnabled: () => ipcRenderer.invoke('updater:is-auto-update-enabled'),
+    getSkippedVersions: () => ipcRenderer.invoke('updater:get-skipped-versions'),
+    clearSkippedVersions: () => ipcRenderer.invoke('updater:clear-skipped-versions'),
+  },
+
   // IPC event listeners
   on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
     const validChannels = [
@@ -78,7 +89,14 @@ const electronAPI = {
       'mark-file-viewed',
       'toggle-diff-view',
       'toggle-whitespace',
-      'show-shortcuts'
+      'show-shortcuts',
+      'update-checking',
+      'update-available',
+      'update-not-available',
+      'update-error',
+      'update-download-progress',
+      'update-downloaded',
+      'update-installing'
     ];
 
     if (validChannels.includes(channel)) {

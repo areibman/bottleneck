@@ -11,16 +11,19 @@ import {
   LogOut,
   Save,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  Download
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { cn } from '../utils/cn';
+import { UpdaterSettings } from '../components/UpdaterSettings';
 
 export default function SettingsView() {
   const { user, logout } = useAuthStore();
   const { settings, updateSettings, saveSettings } = useSettingsStore();
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'notifications' | 'advanced'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'notifications' | 'advanced' | 'updates'>('general');
+  const [showUpdaterSettings, setShowUpdaterSettings] = useState(false);
 
   const handleSave = async () => {
     await saveSettings();
@@ -37,6 +40,7 @@ export default function SettingsView() {
     { id: 'general', label: 'General', icon: Settings },
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'updates', label: 'Updates', icon: Download },
     { id: 'advanced', label: 'Advanced', icon: Code },
   ];
 
@@ -332,6 +336,81 @@ export default function SettingsView() {
             </div>
           )}
 
+          {activeTab === 'updates' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold mb-4">Updates</h2>
+                
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Download className="w-5 h-5 text-blue-400" />
+                      <h3 className="font-medium text-white">Automatic Updates</h3>
+                    </div>
+                    <p className="text-sm text-gray-400 mb-4">
+                      Bottleneck automatically checks for updates and notifies you when a new version is available.
+                    </p>
+                    <button
+                      onClick={() => setShowUpdaterSettings(true)}
+                      className="btn btn-primary"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Update Settings
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-white font-medium">Current Version</h3>
+                    <div className="p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-300">v{window.electron?.app?.getVersion?.() || '0.1.0'}</span>
+                        <span className="text-xs text-gray-500">Latest</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-white font-medium">Release Notes</h3>
+                    <div className="p-4 bg-gray-800 rounded-lg">
+                      <p className="text-sm text-gray-400">
+                        For the latest release notes and changelog, visit our{' '}
+                        <a
+                          href="https://github.com/YOUR_GITHUB_USERNAME/bottleneck/releases"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 underline"
+                        >
+                          GitHub Releases page
+                        </a>
+                        .
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-white font-medium">Manual Update Check</h3>
+                    <p className="text-sm text-gray-400">
+                      You can manually check for updates at any time using the button below.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await window.electron.updater.checkForUpdates();
+                        } catch (error) {
+                          console.error('Failed to check for updates:', error);
+                        }
+                      }}
+                      className="btn btn-secondary"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Check for Updates
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'advanced' && (
             <div className="space-y-6">
               <div>
@@ -416,6 +495,11 @@ export default function SettingsView() {
           </div>
         </div>
       </div>
+
+      {/* Updater Settings Modal */}
+      {showUpdaterSettings && (
+        <UpdaterSettings onClose={() => setShowUpdaterSettings(false)} />
+      )}
     </div>
   );
 }

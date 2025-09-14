@@ -7,6 +7,7 @@ import { Database } from './database';
 import { GitHubAuth } from './auth';
 import { GitOperations } from './git';
 import { TerminalManager } from './terminal';
+import { Updater } from './updater';
 import { createMenu } from './menu';
 import Store from 'electron-store';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
@@ -19,6 +20,7 @@ let database: Database;
 let githubAuth: GitHubAuth;
 let gitOps: GitOperations;
 let terminal: TerminalManager;
+let updater: Updater;
 
 function createWindow() {
   const preloadPath = path.resolve(path.join(__dirname, '../preload/index.js'));
@@ -146,6 +148,9 @@ app.whenReady().then(async () => {
   // Initialize Terminal
   terminal = new TerminalManager();
 
+  // Initialize Updater
+  updater = new Updater();
+
   // Set default settings if they don't exist
   if (!store.has('cloneLocation')) {
     store.set('cloneLocation', '~/repos');
@@ -153,6 +158,19 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  // Set the main window for the updater
+  if (mainWindow) {
+    updater.setMainWindow(mainWindow);
+  }
+
+  // Check for updates on startup (only in production)
+  if (!isDev) {
+    // Delay the update check to avoid blocking the app startup
+    setTimeout(() => {
+      updater.checkForUpdates();
+    }, 5000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -370,6 +388,70 @@ ipcMain.handle('settings:get', async (_, key?: string) => {
 ipcMain.handle('settings:set', async (_, key: string, value: any) => {
   try {
     store.set(key, value);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// Updater IPC handlers
+ipcMain.handle('updater:check-for-updates', async () => {
+  try {
+    await updater.checkForUpdates();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:download-update', async () => {
+  try {
+    await updater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:install-update', async () => {
+  try {
+    await updater.installUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:set-auto-update-enabled', async (_, enabled: boolean) => {
+  try {
+    updater.setAutoUpdateEnabled(enabled);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:is-auto-update-enabled', async () => {
+  try {
+    const enabled = updater.isAutoUpdateEnabled();
+    return { success: true, enabled };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:get-skipped-versions', async () => {
+  try {
+    const versions = updater.getSkippedVersions();
+    return { success: true, versions };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:clear-skipped-versions', async () => {
+  try {
+    updater.clearSkippedVersions();
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
