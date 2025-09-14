@@ -1,0 +1,119 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+categories:
+  - title: '🚀 Features'
+    labels:
+      - 'feature'
+      - 'enhancement'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+  - title: '🧰 Maintenance'
+    labels:
+      - 'chore'
+      - 'maintenance'
+  - title: '📚 Documentation'
+    labels:
+      - 'documentation'
+      - 'docs'
+  - title: '⬆️ Dependencies'
+    labels:
+      - 'dependencies'
+    collapse-after: 5
+
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - 'major'
+      - 'breaking-change'
+  minor:
+    labels:
+      - 'minor'
+      - 'feature'
+      - 'enhancement'
+  patch:
+    labels:
+      - 'patch'
+      - 'bug'
+      - 'bugfix'
+      - 'fix'
+      - 'maintenance'
+  default: patch
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  ## 📊 Statistics
+  - **Contributors:** $CONTRIBUTORS
+  - **Commits:** <!--COMMITS_COUNT-->
+  
+  ## 📥 Installation
+
+  ### Windows
+  - **Installer (.exe):** `Bottleneck-Setup-$RESOLVED_VERSION-x64.exe` - Recommended for most users
+  - **MSI Package:** `Bottleneck-$RESOLVED_VERSION-x64.msi` - For enterprise deployment
+  - **Portable:** `Bottleneck-$RESOLVED_VERSION-win.zip` - No installation required
+  - **ARM64:** Available for Windows on ARM devices
+
+  ### macOS
+  - **Universal DMG:** `Bottleneck-$RESOLVED_VERSION-universal.dmg` - Works on Intel and Apple Silicon
+  - **Intel:** `Bottleneck-$RESOLVED_VERSION-x64.dmg`
+  - **Apple Silicon:** `Bottleneck-$RESOLVED_VERSION-arm64.dmg`
+
+  ### Linux
+  - **AppImage:** `Bottleneck-$RESOLVED_VERSION-x64.AppImage` - Universal, no installation
+  - **Debian/Ubuntu:** `bottleneck_$RESOLVED_VERSION_amd64.deb`
+  - **Fedora/RHEL:** `bottleneck-$RESOLVED_VERSION.x86_64.rpm`
+  - **Snap:** `bottleneck_$RESOLVED_VERSION_amd64.snap`
+  - **Archive:** `Bottleneck-$RESOLVED_VERSION.tar.gz`
+
+  ## 🔒 Verification
+
+  All binaries include SHA256 checksums for verification. Download `checksums-$RESOLVED_VERSION.txt` to verify your download:
+
+  ```bash
+  # Linux/macOS
+  sha256sum -c checksums-$RESOLVED_VERSION.txt
+
+  # Windows (PowerShell)
+  Get-FileHash <filename> -Algorithm SHA256
+  ```
+
+  ## 🔄 Auto-Update
+
+  The app includes automatic updates. Once installed, you'll receive notifications for new versions.
+
+  ## 📋 System Requirements
+
+  - **Windows:** Windows 10 or later (64-bit)
+  - **macOS:** macOS 10.15 (Catalina) or later
+  - **Linux:** Ubuntu 20.04+, Fedora 34+, or equivalent
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+exclude-labels:
+  - 'skip-changelog'
+
+autolabeler:
+  - label: 'documentation'
+    files:
+      - '*.md'
+      - 'docs/**'
+  - label: 'dependencies'
+    files:
+      - 'package*.json'
+  - label: 'github-actions'
+    files:
+      - '.github/**'
+
+replacers:
+  - search: '/<!--COMMITS_COUNT-->/g'
+    replace: '<!--COMMITS_COUNT-->'

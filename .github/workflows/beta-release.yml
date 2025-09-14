@@ -1,0 +1,244 @@
+name: Beta Release
+
+on:
+  push:
+    branches:
+      - beta
+      - develop
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Release channel'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - alpha
+          - nightly
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  prepare-beta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        id: check
+        run: |
+          # Check if there are actual code changes since last beta
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            CHANGES=$(git diff --name-only $LAST_TAG HEAD | grep -E '\.(ts|tsx|js|jsx|json)$' | wc -l)
+            if [ "$CHANGES" -gt 0 ]; then
+              echo "should_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Generate beta version
+        id: version
+        if: steps.check.outputs.should_build == 'true'
+        run: |
+          # Get base version from package.json
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          
+          # Determine channel
+          CHANNEL="${{ github.event.inputs.channel || 'beta' }}"
+          
+          # Generate build number based on date and run number
+          BUILD_DATE=$(date +%Y%m%d)
+          BUILD_NUM="${{ github.run_number }}"
+          
+          # Create version string
+          if [ "$CHANNEL" = "nightly" ]; then
+            VERSION="${BASE_VERSION}-nightly.${BUILD_DATE}.${BUILD_NUM}"
+          else
+            VERSION="${BASE_VERSION}-${CHANNEL}.${BUILD_NUM}"
+          fi
+          
+          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: v${VERSION}"
+
+      - name: Update package.json version
+        if: steps.check.outputs.should_build == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${VERSION#v}"
+          npm version $VERSION --no-git-tag-version
+
+      - name: Create Beta Release
+        id: create_release
+        if: steps.check.outputs.should_build == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Bottleneck ${{ steps.version.outputs.version }}
+          body: |
+            ## 🚧 Beta Release
+            
+            This is a pre-release version for testing purposes.
+            
+            **Channel:** ${{ github.event.inputs.channel || 'beta' }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            
+            ### ⚠️ Warning
+            - This version may contain bugs
+            - Features may be incomplete
+            - Not recommended for production use
+            - Automatic updates will follow the beta channel
+            
+            ### 📝 Recent Changes
+            See [commit history](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }})
+            
+            ### 🐛 Reporting Issues
+            Please report any issues with the beta tag: [Create Issue](https://github.com/${{ github.repository }}/issues/new?labels=beta)
+          draft: false
+          prerelease: true
+
+  build-beta:
+    needs: prepare-beta
+    if: needs.prepare-beta.outputs.should_build == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: universal
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Update version
+        run: |
+          VERSION="${{ needs.prepare-beta.outputs.version }}"
+          VERSION="${VERSION#v}"
+          npm version $VERSION --no-git-tag-version
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm run rebuild
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package application
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ github.event.inputs.channel || 'beta' }}
+        run: |
+          if [ "${{ matrix.platform }}" = "win" ]; then
+            npx electron-builder --win --x64 --publish never
+          elif [ "${{ matrix.platform }}" = "mac" ]; then
+            npx electron-builder --mac --universal --publish never
+          else
+            npx electron-builder --linux --x64 --publish never
+          fi
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}-beta
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.zip
+            release/latest*.yml
+
+  publish-beta-update:
+    needs: [prepare-beta, build-beta]
+    if: needs.prepare-beta.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish update files
+        run: |
+          # Create beta channel update files
+          mkdir -p beta-updates
+          
+          # Copy latest.yml files for auto-updater
+          find artifacts -name "latest*.yml" -exec cp {} beta-updates/ \;
+          
+          # Update channel in yml files
+          for file in beta-updates/*.yml; do
+            sed -i 's/releaseType: release/releaseType: prerelease/g' "$file"
+          done
+          
+          echo "Beta update files prepared"
+
+      - name: Upload update files
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-update-files
+          path: beta-updates/
+
+  notify-testers:
+    needs: [prepare-beta, build-beta]
+    if: needs.prepare-beta.outputs.should_build == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Discord/Slack
+        if: env.DISCORD_WEBHOOK != '' || env.SLACK_WEBHOOK != ''
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          VERSION="${{ needs.prepare-beta.outputs.version }}"
+          MESSAGE="🚧 New Bottleneck Beta Release: ${VERSION}\n\nDownload: https://github.com/${{ github.repository }}/releases/tag/${VERSION}"
+          
+          # Send to Discord if webhook exists
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            curl -X POST -H "Content-Type: application/json" \
+              -d "{\"content\": \"$MESSAGE\"}" \
+              "$DISCORD_WEBHOOK"
+          fi
+          
+          # Send to Slack if webhook exists
+          if [ -n "$SLACK_WEBHOOK" ]; then
+            curl -X POST -H "Content-Type: application/json" \
+              -d "{\"text\": \"$MESSAGE\"}" \
+              "$SLACK_WEBHOOK"
+          fi

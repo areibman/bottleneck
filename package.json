@@ -16,7 +16,11 @@
     "start": "npm run build && npm run electron",
     "dist": "npm run build && electron-builder",
     "postinstall": "electron-rebuild",
-    "rebuild": "electron-rebuild"
+    "rebuild": "electron-rebuild",
+    "release": "node scripts/release.js",
+    "release:patch": "npm version patch && git push origin main --tags",
+    "release:minor": "npm version minor && git push origin main --tags",
+    "release:major": "npm version major && git push origin main --tags"
   },
   "keywords": [
     "electron",
@@ -55,6 +59,8 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
+    "electron-log": "^5.1.0",
+    "electron-updater": "^6.1.7",
     "@octokit/auth-oauth-app": "^7.0.1",
     "@octokit/auth-oauth-device": "^6.0.1",
     "@octokit/rest": "^20.0.2",
@@ -86,21 +92,143 @@
   "build": {
     "appId": "com.bottleneck.app",
     "productName": "Bottleneck",
+    "copyright": "Copyright © 2025 Bottleneck",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/**/node_modules",
+      "!**/*.{map,md,txt}",
+      "!**/{test,tests,spec,__tests__}/**"
     ],
+    "asar": true,
+    "compression": "maximum",
+    "publish": {
+      "provider": "github",
+      "owner": "${env.GITHUB_REPOSITORY_OWNER}",
+      "repo": "bottleneck",
+      "releaseType": "release"
+    },
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64", "universal"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64", "universal"]
+        }
+      ]
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 410,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 130,
+          "y": 150,
+          "type": "file"
+        }
+      ],
+      "sign": false
     },
     "linux": {
-      "target": "AppImage"
+      "icon": "build/icon.png",
+      "category": "Development",
+      "synopsis": "Fast GitHub PR review and branch management",
+      "desktop": {
+        "Name": "Bottleneck",
+        "Comment": "Fast GitHub PR review and branch management",
+        "Categories": "Development;IDE;",
+        "Keywords": "github;pr;review;git;"
+      },
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64", "armv7l"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64", "arm64", "armv7l"]
+        },
+        {
+          "target": "rpm",
+          "arch": ["x64", "arm64", "armv7l"]
+        },
+        {
+          "target": "snap",
+          "arch": ["x64"]
+        },
+        {
+          "target": "tar.gz",
+          "arch": ["x64", "arm64", "armv7l"]
+        }
+      ]
+    },
+    "snap": {
+      "grade": "stable",
+      "summary": "Fast GitHub PR review and branch management"
     },
     "win": {
-      "target": "nsis"
-    }
+      "icon": "build/icon.ico",
+      "certificateSubjectName": "${env.WINDOWS_CERTIFICATE_NAME}",
+      "publisherName": "Bottleneck",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "msi",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Bottleneck"
+    },
+    "msi": {
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "protocols": [
+      {
+        "name": "bottleneck",
+        "schemes": ["bottleneck"]
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "bnk",
+        "name": "Bottleneck File",
+        "description": "Bottleneck configuration file",
+        "role": "Editor"
+      }
+    ]
   }
 }
