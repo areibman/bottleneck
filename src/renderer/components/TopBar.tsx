@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Search, 
   RefreshCw, 
   Bell, 
   User,
@@ -59,17 +58,17 @@ export default function TopBar() {
           <button
             onClick={() => setRepoMenuOpen(!repoMenuOpen)}
             className={cn(
-              "btn btn-secondary text-sm flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors no-drag",
+              "btn btn-secondary text-sm flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm transition-colors no-drag min-w-[150px] max-w-[300px]",
               theme === 'dark' 
                 ? "bg-gray-700 hover:bg-gray-600" 
                 : "bg-white hover:bg-gray-100 border border-gray-300"
             )}
           >
-            <GitBranch className="w-4 h-4 mr-2" />
-            <span className="max-w-[200px] truncate mr-2">
+            <GitBranch className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate flex-1 text-left">
               {selectedRepo ? selectedRepo.full_name : 'Select Repository'}
             </span>
-            <ChevronDown className="w-3 h-3" />
+            <ChevronDown className="w-3 h-3 flex-shrink-0 ml-1" />
           </button>
           
           {repoMenuOpen && (
@@ -79,7 +78,7 @@ export default function TopBar() {
                 onClick={() => setRepoMenuOpen(false)}
               />
               <div className={cn(
-                "absolute left-0 mt-2 w-64 rounded-md shadow-lg z-20 max-h-96 overflow-y-auto border",
+                "absolute left-0 mt-2 min-w-[280px] max-w-[400px] rounded-md shadow-lg z-20 max-h-[400px] overflow-hidden border flex flex-col",
                 theme === 'dark' 
                   ? "bg-gray-800 border-gray-700" 
                   : "bg-white border-gray-200"
@@ -90,25 +89,32 @@ export default function TopBar() {
                     theme === 'dark' ? "text-gray-400" : "text-gray-600"
                   )}>No repositories found</div>
                 ) : (
-                  <div className="p-1">
+                  <div className="p-1 overflow-y-auto overflow-x-hidden">
                     {repositories.map((repo) => (
                       <button
                         key={repo.id}
                         onClick={() => handleRepoSelect(repo)}
                         className={cn(
-                          "w-full text-left px-3 py-2 text-sm rounded flex flex-col",
+                          "w-full text-left px-3 py-2 text-sm rounded flex flex-col min-w-0 group",
                           theme === 'dark' 
                             ? "hover:bg-gray-700" 
                             : "hover:bg-gray-100",
                           selectedRepo?.id === repo.id && (theme === 'dark' ? "bg-gray-700" : "bg-gray-100")
                         )}
                       >
-                        <div className="font-medium">{repo.full_name}</div>
+                        <div className="font-medium truncate pr-2" title={repo.full_name}>
+                          {repo.full_name}
+                        </div>
                         {repo.description && (
-                          <div className={cn(
-                            "text-xs truncate",
-                            theme === 'dark' ? "text-gray-400" : "text-gray-600"
-                          )}>{repo.description}</div>
+                          <div 
+                            className={cn(
+                              "text-xs line-clamp-2 mt-0.5",
+                              theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                            )}
+                            title={repo.description}
+                          >
+                            {repo.description}
+                          </div>
                         )}
                       </button>
                     ))}

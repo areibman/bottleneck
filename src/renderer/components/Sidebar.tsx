@@ -4,7 +4,7 @@ import {
   GitPullRequest,
   GitBranch,
   Settings,
-  Terminal,
+  // Terminal, // TODO: Re-enable terminal tab when ready
   Search,
   ChevronDown,
   ChevronRight,
@@ -110,7 +110,8 @@ export default function Sidebar({ className }: SidebarProps) {
     { path: '/issues', icon: AlertCircle, label: 'Issues' },
     { path: '/branches', icon: GitBranch, label: 'Branches' },
     { path: '/settings', icon: Settings, label: 'Settings' },
-    { path: '/terminal', icon: Terminal, label: 'Terminal' },
+    // TODO: Re-enable terminal tab when ready
+    // { path: '/terminal', icon: Terminal, label: 'Terminal' },
   ];
 
   // Calculate real counts from actual PR data
