@@ -81,7 +81,8 @@
     "remark-gfm": "^4.0.1",
     "simple-git": "^3.22.0",
     "sqlite3": "^5.1.7",
-    "zustand": "^4.4.7"
+    "zustand": "^4.4.7",
+    "electron-updater": "^6.1.7"
   },
   "build": {
     "appId": "com.bottleneck.app",
@@ -93,14 +94,34 @@
       "dist/**/*",
       "node_modules/**/*"
     ],
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ],
     "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.developer-tools"
     },
     "linux": {
-      "target": "AppImage"
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "snap",
+        "tar.gz"
+      ],
+      "category": "Development"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "portable",
+        "msi"
+      ]
     }
   }
 }
