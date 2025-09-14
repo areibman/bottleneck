@@ -11,6 +11,8 @@ Fast GitHub PR review and branch management - A native Electron app that reprodu
 - 📝 **Monaco Editor** - VSCode-powered diff viewer with syntax highlighting
 - 💾 **Offline Support** - SQLite-based local cache for offline access
 - ⌨️ **Keyboard First** - Comprehensive keyboard shortcuts for power users
+- 🔄 **Auto-Updates** - Seamless automatic updates with background downloads
+- 📦 **Multi-Platform** - Native installers for Windows, macOS, and Linux
 
 ## Tech Stack
 
@@ -31,6 +33,18 @@ Fast GitHub PR review and branch management - A native Electron app that reprodu
 - GitHub account with appropriate permissions
 
 ### Installation
+
+#### For Users
+
+Download the latest release from the [GitHub Releases page](https://github.com/your-github-username/bottleneck/releases).
+
+**Windows**: Download and run `Bottleneck-{version}-win-x64.exe`  
+**macOS**: Download and open `Bottleneck-{version}-mac-universal.dmg`  
+**Linux**: Download and run `Bottleneck-{version}-linux-x64.AppImage`
+
+See [Installation Guide](./docs/INSTALLATION.md) for detailed instructions.
+
+#### For Developers
 
 1. Clone the repository:
 ```bash
@@ -79,10 +93,23 @@ bottleneck/
 
 ### Available Scripts
 
+#### Development
 - `npm run dev` - Start development server with hot reload
 - `npm run build` - Build for production
-- `npm run dist` - Package the app for distribution
 - `npm run electron` - Run the built app
+
+#### Distribution
+- `npm run dist` - Package the app for distribution
+- `npm run dist:win` - Build Windows packages only
+- `npm run dist:mac` - Build macOS packages only
+- `npm run dist:linux` - Build Linux packages only
+- `npm run release` - Build and publish to GitHub Releases
+
+#### Release Management
+- `npm run release:patch` - Create patch release (bug fixes)
+- `npm run release:minor` - Create minor release (new features)
+- `npm run release:major` - Create major release (breaking changes)
+- `npm run release:dry` - Preview release changes without publishing
 
 ## Keyboard Shortcuts
 
@@ -122,6 +149,30 @@ bottleneck/
 - Incremental syntax highlighting
 - Smart caching with ETags
 - Concurrent API requests with rate limiting
+
+## Documentation
+
+- [Installation Guide](./docs/INSTALLATION.md) - Platform-specific installation instructions
+- [Troubleshooting](./docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Release Management](./docs/RELEASES.md) - Release process and versioning
+
+## Releases
+
+Bottleneck uses automated releases with semantic versioning:
+
+- **Stable releases** are available on the [GitHub Releases page](https://github.com/your-github-username/bottleneck/releases)
+- **Auto-updates** keep your installation current automatically
+- **Multiple formats** available for each platform (installer, portable, package manager)
+- **Code signing** ensures authenticity and security
+- **Checksums** provided for verification
+
+### Download Options
+
+| Platform | Recommended | Alternative Formats |
+|----------|-------------|-------------------|
+| Windows | `.exe` installer | `.msi`, portable `.zip` |
+| macOS | `.dmg` | `.zip` |
+| Linux | AppImage | `.deb`, `.rpm`, `.snap`, `.tar.gz` |
 
 ## Contributing
 

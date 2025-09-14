@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, dialog } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -13,6 +14,42 @@ import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-insta
 
 const isDev = process.env.NODE_ENV === 'development';
 const store = new Store();
+
+// Configure auto-updater
+autoUpdater.checkForUpdatesAndNotify();
+autoUpdater.logger = console;
+
+// Auto-updater events
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info);
+  mainWindow?.webContents.send('update-available', info);
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available:', info);
+});
+
+autoUpdater.on('error', (err) => {
+  console.log('Error in auto-updater:', err);
+  mainWindow?.webContents.send('update-error', err);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = "Download speed: " + progressObj.bytesPerSecond;
+  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+  console.log(log_message);
+  mainWindow?.webContents.send('update-download-progress', progressObj);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info);
+  mainWindow?.webContents.send('update-downloaded', info);
+});
 
 let mainWindow: BrowserWindow | null = null;
 let database: Database;
@@ -153,6 +190,13 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  // Check for updates after app is ready (but not in development)
+  if (!isDev) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdatesAndNotify();
+    }, 5000); // Check after 5 seconds
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -371,6 +415,51 @@ ipcMain.handle('settings:set', async (_, key: string, value: any) => {
   try {
     store.set(key, value);
     return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// Auto-updater IPC handlers
+ipcMain.handle('updater:check-for-updates', async () => {
+  try {
+    if (isDev) {
+      return { success: false, error: 'Updates not available in development mode' };
+    }
+    const result = await autoUpdater.checkForUpdates();
+    return { success: true, updateInfo: result?.updateInfo };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:download-update', async () => {
+  try {
+    if (isDev) {
+      return { success: false, error: 'Updates not available in development mode' };
+    }
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:install-update', async () => {
+  try {
+    if (isDev) {
+      return { success: false, error: 'Updates not available in development mode' };
+    }
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:get-version', async () => {
+  try {
+    return { success: true, version: app.getVersion() };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }

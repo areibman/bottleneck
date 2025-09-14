@@ -1,0 +1,208 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.result }}
+      version: ${{ steps.get_version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "## Changes" > changelog.md
+            echo "* Initial release" >> changelog.md
+          else
+            echo "## Changes since $PREV_TAG" > changelog.md
+            echo "" >> changelog.md
+            
+            # Get commits since last tag
+            git log $PREV_TAG..HEAD --pretty=format:"* %s" --reverse >> changelog.md
+            
+            # Get merged PRs
+            echo "" >> changelog.md
+            echo "## Merged Pull Requests" >> changelog.md
+            git log $PREV_TAG..HEAD --grep="Merge pull request" --pretty=format:"* %s" --reverse >> changelog.md
+          fi
+          
+          echo "Generated changelog:"
+          cat changelog.md
+
+      - name: Create Release
+        id: create_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const changelog = fs.readFileSync('changelog.md', 'utf8');
+            
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ steps.get_version.outputs.version }}',
+              name: 'Release ${{ steps.get_version.outputs.version }}',
+              body: changelog,
+              draft: true,
+              prerelease: ${{ github.event.inputs.prerelease || 'false' }}
+            });
+            
+            return release.id;
+
+  build:
+    needs: create-release
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: universal
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules
+        run: npm run rebuild
+
+      - name: Build application
+        run: npm run build
+
+      - name: Install Snapcraft (Linux only)
+        if: matrix.platform == 'linux'
+        uses: samuelmeuli/action-snapcraft@v2
+
+      - name: Build Electron app
+        run: npm run dist
+        env:
+          # Code signing certificates (set these in repository secrets)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Windows code signing
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # macOS notarization
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # GitHub token for auto-updater
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate checksums
+        run: |
+          cd release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            for file in *.exe *.msi *.zip; do
+              if [ -f "$file" ]; then
+                certutil -hashfile "$file" SHA256 > "$file.sha256"
+              fi
+            done
+          else
+            for file in *.dmg *.zip *.AppImage *.deb *.rpm *.snap *.tar.gz; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" > "$file.sha256"
+              fi
+            done
+          fi
+        shell: bash
+
+      - name: Upload Release Assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const releaseDir = 'release';
+            const files = fs.readdirSync(releaseDir);
+            
+            for (const file of files) {
+              const filePath = path.join(releaseDir, file);
+              const stats = fs.statSync(filePath);
+              
+              if (stats.isFile() && !file.startsWith('.')) {
+                console.log(`Uploading ${file}...`);
+                
+                const data = fs.readFileSync(filePath);
+                
+                await github.rest.repos.uploadReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: ${{ needs.create-release.outputs.release_id }},
+                  name: file,
+                  data: data
+                });
+              }
+            }
+
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            });
+            
+            console.log('Release published successfully!');
