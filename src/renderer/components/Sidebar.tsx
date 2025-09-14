@@ -302,7 +302,7 @@ export default function Sidebar({ className }: SidebarProps) {
                           <User className="w-4 h-4 mr-2 text-blue-400" />
                         )}
                         <span className="flex-1 truncate">
-                          {agentName === 'cursor' ? 'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
+                          {agentName === 'manual' ? 'Manual PRs' : agentName}
                         </span>
                         <span className={cn(
                           "text-xs",
@@ -369,8 +369,14 @@ export default function Sidebar({ className }: SidebarProps) {
                                       <button
                                         key={pr.id}
                                         onClick={() => handlePRClick(pr)}
-                                        className="sidebar-item text-xs w-full text-left"
+                                        className="sidebar-item text-xs w-full text-left flex items-center"
                                       >
+                                        <img
+                                          src={pr.user.avatar_url}
+                                          alt={pr.user.login}
+                                          className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
+                                          title={`Author: ${pr.user.login}`}
+                                        />
                                         <span className={cn(
                                           "mr-2",
                                           pr.state === 'open' ? "text-green-400" : "text-gray-400"

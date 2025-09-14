@@ -5,7 +5,6 @@ import {
   GitMerge,
   Check,
   X,
-  Clock,
   MessageSquare,
   ChevronDown,
   ChevronRight,
@@ -64,16 +63,34 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
         />
         
         {/* PR Icon/Status */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex items-center" title={
+          pr.draft ? "Draft" : 
+          pr.merged ? "Merged" : 
+          pr.state === 'open' ? "Open" : 
+          "Closed"
+        }>
           {pr.draft ? (
-            <div className="w-5 h-5 rounded-full bg-gray-600" title="Draft" />
+            <GitPullRequest className="w-5 h-5 text-gray-400" />
           ) : pr.merged ? (
-            <GitMerge className="w-5 h-5 text-purple-400" title="Merged" />
+            <GitMerge className="w-5 h-5 text-purple-400" />
           ) : pr.state === 'open' ? (
-            <GitPullRequest className="w-5 h-5 text-green-400" title="Open" />
+            <GitPullRequest className="w-5 h-5 text-green-400" />
           ) : (
-            <X className="w-5 h-5 text-red-400" title="Closed" />
+            <X className="w-5 h-5 text-red-400" />
           )}
+        </div>
+        
+        {/* Author Avatar */}
+        <div className="flex-shrink-0 flex items-center">
+          <img
+            src={pr.user.avatar_url}
+            alt={pr.user.login}
+            className={cn(
+              "w-8 h-8 rounded-full border",
+              theme === 'dark' ? "border-gray-700" : "border-gray-300"
+            )}
+            title={`Author: ${pr.user.login}`}
+          />
         </div>
         
         {/* PR Details */}
@@ -102,14 +119,15 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
                 theme === 'dark' ? "text-gray-400" : "text-gray-600"
               )}>
                 <span>#{pr.number}</span>
-                <span>by {pr.user.login}</span>
                 <span>
                   {formatDistanceToNow(new Date(pr.updated_at), { addSuffix: true })}
                 </span>
-                <span className="flex items-center">
-                  <MessageSquare className="w-3 h-3 mr-1" />
-                  12
-                </span>
+                {pr.comments > 0 && (
+                  <span className="flex items-center">
+                    <MessageSquare className="w-3 h-3 mr-1" />
+                    {pr.comments}
+                  </span>
+                )}
               </div>
               
               {/* Labels */}
@@ -158,8 +176,8 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
               </div>
               
               {/* CI Status */}
-              <div className="flex items-center space-x-1">
-                <Check className="w-4 h-4 text-green-400" title="Checks passed" />
+              <div className="flex items-center space-x-1" title="Checks passed">
+                <Check className="w-4 h-4 text-green-400" />
               </div>
               
               {/* More actions */}
@@ -190,7 +208,6 @@ export default function PRListView() {
     filters, 
     loading, 
     fetchPullRequests, 
-    repositories, 
     selectedRepo 
   } = usePRStore();
   const { selectedPRs, selectPR, deselectPR, clearSelection, theme } = useUIStore();
@@ -527,7 +544,7 @@ export default function PRListView() {
             "divide-y",
             theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
           )}>
-            {(groupedPRs.ungrouped || getFilteredPRs).map((pr: PullRequest) => (
+            {((groupedPRs as any).ungrouped || getFilteredPRs).map((pr: PullRequest) => (
               <PRItem 
                 key={pr.id} 
                 pr={pr} 
@@ -547,7 +564,7 @@ export default function PRListView() {
             {Object.entries(groupedPRs).map(([agentName, subGroups]) => {
               const agentKey = `agent-${agentName}`;
               const isAgentCollapsed = collapsedGroups.has(agentKey);
-              const totalPRs = Object.values(subGroups).reduce((sum, prs: any) => sum + prs.length, 0);
+              const totalPRs = Object.values(subGroups).reduce((sum: number, prs: any) => sum + prs.length, 0);
               
               return (
                 <div key={agentName}>
@@ -575,7 +592,7 @@ export default function PRListView() {
                         <User className="w-4 h-4 text-blue-400" />
                       )}
                       <span className="font-medium text-sm">
-                        {agentName === 'cursor' ? 'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
+                        {'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
                       </span>
                       <span className={cn(
                         "text-xs",

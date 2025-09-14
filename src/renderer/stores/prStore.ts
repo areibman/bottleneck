@@ -17,6 +17,7 @@ interface PRState {
   pullRequests: Map<string, PullRequest>;
   repositories: Repository[];
   selectedRepo: Repository | null;
+  recentlyViewedRepos: Repository[];
   loadedRepos: Set<string>;
   filters: string[];
   groups: PRGroup[];
@@ -26,6 +27,7 @@ interface PRState {
   fetchPullRequests: (owner: string, repo: string, force?: boolean) => Promise<void>;
   fetchRepositories: () => Promise<void>;
   setSelectedRepo: (repo: Repository | null) => void;
+  addToRecentlyViewed: (repo: Repository) => void;
   setFilter: (filter: string) => void;
   removeFilter: (filter: string) => void;
   clearFilters: () => void;
@@ -40,6 +42,7 @@ export const usePRStore = create<PRState>((set, get) => ({
   pullRequests: new Map(),
   repositories: [],
   selectedRepo: null,
+  recentlyViewedRepos: [],
   loadedRepos: new Set(),
   filters: ['open'],
   groups: [],
@@ -150,7 +153,11 @@ export const usePRStore = create<PRState>((set, get) => ({
             description: 'Fast GitHub PR review and branch management',
             default_branch: 'main',
             private: false,
-            clone_url: 'https://github.com/dev-user/bottleneck.git'
+            clone_url: 'https://github.com/dev-user/bottleneck.git',
+            updated_at: new Date(Date.now() - 3600000).toISOString(),
+            pushed_at: new Date(Date.now() - 3600000).toISOString(),
+            stargazers_count: 42,
+            open_issues_count: 5
           },
           {
             id: 2,
@@ -160,7 +167,53 @@ export const usePRStore = create<PRState>((set, get) => ({
             description: 'A sample project for testing',
             default_branch: 'main',
             private: false,
-            clone_url: 'https://github.com/dev-user/sample-project.git'
+            clone_url: 'https://github.com/dev-user/sample-project.git',
+            updated_at: new Date(Date.now() - 86400000).toISOString(),
+            pushed_at: new Date(Date.now() - 86400000).toISOString(),
+            stargazers_count: 10,
+            open_issues_count: 2
+          },
+          {
+            id: 3,
+            owner: 'my-org',
+            name: 'enterprise-app',
+            full_name: 'my-org/enterprise-app',
+            description: 'Enterprise application with microservices',
+            default_branch: 'main',
+            private: true,
+            clone_url: 'https://github.com/my-org/enterprise-app.git',
+            updated_at: new Date(Date.now() - 7200000).toISOString(),
+            pushed_at: new Date(Date.now() - 7200000).toISOString(),
+            stargazers_count: 128,
+            open_issues_count: 15
+          },
+          {
+            id: 4,
+            owner: 'my-org',
+            name: 'ui-components',
+            full_name: 'my-org/ui-components',
+            description: 'Shared UI component library',
+            default_branch: 'main',
+            private: false,
+            clone_url: 'https://github.com/my-org/ui-components.git',
+            updated_at: new Date(Date.now() - 172800000).toISOString(),
+            pushed_at: new Date(Date.now() - 172800000).toISOString(),
+            stargazers_count: 256,
+            open_issues_count: 8
+          },
+          {
+            id: 5,
+            owner: 'another-org',
+            name: 'api-gateway',
+            full_name: 'another-org/api-gateway',
+            description: 'API gateway service',
+            default_branch: 'main',
+            private: false,
+            clone_url: 'https://github.com/another-org/api-gateway.git',
+            updated_at: new Date(Date.now() - 1800000).toISOString(),
+            pushed_at: new Date(Date.now() - 1800000).toISOString(),
+            stargazers_count: 89,
+            open_issues_count: 3
           }
         ];
       } else {
@@ -187,6 +240,17 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   setSelectedRepo: (repo) => {
     set({ selectedRepo: repo });
+    if (repo) {
+      get().addToRecentlyViewed(repo);
+    }
+  },
+
+  addToRecentlyViewed: (repo) => {
+    set((state) => {
+      const filtered = state.recentlyViewedRepos.filter(r => r.id !== repo.id);
+      const newRecent = [repo, ...filtered].slice(0, 5); // Keep only 5 most recent
+      return { recentlyViewedRepos: newRecent };
+    });
   },
 
   setFilter: (filter) => {

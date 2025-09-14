@@ -37,6 +37,7 @@ export const mockPullRequests = [
       { name: 'enhancement', color: 'a2eeef' },
       { name: 'frontend', color: '0e8a16' }
     ],
+    comments: 5,
     created_at: new Date(Date.now() - 86400000).toISOString(),
     updated_at: new Date(Date.now() - 3600000).toISOString(),
     closed_at: null,
@@ -78,6 +79,7 @@ export const mockPullRequests = [
       { name: 'bug', color: 'd73a4a' },
       { name: 'high-priority', color: 'b60205' }
     ],
+    comments: 12,
     created_at: new Date(Date.now() - 172800000).toISOString(),
     updated_at: new Date(Date.now() - 7200000).toISOString(),
     closed_at: null,
@@ -118,6 +120,7 @@ export const mockPullRequests = [
     labels: [
       { name: 'dependencies', color: '0366d6' }
     ],
+    comments: 2,
     created_at: new Date(Date.now() - 259200000).toISOString(),
     updated_at: new Date(Date.now() - 86400000).toISOString(),
     closed_at: null,
@@ -159,6 +162,7 @@ export const mockPullRequests = [
       { name: 'enhancement', color: 'a2eeef' },
       { name: 'ui/ux', color: 'fbca04' }
     ],
+    comments: 8,
     created_at: new Date(Date.now() - 604800000).toISOString(),
     updated_at: new Date(Date.now() - 345600000).toISOString(),
     closed_at: new Date(Date.now() - 345600000).toISOString(),
@@ -200,6 +204,7 @@ export const mockPullRequests = [
     labels: [
       { name: 'ai-generated', color: '7057ff' }
     ],
+    comments: 3,
     created_at: new Date(Date.now() - 3600000).toISOString(),
     updated_at: new Date(Date.now() - 1800000).toISOString(),
     closed_at: null,
@@ -240,6 +245,7 @@ export const mockPullRequests = [
     labels: [
       { name: 'ai-generated', color: '7057ff' }
     ],
+    comments: 0,
     created_at: new Date(Date.now() - 5400000).toISOString(),
     updated_at: new Date(Date.now() - 2700000).toISOString(),
     closed_at: null,
@@ -280,6 +286,7 @@ export const mockPullRequests = [
     labels: [
       { name: 'ai-generated', color: '7057ff' }
     ],
+    comments: 7,
     created_at: new Date(Date.now() - 7200000).toISOString(),
     updated_at: new Date(Date.now() - 3600000).toISOString(),
     closed_at: null,
@@ -321,6 +328,7 @@ export const mockPullRequests = [
       { name: 'ai-generated', color: '7057ff' },
       { name: 'accessibility', color: '0366d6' }
     ],
+    comments: 4,
     created_at: new Date(Date.now() - 9000000).toISOString(),
     updated_at: new Date(Date.now() - 4500000).toISOString(),
     closed_at: null,
@@ -362,6 +370,7 @@ export const mockPullRequests = [
       { name: 'ai-generated', color: '7057ff' },
       { name: 'ui/ux', color: 'fbca04' }
     ],
+    comments: 1,
     created_at: new Date(Date.now() - 10800000).toISOString(),
     updated_at: new Date(Date.now() - 5400000).toISOString(),
     closed_at: null,

@@ -46,6 +46,7 @@ export interface PullRequest {
     name: string;
     color: string;
   }>;
+  comments: number;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
@@ -61,6 +62,10 @@ export interface Repository {
   default_branch: string;
   private: boolean;
   clone_url: string;
+  updated_at: string | null;
+  pushed_at: string | null;
+  stargazers_count: number;
+  open_issues_count: number;
 }
 
 export interface Issue {
@@ -143,7 +148,7 @@ export class GitHubAPI {
     });
   }
 
-  async getRepositories(page = 1, perPage = 100) {
+  async getRepositories(page = 1, perPage = 100): Promise<Repository[]> {
     const { data } = await this.octokit.repos.listForAuthenticatedUser({
       page,
       per_page: perPage,
@@ -159,6 +164,10 @@ export class GitHubAPI {
       default_branch: repo.default_branch || 'main',
       private: repo.private,
       clone_url: repo.clone_url,
+      updated_at: repo.updated_at,
+      pushed_at: repo.pushed_at,
+      stargazers_count: repo.stargazers_count,
+      open_issues_count: repo.open_issues_count,
     }));
   }
 
@@ -170,7 +179,30 @@ export class GitHubAPI {
       per_page: 100,
     });
     
-    return data as unknown as PullRequest[];
+    // The pulls.list endpoint doesn't include comment counts, but we can get them from the issues API
+    // Since every PR is also an issue, we can fetch the issues to get comment counts
+    const issuesData = await this.octokit.issues.listForRepo({
+      owner,
+      repo,
+      state: state === 'all' ? 'all' : state as 'open' | 'closed',
+      per_page: 100,
+    });
+    
+    // Create a map of issue number to comment count
+    const commentCounts = new Map<number, number>();
+    issuesData.data.forEach(issue => {
+      if (issue.pull_request) {
+        commentCounts.set(issue.number, issue.comments);
+      }
+    });
+    
+    // Add comment counts to the PR data
+    const prsWithComments = data.map(pr => ({
+      ...pr,
+      comments: commentCounts.get(pr.number) || 0
+    }));
+    
+    return prsWithComments as unknown as PullRequest[];
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {
@@ -180,7 +212,17 @@ export class GitHubAPI {
       pull_number: pullNumber,
     });
     
-    return data as PullRequest;
+    // Get comment count from issues API
+    const issueData = await this.octokit.issues.get({
+      owner,
+      repo,
+      issue_number: pullNumber,
+    });
+    
+    return {
+      ...data,
+      comments: issueData.data.comments
+    } as PullRequest;
   }
 
   async getIssue(owner: string, repo: string, issueNumber: number) {

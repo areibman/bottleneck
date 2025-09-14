@@ -71,23 +71,48 @@ export class GitHubAuth {
 
     const tokenPromise = new Promise<string>((resolve, reject) => {
       const { ipcMain } = require('electron');
+      let isResolved = false;
       
-      ipcMain.once('token-submitted', (_event: any, token: string) => {
+      const handleTokenSubmit = (_event: any, token: string) => {
+        if (isResolved) return;
+        
         if (token && token.trim()) {
+          isResolved = true;
           resolve(token.trim());
         } else {
+          isResolved = true;
           reject(new Error('No token provided'));
         }
-        tokenWindow.close();
-      });
-
-      ipcMain.once('token-cancelled', () => {
+        
+        if (!tokenWindow.isDestroyed()) {
+          tokenWindow.close();
+        }
+      };
+      
+      const handleTokenCancel = () => {
+        if (isResolved) return;
+        
+        isResolved = true;
         reject(new Error('Authentication cancelled'));
-        tokenWindow.close();
-      });
+        
+        if (!tokenWindow.isDestroyed()) {
+          tokenWindow.close();
+        }
+      };
+      
+      ipcMain.once('token-submitted', handleTokenSubmit);
+      ipcMain.once('token-cancelled', handleTokenCancel);
 
       tokenWindow.on('closed', () => {
-        reject(new Error('Authentication window closed'));
+        // Clean up IPC listeners
+        ipcMain.removeListener('token-submitted', handleTokenSubmit);
+        ipcMain.removeListener('token-cancelled', handleTokenCancel);
+        
+        // Only reject if we haven't already resolved/rejected
+        if (!isResolved) {
+          isResolved = true;
+          reject(new Error('Authentication window closed'));
+        }
       });
     });
 
