@@ -54,6 +54,18 @@ npm run build
 npm run dist
 ```
 
+5. Create a release:
+```bash
+# Patch release (0.1.0 -> 0.1.1)
+npm run release
+
+# Minor release (0.1.0 -> 0.2.0)
+npm run release:minor
+
+# Major release (0.1.0 -> 1.0.0)
+npm run release:major
+```
+
 ## Development
 
 ### Project Structure
@@ -122,6 +134,30 @@ bottleneck/
 - Incremental syntax highlighting
 - Smart caching with ETags
 - Concurrent API requests with rate limiting
+
+## Releases
+
+Bottleneck uses automated releases through GitHub Actions. Each release includes:
+
+- **Windows**: .exe installer, .msi package, portable .zip
+- **macOS**: .dmg disk image, .zip archive (Universal binary)
+- **Linux**: .AppImage, .deb, .rpm, .snap, .tar.gz packages
+
+### Automatic Updates
+
+The app includes automatic update functionality:
+- Checks for updates on startup
+- Downloads updates in the background
+- Prompts user to install when ready
+- Configurable in Settings > Updates
+
+### Release Process
+
+1. **Create a release**: `npm run release` (or `release:minor`, `release:major`)
+2. **Push the tag**: `git push origin --tags`
+3. **GitHub Actions** automatically builds and publishes the release
+
+For more details, see [RELEASE.md](RELEASE.md).
 
 ## Contributing
 
