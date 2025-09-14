@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  ELECTRON_BUILDER_CACHE: .cache/electron-builder
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # macOS signing & notarization
+  CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+  CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+  APPLE_ID: ${{ secrets.APPLE_ID }}
+  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  # Windows signing
+  WIN_CSC_LINK: ${{ secrets.WIN_CERT_PFX_BASE64 }}
+  WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+  # Update channel (latest/beta)
+  UPDATE_CHANNEL: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta') && 'beta' || 'latest' }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 20
+          - os: windows-latest
+            node: 20
+          - os: macos-latest
+            node: 20
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache electron-builder
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron-builder
+            ~/.cache/electron
+          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
+
+      - name: Build
+        run: npm run build
+
+      - name: Package and publish
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ env.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ env.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ env.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ env.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ env.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ env.WIN_CSC_KEY_PASSWORD }}
+          UPDATE_CHANNEL: ${{ env.UPDATE_CHANNEL }}
+
+      - name: Generate checksums
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          ls -1 release | grep -E '\\.(AppImage|deb|rpm|snap|tar.gz|dmg|zip|exe|msi)$' | while read f; do
+            sha256sum "release/$f" >> release/sha256sums.txt
+          done
+
+      - name: Upload checksums to release
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/sha256sums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

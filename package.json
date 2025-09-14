@@ -67,6 +67,7 @@
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.3.9",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
@@ -93,14 +94,70 @@
       "dist/**/*",
       "node_modules/**/*"
     ],
+    "asar": true,
+    "artifactName": "Bottleneck-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bottleneck-app",
+        "repo": "bottleneck",
+        "vPrefixedTagName": true,
+        "draft": true
+      }
+    ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false,
+      "notarize": {
+        "teamId": "${env.APPLE_TEAM_ID}"
+      }
     },
     "linux": {
-      "target": "AppImage"
+      "category": "Utility",
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "snap",
+        "tar.gz"
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "msi",
+        "zip"
+      ],
+      "publisherName": [
+        "Bottleneck, Inc."
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Bottleneck-${version}-Setup-${arch}.${ext}"
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bottleneck-app/bottleneck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bottleneck-app/bottleneck/issues"
+  },
+  "homepage": "https://github.com/bottleneck-app/bottleneck#readme"
 }

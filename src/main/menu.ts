@@ -1,4 +1,5 @@
 import { Menu, MenuItemConstructorOptions, BrowserWindow, app, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
 
 export function createMenu(mainWindow: BrowserWindow): Menu {
   const isMac = process.platform === 'darwin';
@@ -252,6 +253,12 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
           label: 'Documentation',
           click: () => {
             shell.openExternal('https://github.com/bottleneck-app/docs');
+          }
+        },
+        {
+          label: 'Check for Updates…',
+          click: () => {
+            autoUpdater.checkForUpdates().catch(() => {});
           }
         },
         {
