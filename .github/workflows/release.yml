@@ -23,6 +23,11 @@ env:
   WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
   # Update channel (latest/beta)
   UPDATE_CHANNEL: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-beta') && 'beta' || 'latest' }}
+  # electron-builder publish target
+  GH_OWNER: ${{ github.repository_owner }}
+  GH_REPO: ${{ github.event.repository.name }}
+  # Staged rollouts (0-100)
+  ELECTRON_UPDATER_STAGING_PERCENTAGE: ${{ vars.STAGING_PERCENTAGE || '100' }}
 
 jobs:
   build:
@@ -51,6 +56,22 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
+      - name: Setup OS deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm snapcraft libfuse2
+
+      - name: Setup OS deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install rpm || true
+
+      - name: Setup OS deps (Windows)
+        if: runner.os == 'Windows'
+        run: echo "No additional dependencies"
+
       - name: Install dependencies
         run: npm ci
 
@@ -77,20 +98,54 @@ jobs:
           WIN_CSC_LINK: ${{ env.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ env.WIN_CSC_KEY_PASSWORD }}
           UPDATE_CHANNEL: ${{ env.UPDATE_CHANNEL }}
+          GH_OWNER: ${{ env.GH_OWNER }}
+          GH_REPO: ${{ env.GH_REPO }}
 
       - name: Generate checksums
-        if: startsWith(matrix.os, 'ubuntu')
+        shell: bash
         run: |
-          ls -1 release | grep -E '\\.(AppImage|deb|rpm|snap|tar.gz|dmg|zip|exe|msi)$' | while read f; do
-            sha256sum "release/$f" >> release/sha256sums.txt
+          OS_NAME=${{ runner.os }}
+          OUT="release/sha256sums-${OS_NAME}.txt"
+          rm -f "$OUT"
+          shopt -s nullglob
+          for f in release/*.{AppImage,deb,rpm,snap,tar.gz,dmg,zip,exe,msi}; do
+            [ -e "$f" ] || continue
+            sha256sum "$f" >> "$OUT"
           done
+          if [ -s "$OUT" ]; then echo "Generated $OUT"; else echo "No artifacts to checksum"; fi
+
+      - name: Upload checksum artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ runner.os }}
+          path: release/sha256sums-${{ runner.os }}.txt
+          if-no-files-found: ignore
+
+  upload-checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download checksum artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: checksums
+          pattern: checksums-*
+          merge-multiple: true
+
+      - name: Combine checksums
+        run: |
+          shopt -s nullglob
+          cat checksums/sha256sums-*.txt > sha256sums.txt || true
+          if [ -s sha256sums.txt ]; then echo "Combined checksums:"; cat sha256sums.txt; else echo "No checksums to upload"; fi
 
       - name: Upload checksums to release
-        if: startsWith(matrix.os, 'ubuntu')
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release/sha256sums.txt
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: sha256sums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
