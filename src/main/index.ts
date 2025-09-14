@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, dialog } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -154,6 +155,48 @@ app.whenReady().then(async () => {
 
   createWindow();
 
+  // Configure auto-updater (production only)
+  try {
+    const appVersion = app.getVersion();
+    const isPrerelease = /-alpha\.|-beta\.|-rc\./i.test(appVersion);
+
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = isPrerelease;
+
+    // Relay updater events to renderer
+    autoUpdater.on('checking-for-update', () => {
+      mainWindow?.webContents.send('update:status', { status: 'checking' });
+    });
+    autoUpdater.on('update-available', (info) => {
+      mainWindow?.webContents.send('update:status', { status: 'available', info });
+    });
+    autoUpdater.on('update-not-available', (info) => {
+      mainWindow?.webContents.send('update:status', { status: 'not-available', info });
+    });
+    autoUpdater.on('download-progress', (progress) => {
+      mainWindow?.webContents.send('update:status', { status: 'downloading', progress });
+    });
+    autoUpdater.on('update-downloaded', (info) => {
+      mainWindow?.webContents.send('update:status', { status: 'downloaded', info });
+    });
+    autoUpdater.on('error', (error) => {
+      mainWindow?.webContents.send('update:status', { status: 'error', error: (error as Error).message });
+    });
+
+    if (!isDev) {
+      // Delay slightly to ensure app is fully ready
+      setTimeout(() => {
+        autoUpdater.checkForUpdates().catch((err) => {
+          console.error('[AutoUpdater] check failed:', err);
+        });
+      }, 3000);
+    }
+  } catch (err) {
+    console.error('[AutoUpdater] initialization failed:', err);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -270,6 +313,25 @@ ipcMain.handle('app:select-directory', async () => {
 
 ipcMain.handle('app:get-version', () => {
   return app.getVersion();
+});
+
+// Updater IPC
+ipcMain.handle('update:check', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { success: true, result: result?.updateInfo };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('update:quit-and-install', async () => {
+  try {
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
 });
 
 // Terminal IPC handlers

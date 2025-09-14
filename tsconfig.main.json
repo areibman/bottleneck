@@ -5,6 +5,8 @@
     "moduleResolution": "node",
     "noEmit": false,
     "allowImportingTsExtensions": false,
+    "types": ["node"],
+    "lib": ["ES2022"],
     "rootDir": "src/main",
     "outDir": "dist/main"
   },
