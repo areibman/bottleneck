@@ -17,6 +17,7 @@ import IssuesView from './views/IssuesView';
 import IssueDetailView from './views/IssueDetailView';
 import { setupKeyboardShortcuts } from './utils/keyboard';
 import { cn } from './utils/cn';
+import UpdateNotification from './components/UpdateNotification';
 
 function App() {
   const { isAuthenticated, checkAuth, token } = useAuthStore();
@@ -94,6 +95,8 @@ function App() {
           'w-0': !rightPanelOpen,
         })} />
       </div>
+      
+      <UpdateNotification />
     </div>
   );
 }

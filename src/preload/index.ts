@@ -54,6 +54,32 @@ const electronAPI = {
     set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value),
   },
 
+  // Auto-updater operations
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:check-for-updates'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download-update'),
+    installUpdate: () => ipcRenderer.invoke('updater:install-update'),
+    getVersion: () => ipcRenderer.invoke('updater:get-version'),
+    onUpdateAvailable: (callback: (info: any) => void) => {
+      ipcRenderer.on('update-available', (_event, info) => callback(info));
+    },
+    onUpdateDownloaded: (callback: (info: any) => void) => {
+      ipcRenderer.on('update-downloaded', (_event, info) => callback(info));
+    },
+    onDownloadProgress: (callback: (progress: any) => void) => {
+      ipcRenderer.on('update-download-progress', (_event, progress) => callback(progress));
+    },
+    onUpdateError: (callback: (error: any) => void) => {
+      ipcRenderer.on('update-error', (_event, error) => callback(error));
+    },
+    offUpdateListeners: () => {
+      ipcRenderer.removeAllListeners('update-available');
+      ipcRenderer.removeAllListeners('update-downloaded');
+      ipcRenderer.removeAllListeners('update-download-progress');
+      ipcRenderer.removeAllListeners('update-error');
+    },
+  },
+
   // IPC event listeners
   on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
     const validChannels = [

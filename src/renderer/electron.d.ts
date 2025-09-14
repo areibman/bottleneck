@@ -42,6 +42,18 @@ declare global {
         get: (key?: string) => Promise<{ success: boolean; value?: any; settings?: any; error?: string }>;
         set: (key: string, value: any) => Promise<{ success: boolean; error?: string }>;
       };
+
+      updater: {
+        checkForUpdates: () => Promise<{ success: boolean; updateInfo?: any; error?: string }>;
+        downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+        installUpdate: () => Promise<{ success: boolean; error?: string }>;
+        getVersion: () => Promise<{ success: boolean; version?: string; error?: string }>;
+        onUpdateAvailable: (callback: (info: any) => void) => void;
+        onUpdateDownloaded: (callback: (info: any) => void) => void;
+        onDownloadProgress: (callback: (progress: any) => void) => void;
+        onUpdateError: (callback: (error: any) => void) => void;
+        offUpdateListeners: () => void;
+      };
       
       on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => void;
       off: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => void;
