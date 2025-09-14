@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  GitPullRequest, 
-  GitBranch, 
-  Settings, 
+import {
+  GitPullRequest,
+  GitBranch,
+  Settings,
+  // Terminal, // TODO: Re-enable terminal tab when ready
   Search,
   ChevronDown,
   ChevronRight,
@@ -109,6 +110,8 @@ export default function Sidebar({ className }: SidebarProps) {
     { path: '/issues', icon: AlertCircle, label: 'Issues' },
     { path: '/branches', icon: GitBranch, label: 'Branches' },
     { path: '/settings', icon: Settings, label: 'Settings' },
+    // TODO: Re-enable terminal tab when ready
+    // { path: '/terminal', icon: Terminal, label: 'Terminal' },
   ];
 
   // Calculate real counts from actual PR data

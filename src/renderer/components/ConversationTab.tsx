@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  MessageSquare, 
-  GitCommit, 
+import {
+  MessageSquare,
+  GitCommit,
   GitMerge,
   Tag,
   Users,
   Check,
   X,
   AlertCircle,
-  Clock
+  Clock,
+  Send
 } from 'lucide-react';
 import { PullRequest, Comment, Review } from '../services/github';
 import { formatDistanceToNow } from 'date-fns';
@@ -329,6 +330,7 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
                       disabled={!commentText.trim() || isSubmitting}
                       className="btn btn-primary text-sm"
                     >
+                      <Send className="w-4 h-4 mr-2" />
                       {isSubmitting ? 'Submitting...' : 'Submit'}
                     </button>
                   </div>

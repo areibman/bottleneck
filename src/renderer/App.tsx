@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useUIStore } from './stores/uiStore';
 import { usePRStore } from './stores/prStore';
+import { useSettingsStore } from './stores/settingsStore';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import RightPanel from './components/RightPanel';
@@ -10,6 +11,7 @@ import PRListView from './views/PRListView';
 import PRDetailView from './views/PRDetailView';
 import BranchesView from './views/BranchesView';
 import SettingsView from './views/SettingsView';
+// import TerminalView from './views/TerminalView'; // TODO: Re-enable terminal tab when ready
 import AuthView from './views/AuthView';
 import IssuesView from './views/IssuesView';
 import IssueDetailView from './views/IssueDetailView';
@@ -19,19 +21,24 @@ import { cn } from './utils/cn';
 function App() {
   const { isAuthenticated, checkAuth, token } = useAuthStore();
   const { sidebarOpen, rightPanelOpen, theme } = useUIStore();
+  const { loadSettings } = useSettingsStore();
   const { fetchRepositories } = usePRStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     console.log('window.electron:', window.electron);
     if (window.electron) {
-      checkAuth().finally(() => setLoading(false));
+      // Load settings and auth in parallel
+      Promise.all([
+        loadSettings(),
+        checkAuth()
+      ]).finally(() => setLoading(false));
       setupKeyboardShortcuts();
     } else {
       console.error('window.electron is not available!');
       setLoading(false);
     }
-  }, [checkAuth]);
+  }, [checkAuth, loadSettings]);
 
   // Fetch repositories when authenticated
   useEffect(() => {
@@ -77,6 +84,8 @@ function App() {
             <Route path="/issues" element={<IssuesView />} />
             <Route path="/issues/:owner/:repo/:number" element={<IssueDetailView />} />
             <Route path="/settings" element={<SettingsView />} />
+            {/* TODO: Re-enable terminal tab when ready */}
+            {/* <Route path="/terminal" element={<TerminalView />} /> */}
           </Routes>
         </main>
         

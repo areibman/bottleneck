@@ -48,11 +48,11 @@ vite.stdout.on('data', (data) => {
     
     // Wait a bit for the server to be fully ready
     setTimeout(() => {
-      const electron = spawn('electron', ['.'], {
+      const electron = spawn('npx', ['electron', '.'], {
         stdio: 'inherit',
         shell: true,
-        env: { 
-          ...process.env, 
+        env: {
+          ...process.env,
           NODE_ENV: 'development',
           GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
           GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET
