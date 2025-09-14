@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, dialog } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import * as dotenv from 'dotenv';
 dotenv.config();
@@ -19,6 +20,7 @@ let database: Database;
 let githubAuth: GitHubAuth;
 let gitOps: GitOperations;
 let terminal: TerminalManager;
+let hasInitializedAutoUpdater = false;
 
 function createWindow() {
   const preloadPath = path.resolve(path.join(__dirname, '../preload/index.js'));
@@ -153,6 +155,11 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  if (!hasInitializedAutoUpdater) {
+    initializeAutoUpdater();
+    hasInitializedAutoUpdater = true;
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -333,6 +340,101 @@ ipcMain.handle('terminal:resize', async (_event, cols: number, rows: number) => 
     return { success: false, error: (error as Error).message };
   }
 });
+
+// Updater IPC handlers
+ipcMain.handle('updater:check', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { success: true, updateInfo: result?.updateInfo };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:download', async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('updater:quit-and-install', async () => {
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+function initializeAutoUpdater() {
+  const isBeta = app.getVersion().includes('-beta');
+  const updateChannel = process.env.UPDATE_CHANNEL || (isBeta ? 'beta' : 'latest');
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.allowPrerelease = updateChannel !== 'latest';
+  autoUpdater.channel = updateChannel;
+
+  autoUpdater.on('checking-for-update', () => {
+    mainWindow?.webContents.send('updater:checking-for-update');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('updater:update-available', info);
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update available',
+        message: 'A new version of Bottleneck is available. Do you want to download it now?',
+        buttons: ['Download', 'Later'],
+        defaultId: 0,
+        cancelId: 1
+      }).then(result => {
+        if (result.response === 0) {
+          autoUpdater.downloadUpdate().catch(() => {});
+        }
+      });
+    }
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    mainWindow?.webContents.send('updater:update-not-available', info);
+  });
+
+  autoUpdater.on('error', (error) => {
+    mainWindow?.webContents.send('updater:error', (error as Error).message);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    mainWindow?.webContents.send('updater:download-progress', progress);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('updater:update-downloaded', info);
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: 'Update ready',
+        message: 'Update downloaded. Restart now to apply the update?',
+        buttons: ['Restart', 'Later'],
+        defaultId: 0,
+        cancelId: 1
+      }).then(result => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall(false, true);
+        }
+      });
+    }
+  });
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((_e) => {
+      // Swallow errors; they will be reported via 'error' event
+    });
+  }, 3000);
+}
 
 ipcMain.handle('terminal:restart', async (_event, cwd?: string) => {
   try {

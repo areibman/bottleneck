@@ -55,6 +55,42 @@ npm run dist
 ```
 
 ## Development
+## Distribution & Updates
+
+### Releases
+- Push a tag like `v1.2.3` to trigger the release workflow. Draft releases are created with assets for Windows (.exe, .msi, .zip), macOS (.dmg, .zip, universal), and Linux (.AppImage, .deb, .rpm, .snap, .tar.gz). SHA256 checksums are attached.
+- Beta releases are supported using prerelease tags (e.g., `v1.2.3-beta.1`).
+
+### Auto-Update
+- The app uses electron-updater for differential updates where supported.
+- Channels: `latest` (default) and `beta` (prereleases). The channel is inferred from the tag.
+- The app checks for updates on startup and from Help → Check for Updates.
+
+### Code Signing & Notarization
+- macOS builds are signed and notarized using `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and `MAC_CERT_*` secrets.
+- Windows builds are signed via `WIN_CSC_*` secrets.
+
+### System Requirements
+- Windows 10+
+- macOS 12+
+- Linux: modern x64 distro (AppImage provided). Packages for Debian/Ubuntu (.deb) and Fedora/RHEL (.rpm) are included.
+
+### Troubleshooting
+- Update fails to download: ensure network allows GitHub Releases CDN.
+- macOS cannot open app: right-click → Open, or verify signature and quarantine cleared post-notarization.
+- Renderer fails to start after update: use rollback by reinstalling a prior asset from Releases.
+
+### Release Notes Template
+```
+## What's Changed
+
+- Feature: ... (#PR)
+- Fix: ... (#PR)
+- Perf: ... (#PR)
+
+## Checksums
+See attached sha256sums.txt.
+```
 
 ### Project Structure
 
