@@ -10,6 +10,7 @@ import { TerminalManager } from './terminal';
 import { createMenu } from './menu';
 import Store from 'electron-store';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
+import { autoUpdater } from 'electron-updater';
 
 const isDev = process.env.NODE_ENV === 'development';
 const store = new Store();
@@ -74,7 +75,10 @@ function createWindow() {
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
-    
+    // Trigger update check and notify user if a new version is available
+    if (!isDev) {
+      autoUpdater.checkForUpdatesAndNotify().catch(err => console.error('[AutoUpdater] check failed', err));
+    }
     // Debug: Check if preload was set
     console.log('Window created and shown');
   });
