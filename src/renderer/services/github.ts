@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 
+//
 export interface PullRequest {
   id: number;
   number: number;
@@ -468,6 +469,22 @@ export class GitHubAPI {
     });
     
     return data.head.sha;
+  }
+
+  async getFileContent(owner: string, repo: string, path: string, ref: string): Promise<string> {
+    const { data } = await this.octokit.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+    });
+
+    if ('content' in data) {
+      // Content is base64 encoded, decode in main process
+      return window.electron.utils.fromBase64(data.content);
+    }
+
+    throw new Error('Could not retrieve file content.');
   }
 
   async searchPullRequests(query: string) {

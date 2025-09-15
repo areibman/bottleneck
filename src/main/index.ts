@@ -172,6 +172,10 @@ app.on('before-quit', async () => {
 });
 
 // IPC Handlers
+ipcMain.handle('utils:fromBase64', (_event, data: string) => {
+  return Buffer.from(data, 'base64').toString('utf8');
+});
+
 ipcMain.handle('auth:login', async () => {
   try {
     const token = await githubAuth.authenticate();

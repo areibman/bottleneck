@@ -11,6 +11,9 @@ import {
   FileDiff,
   Terminal,
   Folder,
+  FilePlus,
+  FileMinus,
+  FileEdit,
 } from 'lucide-react';
 import { DiffEditor } from '../components/DiffEditor';
 import { ConversationTab } from '../components/ConversationTab';
@@ -49,6 +52,7 @@ export default function PRDetailView() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set());
+  const [fileContent, setFileContent] = useState<{ original: string; modified: string } | null>(null);
   const [fileListWidth, setFileListWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const fileListRef = useRef<HTMLDivElement>(null);
@@ -123,6 +127,36 @@ export default function PRDetailView() {
     }
   }, [owner, repo, number, token]);
 
+  useEffect(() => {
+    if (files.length > 0 && !selectedFile) {
+      handleFileSelect(files[0]);
+    }
+  }, [files, selectedFile]);
+
+  const handleFileSelect = async (file: File) => {
+    setSelectedFile(file);
+    setFileContent(null);
+
+    if (token && owner && repo && pr) {
+      try {
+        const api = new GitHubAPI(token);
+        const [original, modified] = await Promise.all([
+          file.status === 'added' 
+            ? Promise.resolve('') 
+            : api.getFileContent(owner, repo, file.filename, pr.base.sha),
+          file.status === 'removed'
+            ? Promise.resolve('')
+            : api.getFileContent(owner, repo, file.filename, pr.head.sha),
+        ]);
+        setFileContent({ original, modified });
+      } catch (error) {
+        console.error('Failed to fetch file content:', error);
+        // Fallback to patch if content fetch fails
+        setFileContent(null);
+      }
+    }
+  };
+
   const loadPRData = async () => {
     setLoading(true);
     
@@ -156,10 +190,7 @@ export default function PRDetailView() {
         setComments(commentsData);
         setReviews(reviewsData);
         
-        // Auto-select first file
-        if (filesData.length > 0) {
-          setSelectedFile(filesData[0]);
-        }
+        // Auto-select first file is now handled by useEffect
       }
     } catch (error) {
       console.error('Failed to load PR data:', error);
@@ -182,9 +213,13 @@ export default function PRDetailView() {
   };
 
 
-  const markFileViewed = (filename: string) => {
+  const toggleFileViewed = (filename: string) => {
     const newViewed = new Set(viewedFiles);
-    newViewed.add(filename);
+    if (newViewed.has(filename)) {
+      newViewed.delete(filename);
+    } else {
+      newViewed.add(filename);
+    }
     setViewedFiles(newViewed);
   };
 
@@ -417,7 +452,7 @@ export default function PRDetailView() {
                 }}
                 onPrimaryAction={(item: TreeItem<TreeData>) => {
                   if (item && !item.isFolder && item.data.file) {
-                    setSelectedFile(item.data.file);
+                    handleFileSelect(item.data.file);
                   }
                 }}
                 renderItemTitle={({ title, item }) => (
@@ -448,9 +483,29 @@ export default function PRDetailView() {
                           theme === 'dark' ? "text-gray-500" : "text-gray-600"
                         )} />
                       )}
-                      <div className="flex items-center space-x-0.5 text-xs">
-                        <span className="text-green-400 text-[10px]">+{item.data.file.additions}</span>
-                        <span className="text-red-400 text-[10px]">-{item.data.file.deletions}</span>
+                      <div className="flex items-center space-x-1 text-[10px]">
+                        {item.data.file.status === 'added' ? (
+                          <>
+                            <FilePlus className="w-3 h-3 text-green-500" />
+                            <span className="text-green-500">+{item.data.file.additions}</span>
+                          </>
+                        ) : item.data.file.status === 'removed' ? (
+                          <>
+                            <FileMinus className="w-3 h-3 text-red-500" />
+                            <span className="text-red-500">-{item.data.file.deletions}</span>
+                          </>
+                        ) : item.data.file.status === 'modified' ? (
+                          <>
+                            <FileEdit className="w-3 h-3 text-yellow-500" />
+                            <span className="text-green-400">+{item.data.file.additions}</span>
+                            <span className="text-red-400">-{item.data.file.deletions}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-green-400">+{item.data.file.additions}</span>
+                            <span className="text-red-400">-{item.data.file.deletions}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -502,8 +557,11 @@ export default function PRDetailView() {
               {selectedFile && (
                 <DiffEditor
                   file={selectedFile}
+                  originalContent={fileContent?.original}
+                  modifiedContent={fileContent?.modified}
                   comments={comments.filter(c => c.path === selectedFile.filename)}
-                  onMarkViewed={() => markFileViewed(selectedFile.filename)}
+                  onMarkViewed={() => toggleFileViewed(selectedFile.filename)}
+                  isViewed={viewedFiles.has(selectedFile.filename)}
                 />
               )}
             </div>

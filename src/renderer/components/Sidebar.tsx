@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   GitPullRequest,
@@ -6,7 +6,6 @@ import {
   Settings,
   // Terminal, // TODO: Re-enable terminal tab when ready
   ChevronDown,
-  ChevronRight,
   Filter,
   Plus,
   FolderOpen,
@@ -15,6 +14,14 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
+import {
+  UncontrolledTreeEnvironment,
+  Tree,
+  StaticTreeDataProvider,
+  TreeItem,
+  TreeItemIndex,
+} from 'react-complex-tree';
+import 'react-complex-tree/lib/style-modern.css';
 import { cn } from '../utils/cn';
 import { usePRStore } from '../stores/prStore';
 import { useIssueStore } from '../stores/issueStore';
@@ -23,6 +30,12 @@ import { useUIStore } from '../stores/uiStore';
 interface SidebarProps {
   className?: string;
 }
+
+type TreeData = {
+  type: 'agent' | 'task' | 'pr';
+  pr?: any;
+  count?: number;
+};
 
 export default function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
@@ -35,25 +48,11 @@ export default function Sidebar({ className }: SidebarProps) {
     resetFilters: resetIssueFilters 
   } = useIssueStore();
   const { theme } = useUIStore();
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showLabelDropdown, setShowLabelDropdown] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
 
-  const toggleGroup = (groupId: string, event?: React.MouseEvent) => {
-    if (event) {
-      event.stopPropagation();
-    }
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupId)) {
-      newExpanded.delete(groupId);
-    } else {
-      newExpanded.add(groupId);
-    }
-    setExpandedGroups(newExpanded);
-  };
-
   // Extract agent from PR (e.g., "cursor" from branch name or title)
-  const getAgentFromPR = (pr: any): string => {
+  const getAgentFromPR = useCallback((pr: any): string => {
     const branchName = pr.head?.ref || '';
     const agentMatch = branchName.match(/^([^/]+)\//);
     if (agentMatch) {
@@ -74,10 +73,10 @@ export default function Sidebar({ className }: SidebarProps) {
     }
     
     return 'manual';
-  };
+  }, []);
 
   // Extract common prefix from PR title for sub-grouping
-  const getTitlePrefix = (title: string): string => {
+  const getTitlePrefix = useCallback((title: string): string => {
     const withoutNumber = title.replace(/^#?\d+\s*/, '');
     const colonMatch = withoutNumber.match(/^([^:]+):/);
     if (colonMatch) {
@@ -86,13 +85,11 @@ export default function Sidebar({ className }: SidebarProps) {
     const words = withoutNumber.split(/\s+/);
     const prefixWords = words.slice(0, Math.min(3, words.length));
     return prefixWords.join(' ');
-  };
+  }, []);
 
-  // Group PRs by agent and then by title prefix
-  const getGroupedPRs = () => {
+  const treeItems = useMemo(() => {
     let prs = Array.from(pullRequests.values());
-    const groups: Record<string, Record<string, any[]>> = {};
-
+    
     // Apply filters
     if (filters.length > 0) {
       prs = prs.filter(pr => {
@@ -114,22 +111,97 @@ export default function Sidebar({ className }: SidebarProps) {
         });
       });
     }
-    
+
+    const items: Record<TreeItemIndex, TreeItem<TreeData>> = {
+      root: {
+        index: 'root',
+        isFolder: true,
+        children: [],
+        data: { type: 'agent' },
+      },
+    };
+
+    const agentGroups: Record<string, any[]> = {};
+
     prs.forEach(pr => {
       const agent = getAgentFromPR(pr);
-      if (!groups[agent]) {
-        groups[agent] = {};
+      if (!agentGroups[agent]) {
+        agentGroups[agent] = [];
       }
-      
-      const prefix = getTitlePrefix(pr.title);
-      if (!groups[agent][prefix]) {
-        groups[agent][prefix] = [];
-      }
-      groups[agent][prefix].push(pr);
+      agentGroups[agent].push(pr);
     });
-    
-    return groups;
-  };
+
+    for (const agentName in agentGroups) {
+      const agentKey = `agent-${agentName}`;
+      items[agentKey] = {
+        index: agentKey,
+        isFolder: true,
+        children: [],
+        data: {
+          type: 'agent',
+          count: agentGroups[agentName].length,
+        },
+      };
+      (items.root.children as TreeItemIndex[]).push(agentKey);
+
+      const taskGroups: Record<string, any[]> = {};
+      agentGroups[agentName].forEach(pr => {
+        const prefix = getTitlePrefix(pr.title);
+        if (!taskGroups[prefix]) {
+          taskGroups[prefix] = [];
+        }
+        taskGroups[prefix].push(pr);
+      });
+
+      for (const prefix in taskGroups) {
+        const taskPRs = taskGroups[prefix];
+        if (taskPRs.length > 1) {
+          const taskKey = `${agentKey}-${prefix}`;
+          items[taskKey] = {
+            index: taskKey,
+            isFolder: true,
+            children: [],
+            data: {
+              type: 'task',
+              count: taskPRs.length,
+            },
+          };
+          (items[agentKey].children as TreeItemIndex[]).push(taskKey);
+
+          taskPRs.forEach(pr => {
+            const prKey = `pr-${pr.id}`;
+            items[prKey] = {
+              index: prKey,
+              children: [],
+              data: {
+                type: 'pr',
+                pr,
+              },
+            };
+            (items[taskKey].children as TreeItemIndex[]).push(prKey);
+          });
+        } else {
+          const pr = taskPRs[0];
+          const prKey = `pr-${pr.id}`;
+          items[prKey] = {
+            index: prKey,
+            children: [],
+            data: {
+              type: 'pr',
+              pr,
+            },
+          };
+          (items[agentKey].children as TreeItemIndex[]).push(prKey);
+        }
+      }
+    }
+
+    return items;
+  }, [pullRequests, filters, getAgentFromPR, getTitlePrefix]);
+
+  const treeDataProvider: StaticTreeDataProvider<TreeData> = useMemo(() => {
+    return new StaticTreeDataProvider<TreeData>(treeItems);
+  }, [treeItems]);
 
   const handlePRClick = (pr: any) => {
     navigate(`/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`);
@@ -597,148 +669,79 @@ export default function Sidebar({ className }: SidebarProps) {
               </button>
             </div>
             <div className="space-y-1">
-              {/* Hierarchical groups by agent/title */}
-              {(() => {
-                const groupedPRs = getGroupedPRs();
-                const agentNames = Object.keys(groupedPRs);
-                
-                if (agentNames.length === 0) {
-                  return (
-                    <div className={cn(
-                      "text-xs px-3 py-2",
-                      theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                    )}>No groups</div>
-                  );
-                }
-                
-                return agentNames.map((agentName) => {
-                  const agentKey = `agent-${agentName}`;
-                  const isAgentExpanded = expandedGroups.has(agentKey);
-                  const subGroups = groupedPRs[agentName];
-                  const totalPRs = Object.values(subGroups).reduce((sum, prs: any) => sum + prs.length, 0);
-                  const openPRs = Object.values(subGroups)
-                    .flat()
-                    .filter((pr: any) => pr.state === 'open').length;
-                  
-                  return (
-                    <div key={agentName}>
-                      {/* Agent Group Header */}
-                      <button
-                        onClick={(e) => toggleGroup(agentKey, e)}
-                        className="sidebar-item w-full text-left"
-                      >
-                        {isAgentExpanded ? (
-                          <ChevronDown className="w-3 h-3 mr-2" />
-                        ) : (
-                          <ChevronRight className="w-3 h-3 mr-2" />
-                        )}
-                        {agentName === 'cursor' ? (
-                          <Bot className="w-4 h-4 mr-2 text-purple-400" />
-                        ) : (
-                          <User className="w-4 h-4 mr-2 text-blue-400" />
-                        )}
-                        <span className="flex-1 truncate">
-                          {agentName === 'manual' ? 'Manual PRs' : agentName}
-                        </span>
-                        <span className={cn(
-                          "text-xs",
-                          theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                        )}>
-                          {openPRs}/{totalPRs}
-                        </span>
-                      </button>
-                      
-                      {/* Agent Group Content */}
-                      {isAgentExpanded && (
-                        <div className="ml-6 space-y-1 mt-1">
-                          {Object.entries(subGroups).map(([prefix, prefixPRs]) => {
-                            const prefixKey = `${agentKey}-${prefix}`;
-                            const isPrefixExpanded = expandedGroups.has(prefixKey);
-                            const hasMultiplePRs = (prefixPRs as any[]).length > 1;
-                            
-                            if (!hasMultiplePRs) {
-                              // Single PR - render directly
-                              const pr = (prefixPRs as any[])[0];
-                              return (
-                                <button
-                                  key={pr.id}
-                                  onClick={() => handlePRClick(pr)}
-                                  className="sidebar-item text-xs w-full text-left"
-                                >
-                                  <span className={cn(
-                                    "mr-2",
-                                    pr.state === 'open' ? "text-green-400" : "text-gray-400"
-                                  )}>●</span>
-                                  <span className="truncate">#{pr.number} {pr.title}</span>
-                                </button>
-                              );
-                            }
-                            
-                            // Multiple PRs with same prefix - subgroup
-                            return (
-                              <div key={prefix}>
-                                <button
-                                  onClick={(e) => toggleGroup(prefixKey, e)}
-                                  className={cn(
-                                    "sidebar-item text-xs w-full text-left",
-                                    theme === 'dark' ? "hover:bg-gray-750" : "hover:bg-gray-100"
-                                  )}
-                                >
-                                  {isPrefixExpanded ? (
-                                    <ChevronDown className="w-3 h-3 mr-1" />
-                                  ) : (
-                                    <ChevronRight className="w-3 h-3 mr-1" />
-                                  )}
-                                  <FolderOpen className="w-3 h-3 mr-1 text-gray-500" />
-                                  <span className="flex-1 truncate">{prefix}</span>
-                                  <span className={cn(
-                                    "text-xs",
-                                    theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                                  )}>
-                                    ({(prefixPRs as any[]).length})
-                                  </span>
-                                </button>
-                                
-                                {isPrefixExpanded && (
-                                  <div className="ml-6 space-y-1 mt-1">
-                                    {(prefixPRs as any[]).slice(0, 5).map((pr) => (
-                                      <button
-                                        key={pr.id}
-                                        onClick={() => handlePRClick(pr)}
-                                        className="sidebar-item text-xs w-full text-left flex items-center"
-                                      >
-                                        <img
-                                          src={pr.user.avatar_url}
-                                          alt={pr.user.login}
-                                          className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
-                                          title={`Author: ${pr.user.login}`}
-                                        />
-                                        <span className={cn(
-                                          "mr-2",
-                                          pr.state === 'open' ? "text-green-400" : "text-gray-400"
-                                        )}>●</span>
-                                        <span className="truncate">#{pr.number} {pr.title}</span>
-                                      </button>
-                                    ))}
-                                    {(prefixPRs as any[]).length > 5 && (
-                                      <div className={cn(
-                                        "text-xs px-3",
-                                        theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                                      )}>
-                                        +{(prefixPRs as any[]).length - 5} more
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                });
-              })()}
+              <UncontrolledTreeEnvironment
+                dataProvider={treeDataProvider}
+                getItemTitle={(item) => {
+                  if (item.data.type === 'agent') {
+                    const agentName = (item.index as string).replace('agent-', '');
+                    return agentName === 'manual' ? 'Manual PRs' : agentName;
+                  }
+                  if (item.data.type === 'task') {
+                    const prefix = (item.index as string).split('-').slice(2).join('-');
+                    return prefix;
+                  }
+                  if (item.data.type === 'pr' && item.data.pr) {
+                    return `#${item.data.pr.number} ${item.data.pr.title}`;
+                  }
+                  return '';
+                }}
+                viewState={{
+                  'pr-groups': {
+                    expandedItems: Object.values(treeItems)
+                      .filter(item => item.isFolder)
+                      .map(item => item.index),
+                  },
+                }}
+                onPrimaryAction={(item) => {
+                  if (item.data.type === 'pr' && item.data.pr) {
+                    handlePRClick(item.data.pr);
+                  }
+                }}
+                renderItemTitle={({ title, item, ...rest }) => (
+                  <div className={cn(
+                    "flex items-center w-full",
+                    item.data.type === 'pr' && 'text-xs',
+                    item.data.type === 'task' && 'text-xs',
+                  )}>
+                    {item.isFolder ? (
+                      (rest as any).arrow
+                    ) : (
+                      <span className={cn(
+                        "mr-2",
+                        item.data.pr?.state === 'open' ? "text-green-400" : "text-gray-400"
+                      )}>●</span>
+                    )}
+                    {item.data.type === 'agent' && (
+                      item.index.toString().includes('cursor') ? (
+                        <Bot className="w-4 h-4 mr-2 text-purple-400" />
+                      ) : (
+                        <User className="w-4 h-4 mr-2 text-blue-400" />
+                      )
+                    )}
+                    {item.data.type === 'task' && (
+                      <FolderOpen className="w-3 h-3 mr-1 text-gray-500" />
+                    )}
+                    {item.data.type === 'pr' && item.data.pr && (
+                      <img
+                        src={item.data.pr.user.avatar_url}
+                        alt={item.data.pr.user.login}
+                        className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
+                      />
+                    )}
+                    <span className="flex-1 truncate">{title}</span>
+                    {item.data.count && (
+                      <span className={cn(
+                        "text-xs",
+                        theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                      )}>
+                        ({item.data.count})
+                      </span>
+                    )}
+                  </div>
+                )}
+              >
+                <Tree treeId="pr-groups" rootItem="root" />
+              </UncontrolledTreeEnvironment>
             </div>
           </div>
         </>

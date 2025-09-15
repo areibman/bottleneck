@@ -10,6 +10,7 @@ interface UIState {
   activeView: 'list' | 'detail';
   diffView: 'unified' | 'split';
   showWhitespace: boolean;
+  wordWrap: boolean;
   theme: 'light' | 'dark';
   
   toggleSidebar: () => void;
@@ -18,6 +19,7 @@ interface UIState {
   toggleKeyboardShortcuts: () => void;
   toggleDiffView: () => void;
   toggleWhitespace: () => void;
+  toggleWordWrap: () => void;
   toggleTheme: () => void;
   selectPR: (prId: string) => void;
   deselectPR: (prId: string) => void;
@@ -34,8 +36,9 @@ export const useUIStore = create<UIState>()(
   keyboardShortcutsOpen: false,
   selectedPRs: new Set(),
   activeView: 'list',
-  diffView: 'unified',
+  diffView: 'split',
   showWhitespace: false,
+  wordWrap: false,
   theme: 'dark',
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -46,6 +49,7 @@ export const useUIStore = create<UIState>()(
     diffView: state.diffView === 'unified' ? 'split' : 'unified' 
   })),
   toggleWhitespace: () => set((state) => ({ showWhitespace: !state.showWhitespace })),
+  toggleWordWrap: () => set((state) => ({ wordWrap: !state.wordWrap })),
   toggleTheme: () => set((state) => ({ 
     theme: state.theme === 'dark' ? 'light' : 'dark' 
   })),

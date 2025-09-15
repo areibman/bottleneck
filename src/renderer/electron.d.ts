@@ -27,6 +27,10 @@ declare global {
         getVersion: () => Promise<string>;
       };
 
+      utils: {
+        fromBase64: (data: string) => Promise<string>;
+      };
+
       terminal: {
         spawn: (cwd?: string) => Promise<{ success: boolean; error?: string }>;
         write: (data: string) => Promise<{ success: boolean; error?: string }>;

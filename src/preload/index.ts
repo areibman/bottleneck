@@ -32,6 +32,11 @@ const electronAPI = {
     getVersion: () => ipcRenderer.invoke('app:get-version'),
   },
 
+  // Utility functions
+  utils: {
+    fromBase64: (data: string) => ipcRenderer.invoke('utils:fromBase64', data),
+  },
+
   // Terminal operations
   terminal: {
     spawn: (cwd?: string) => ipcRenderer.invoke('terminal:spawn', cwd),

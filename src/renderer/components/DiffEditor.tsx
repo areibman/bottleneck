@@ -1,13 +1,16 @@
-import React, { useRef, useEffect, useState } from 'react';
-import Editor, { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
+import { useRef, useEffect, useState } from 'react';
+import { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
 import { 
   Eye, 
   MessageSquare, 
-  Plus,
-  ChevronUp,
-  ChevronDown,
   Columns,
-  FileText
+  FileText,
+  Check,
+  WrapText,
+  WholeWord,
+  FilePlus,
+  FileMinus,
+  FileEdit
 } from 'lucide-react';
 import { File, Comment } from '../services/github';
 import { useUIStore } from '../stores/uiStore';
@@ -16,51 +19,162 @@ import '../utils/monaco-loader'; // Import Monaco loader configuration
 
 interface DiffEditorProps {
   file: File;
+  originalContent?: string;
+  modifiedContent?: string;
   comments: Comment[];
   onMarkViewed: () => void;
+  isViewed: boolean;
 }
 
-export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
-  const { diffView, showWhitespace, toggleDiffView, toggleWhitespace, theme } = useUIStore();
-  const [originalContent, setOriginalContent] = useState('');
-  const [modifiedContent, setModifiedContent] = useState('');
+export function DiffEditor({ 
+  file, 
+  originalContent, 
+  modifiedContent, 
+  comments, 
+  onMarkViewed, 
+  isViewed 
+}: DiffEditorProps) {
+  const { 
+    diffView, 
+    showWhitespace, 
+    wordWrap,
+    toggleDiffView, 
+    toggleWhitespace, 
+    toggleWordWrap,
+    theme 
+  } = useUIStore();
+  const [patchOriginalContent, setPatchOriginalContent] = useState('');
+  const [patchModifiedContent, setPatchModifiedContent] = useState('');
   const [showCommentForm, setShowCommentForm] = useState<number | null>(null);
   const [commentText, setCommentText] = useState('');
+  const [showFullFile, setShowFullFile] = useState(false);
   const editorRef = useRef<any>(null);
 
   useEffect(() => {
-    // Parse the patch to get original and modified content
+    // Reset to patch view when file changes
+    setShowFullFile(false);
+    
+    // Always parse the patch for diff view
     if (file.patch) {
       const { original, modified } = parsePatch(file.patch);
-      setOriginalContent(original);
-      setModifiedContent(modified);
+      setPatchOriginalContent(original);
+      setPatchModifiedContent(modified);
     }
-  }, [file]);
+  }, [file.patch]);
 
   const parsePatch = (patch: string) => {
-    // Simple patch parser - in production, use a proper diff parser
+    if (!patch) {
+      return { original: '', modified: '' };
+    }
+
     const lines = patch.split('\n');
-    const original: string[] = [];
-    const modified: string[] = [];
+    const hunks: Array<{
+      oldStart: number;
+      oldLines: number;
+      newStart: number;
+      newLines: number;
+      lines: Array<{ type: '-' | '+' | ' ', content: string }>
+    }> = [];
     
-    for (const line of lines) {
-      if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
-        continue;
-      }
+    // Parse the patch to extract hunks
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       
-      if (line.startsWith('-')) {
-        original.push(line.substring(1));
-      } else if (line.startsWith('+')) {
-        modified.push(line.substring(1));
-      } else if (line.startsWith(' ')) {
-        original.push(line.substring(1));
-        modified.push(line.substring(1));
+      // Parse hunk header
+      if (line.startsWith('@@')) {
+        const match = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        if (match) {
+          const hunk = {
+            oldStart: parseInt(match[1], 10),
+            oldLines: parseInt(match[2] || '1', 10),
+            newStart: parseInt(match[3], 10),
+            newLines: parseInt(match[4] || '1', 10),
+            lines: [] as Array<{ type: '-' | '+' | ' ', content: string }>
+          };
+          
+          // Collect lines for this hunk
+          i++;
+          while (i < lines.length && !lines[i].startsWith('@@') && !lines[i].startsWith('diff --git')) {
+            const hunkLine = lines[i];
+            if (hunkLine.startsWith('-')) {
+              hunk.lines.push({ type: '-', content: hunkLine.substring(1) });
+            } else if (hunkLine.startsWith('+')) {
+              hunk.lines.push({ type: '+', content: hunkLine.substring(1) });
+            } else if (hunkLine.startsWith(' ')) {
+              hunk.lines.push({ type: ' ', content: hunkLine.substring(1) });
+            } else if (hunkLine === '\\No newline at end of file' || hunkLine === '\\ No newline at end of file') {
+              // Skip this marker (with or without space after backslash)
+            } else if (hunkLine.startsWith('---') || hunkLine.startsWith('+++') || hunkLine.startsWith('index ')) {
+              // Skip file headers
+            } else if (hunkLine.startsWith('\\')) {
+              // Skip any other backslash-prefixed Git markers
+            } else {
+              // Might be part of the content, treat as context
+              if (hunkLine.length > 0) {
+                hunk.lines.push({ type: ' ', content: hunkLine });
+              }
+            }
+            i++;
+          }
+          i--; // Back up one since the outer loop will increment
+          
+          hunks.push(hunk);
+        }
+      }
+    }
+    
+    if (hunks.length === 0) {
+      return { original: '', modified: '' };
+    }
+    
+    // Build properly aligned content arrays
+    const originalLines: string[] = [];
+    const modifiedLines: string[] = [];
+    
+    for (const hunk of hunks) {
+      // Process hunk lines maintaining alignment
+      let i = 0;
+      while (i < hunk.lines.length) {
+        const line = hunk.lines[i];
+        
+        if (line.type === ' ') {
+          // Context line - same in both
+          originalLines.push(line.content);
+          modifiedLines.push(line.content);
+          i++;
+        } else if (line.type === '-') {
+          // Deletion - collect all consecutive deletions
+          const deletions: string[] = [];
+          while (i < hunk.lines.length && hunk.lines[i].type === '-') {
+            deletions.push(hunk.lines[i].content);
+            i++;
+          }
+          
+          // Check for following additions (replacement)
+          const additions: string[] = [];
+          while (i < hunk.lines.length && hunk.lines[i].type === '+') {
+            additions.push(hunk.lines[i].content);
+            i++;
+          }
+          
+          // Add the lines, padding shorter side with empty lines
+          const maxLines = Math.max(deletions.length, additions.length);
+          for (let j = 0; j < maxLines; j++) {
+            originalLines.push(deletions[j] || '');
+            modifiedLines.push(additions[j] || '');
+          }
+        } else if (line.type === '+') {
+          // Pure addition (no preceding deletion)
+          originalLines.push('');
+          modifiedLines.push(line.content);
+          i++;
+        }
       }
     }
     
     return {
-      original: original.join('\n'),
-      modified: modified.join('\n')
+      original: originalLines.join('\n'),
+      modified: modifiedLines.join('\n')
     };
   };
 
@@ -111,10 +225,6 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
     return languageMap[ext || ''] || 'plaintext';
   };
 
-  const handleAddComment = (lineNumber: number) => {
-    setShowCommentForm(lineNumber);
-  };
-
   const handleSubmitComment = async () => {
     if (!commentText.trim()) return;
     
@@ -132,23 +242,36 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className={cn(
-        "p-3 flex items-center justify-between border-b",
+        "py-1 px-2 flex items-center justify-between border-b",
         theme === 'dark' 
           ? "bg-gray-800 border-gray-700" 
           : "bg-gray-50 border-gray-200"
       )}>
         <div className="flex items-center space-x-3">
-          <h3 className="font-mono text-sm">{file.filename}</h3>
+          <h3 className="font-mono text-xs flex items-center gap-2">
+            {file.status === 'added' && <FilePlus className="w-4 h-4 text-green-500" />}
+            {file.status === 'removed' && <FileMinus className="w-4 h-4 text-red-500" />}
+            {file.status === 'modified' && <FileEdit className="w-4 h-4 text-yellow-500" />}
+            {file.filename}
+          </h3>
           <div className="flex items-center space-x-2 text-xs">
-            <span className="text-green-400">+{file.additions}</span>
-            <span className="text-red-400">-{file.deletions}</span>
+            {file.status === 'added' ? (
+              <span className="text-green-500 font-medium">New file (+{file.additions} lines)</span>
+            ) : file.status === 'removed' ? (
+              <span className="text-red-500 font-medium">Deleted (-{file.deletions} lines)</span>
+            ) : (
+              <>
+                <span className="text-green-400">+{file.additions}</span>
+                <span className="text-red-400">-{file.deletions}</span>
+              </>
+            )}
           </div>
         </div>
         
         <div className="flex items-center space-x-2">
           <button
             onClick={toggleDiffView}
-            className="btn btn-ghost p-2 text-sm"
+            className="btn btn-ghost p-1 text-xs"
             title={diffView === 'unified' ? 'Switch to split view' : 'Switch to unified view'}
           >
             {diffView === 'unified' ? <Columns className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
@@ -157,7 +280,7 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
           <button
             onClick={toggleWhitespace}
             className={cn(
-              'btn btn-ghost p-2 text-sm', 
+              'btn btn-ghost p-1 text-xs', 
               showWhitespace && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
             )}
             title="Toggle whitespace"
@@ -166,121 +289,91 @@ export function DiffEditor({ file, comments, onMarkViewed }: DiffEditorProps) {
           </button>
           
           <button
-            onClick={onMarkViewed}
-            className="btn btn-ghost p-2 text-sm"
-            title="Mark as viewed"
+            onClick={() => {
+              if (originalContent !== undefined || modifiedContent !== undefined) {
+                setShowFullFile(!showFullFile);
+              }
+            }}
+            className={cn(
+              'btn btn-ghost px-2 py-1 text-xs flex items-center gap-1',
+              showFullFile && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'),
+              originalContent === undefined && modifiedContent === undefined && 'opacity-50 cursor-not-allowed'
+            )}
+            disabled={originalContent === undefined && modifiedContent === undefined}
+            title={
+              originalContent === undefined && modifiedContent === undefined 
+                ? 'Full file content not available' 
+                : (showFullFile ? 'Show diff' : 'Show full file')
+            }
           >
-            <Eye className="w-4 h-4" />
+            <WholeWord className="w-4 h-4" />
+            <span>{showFullFile ? 'Diff' : 'Full'}</span>
+          </button>
+
+          <button
+            onClick={toggleWordWrap}
+            className={cn(
+              'btn btn-ghost p-1 text-sm', 
+              wordWrap && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200')
+            )}
+            title="Toggle word wrap"
+          >
+            <WrapText className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={onMarkViewed}
+            className="btn btn-ghost p-1 text-sm flex items-center"
+            title={isViewed ? "Mark as not viewed" : "Mark as viewed"}
+          >
+            {isViewed ? <Check className="w-4 h-4 text-green-500" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
       {/* Editor */}
       <div className="flex-1 relative">
-        {diffView === 'split' ? (
-          <MonacoDiffEditor
-            original={originalContent}
-            modified={modifiedContent}
-            language={language}
-            theme={theme === 'dark' ? "vs-dark" : "vs"}
-            options={{
-              readOnly: true,
-              renderSideBySide: true,
-              renderWhitespace: showWhitespace ? 'all' : 'none',
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              fontSize: 13,
-              lineHeight: 20,
-              renderLineHighlight: 'none',
-              glyphMargin: true,
-              folding: true,
-              lineNumbers: 'on',
-              lineDecorationsWidth: 0,
-              lineNumbersMinChars: 3,
-              renderValidationDecorations: 'off',
-              scrollbar: {
-                vertical: 'visible',
-                horizontal: 'visible',
-                verticalScrollbarSize: 10,
-                horizontalScrollbarSize: 10,
-              },
-            }}
-            onMount={(editor) => {
-              editorRef.current = editor;
-            }}
-          />
-        ) : (
-          <Editor
-            value={modifiedContent}
-            language={language}
-            theme={theme === 'dark' ? "vs-dark" : "vs"}
-            options={{
-              readOnly: true,
-              renderWhitespace: showWhitespace ? 'all' : 'none',
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              fontSize: 13,
-              lineHeight: 20,
-              renderLineHighlight: 'none',
-              glyphMargin: true,
-              folding: true,
-              lineNumbers: 'on',
-              lineDecorationsWidth: 0,
-              lineNumbersMinChars: 3,
-              renderValidationDecorations: 'off',
-              scrollbar: {
-                vertical: 'visible',
-                horizontal: 'visible',
-                verticalScrollbarSize: 10,
-                horizontalScrollbarSize: 10,
-              },
-            }}
-            onMount={(editor) => {
-              editorRef.current = editor;
-              
-              // Add decorations for additions/deletions
-              const decorations: any[] = [];
-              const lines = modifiedContent.split('\n');
-              
-              lines.forEach((line, index) => {
-                if (file.patch) {
-                  const patchLines = file.patch.split('\n');
-                  const patchLine = patchLines.find(pl => pl.includes(line));
-                  
-                  if (patchLine?.startsWith('+')) {
-                    decorations.push({
-                      range: {
-                        startLineNumber: index + 1,
-                        startColumn: 1,
-                        endLineNumber: index + 1,
-                        endColumn: line.length + 1,
-                      },
-                      options: {
-                        isWholeLine: true,
-                        className: 'diff-addition',
-                      },
-                    });
-                  } else if (patchLine?.startsWith('-')) {
-                    decorations.push({
-                      range: {
-                        startLineNumber: index + 1,
-                        startColumn: 1,
-                        endLineNumber: index + 1,
-                        endColumn: line.length + 1,
-                      },
-                      options: {
-                        isWholeLine: true,
-                        className: 'diff-deletion',
-                      },
-                    });
-                  }
-                }
-              });
-              
-              editor.deltaDecorations([], decorations);
-            }}
-          />
-        )}
+        <MonacoDiffEditor
+          original={showFullFile && originalContent !== undefined ? originalContent : patchOriginalContent}
+          modified={showFullFile && modifiedContent !== undefined ? modifiedContent : patchModifiedContent}
+          language={language}
+          theme={theme === 'dark' ? "vs-dark" : "vs"}
+          options={{
+            readOnly: true,
+            renderSideBySide: diffView === 'split',
+            renderWhitespace: showWhitespace ? 'all' : 'none',
+            wordWrap: wordWrap ? 'on' : 'off',
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            fontSize: 12,
+            lineHeight: 18,
+            renderLineHighlight: 'none',
+            glyphMargin: true,
+            folding: true,
+            lineNumbers: 'on',
+            lineDecorationsWidth: 0,
+            lineNumbersMinChars: 3,
+            renderValidationDecorations: 'off',
+            scrollbar: {
+              vertical: 'visible',
+              horizontal: 'visible',
+              verticalScrollbarSize: 10,
+              horizontalScrollbarSize: 10,
+            },
+            // Enable collapsing of unchanged regions (works best with full file view)
+            hideUnchangedRegions: {
+              enabled: !showFullFile ? false : true, // Only enable for full file view
+              revealLineCount: 3, // Show 3 lines of context around changes
+              minimumLineCount: 3, // Minimum lines to show in collapsed region
+              contextLineCount: 3, // Context lines to show around changes
+            },
+            // Improve diff algorithm
+            diffAlgorithm: 'advanced',
+          }}
+          onMount={(editor) => {
+            editorRef.current = editor;
+          }}
+        />
 
         {/* Comment overlay */}
         {showCommentForm !== null && (
