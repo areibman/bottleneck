@@ -40,10 +40,24 @@ function App() {
     }
   }, [checkAuth, loadSettings]);
 
-  // Fetch repositories when authenticated
+  // Fetch repositories when authenticated and trigger initial sync if needed
   useEffect(() => {
     if (isAuthenticated && token) {
-      fetchRepositories();
+      fetchRepositories().then(() => {
+        // Check if we should do an initial sync
+        const syncStore = require('./stores/syncStore').useSyncStore.getState();
+        const lastSync = syncStore.lastSyncTime;
+        const now = new Date();
+        
+        // Auto-sync if never synced or last sync was more than 5 minutes ago
+        if (!lastSync || (now.getTime() - lastSync.getTime()) > 5 * 60 * 1000) {
+          console.log('Triggering initial sync...');
+          // Small delay to let the UI settle
+          setTimeout(() => {
+            syncStore.syncAll();
+          }, 1000);
+        }
+      });
     }
   }, [isAuthenticated, token, fetchRepositories]);
 

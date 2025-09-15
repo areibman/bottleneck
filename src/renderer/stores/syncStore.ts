@@ -7,6 +7,7 @@ interface SyncState {
   syncProgress: number;
   syncMessage: string;
   syncErrors: string[];
+  syncDebounceTimer: NodeJS.Timeout | null;
   
   syncAll: () => Promise<void>;
   syncRepository: (owner: string, repo: string) => Promise<void>;
@@ -16,19 +17,52 @@ interface SyncState {
   clearSyncErrors: () => void;
 }
 
+// Initialize lastSyncTime from localStorage
+const getInitialSyncTime = (): Date | null => {
+  const stored = localStorage.getItem('lastSyncTime');
+  if (stored) {
+    try {
+      return new Date(stored);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
 export const useSyncStore = create<SyncState>((set, get) => ({
   isSyncing: false,
-  lastSyncTime: null,
+  lastSyncTime: getInitialSyncTime(),
   syncProgress: 0,
   syncMessage: '',
   syncErrors: [],
+  syncDebounceTimer: null as NodeJS.Timeout | null,
 
   syncAll: async () => {
+    const state = get();
+    
+    // Debounce: if already syncing or a sync was just triggered, ignore
+    if (state.isSyncing) {
+      console.log('Sync already in progress, skipping...');
+      return;
+    }
+    
+    // Clear any existing debounce timer
+    if (state.syncDebounceTimer) {
+      clearTimeout(state.syncDebounceTimer);
+    }
+    
+    // Set a debounce timer to prevent rapid clicks
+    const timer = setTimeout(() => {
+      set({ syncDebounceTimer: null });
+    }, 1000);
+    
     set({ 
       isSyncing: true, 
       syncProgress: 0, 
       syncMessage: 'Starting sync...',
-      syncErrors: [] 
+      syncErrors: [],
+      syncDebounceTimer: timer
     });
 
     try {
@@ -40,32 +74,51 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       await prStore.fetchRepositories();
       set({ syncProgress: 20 });
 
-      const repos = prStore.repositories;
-      const totalRepos = repos.length;
+      // Only sync PRs for the currently selected repository
+      // or recently viewed repos to avoid excessive API calls
+      const selectedRepo = prStore.selectedRepo;
+      const recentRepos = prStore.recentlyViewedRepos.slice(0, 3); // Limit to 3 recent repos
+      const reposToSync = selectedRepo 
+        ? [selectedRepo, ...recentRepos.filter(r => r.id !== selectedRepo.id)]
+        : recentRepos;
       
-      // Sync PRs for each repository
-      for (let i = 0; i < totalRepos; i++) {
-        const repo = repos[i];
-        const progress = 20 + (80 * (i / totalRepos));
-        
+      const totalRepos = reposToSync.length;
+      
+      if (totalRepos === 0) {
         set({ 
-          syncProgress: progress,
-          syncMessage: `Syncing ${repo.full_name}...` 
+          syncProgress: 100,
+          syncMessage: 'No repositories to sync' 
         });
-        
-        try {
-          await prStore.fetchPullRequests(repo.owner, repo.name);
-        } catch (error) {
-          get().addSyncError(`Failed to sync ${repo.full_name}: ${(error as Error).message}`);
+      } else {
+        // Sync PRs for selected/recent repositories only
+        for (let i = 0; i < totalRepos; i++) {
+          const repo = reposToSync[i];
+          const progress = 20 + (80 * ((i + 1) / totalRepos));
+          
+          set({ 
+            syncProgress: progress,
+            syncMessage: `Syncing ${repo.full_name}...` 
+          });
+          
+          try {
+            await prStore.fetchPullRequests(repo.owner, repo.name, true); // Force refresh
+          } catch (error) {
+            get().addSyncError(`Failed to sync ${repo.full_name}: ${(error as Error).message}`);
+          }
         }
       }
 
+      const syncTime = new Date();
       set({ 
         isSyncing: false,
-        lastSyncTime: new Date(),
+        lastSyncTime: syncTime,
         syncProgress: 100,
-        syncMessage: 'Sync complete!' 
+        syncMessage: 'Sync complete!',
+        syncErrors: [] // Clear errors on successful sync
       });
+      
+      // Save sync time to localStorage for persistence
+      localStorage.setItem('lastSyncTime', syncTime.toISOString());
 
       // Clear message after a delay
       setTimeout(() => {
@@ -82,6 +135,14 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   },
 
   syncRepository: async (owner: string, repo: string) => {
+    const state = get();
+    
+    // Debounce check
+    if (state.isSyncing) {
+      console.log('Sync already in progress, skipping repository sync...');
+      return;
+    }
+    
     set({ 
       isSyncing: true,
       syncMessage: `Syncing ${owner}/${repo}...` 
@@ -89,13 +150,18 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
     try {
       const prStore = usePRStore.getState();
-      await prStore.fetchPullRequests(owner, repo);
+      await prStore.fetchPullRequests(owner, repo, true); // Force refresh
       
+      const syncTime = new Date();
       set({ 
         isSyncing: false,
-        lastSyncTime: new Date(),
-        syncMessage: 'Repository synced!' 
+        lastSyncTime: syncTime,
+        syncMessage: 'Repository synced!',
+        syncErrors: [] // Clear errors on successful sync
       });
+      
+      // Save sync time to localStorage
+      localStorage.setItem('lastSyncTime', syncTime.toISOString());
 
       setTimeout(() => {
         set({ syncMessage: '' });

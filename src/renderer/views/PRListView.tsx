@@ -216,10 +216,13 @@ export default function PRListView() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // Fetch PRs when the selected repo changes
+    // The TopBar also calls fetchPullRequests, but this ensures we always have the right data
     if (selectedRepo) {
+      // The store will handle deduplication and clearing old data
       fetchPullRequests(selectedRepo.owner, selectedRepo.name);
     }
-  }, [selectedRepo, fetchPullRequests]);
+  }, [selectedRepo?.id, fetchPullRequests]); // Depend on repo ID and fetchPullRequests
 
   // Extract agent from PR (e.g., "cursor" from branch name or title)
   const getAgentFromPR = useCallback((pr: PullRequest): string => {
@@ -592,7 +595,7 @@ export default function PRListView() {
                         <User className="w-4 h-4 text-blue-400" />
                       )}
                       <span className="font-medium text-sm">
-                        {'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
+                        {agentName === 'ai' ? 'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
                       </span>
                       <span className={cn(
                         "text-xs",

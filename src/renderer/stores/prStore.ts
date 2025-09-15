@@ -28,6 +28,7 @@ interface PRState {
   fetchRepositories: () => Promise<void>;
   setSelectedRepo: (repo: Repository | null) => void;
   addToRecentlyViewed: (repo: Repository) => void;
+  removeFromRecentlyViewed: (repoId: number) => void;
   setFilter: (filter: string) => void;
   removeFilter: (filter: string) => void;
   clearFilters: () => void;
@@ -38,16 +39,98 @@ interface PRState {
   storeReposInDB: (repos: Repository[]) => Promise<void>;
 }
 
-export const usePRStore = create<PRState>((set, get) => ({
-  pullRequests: new Map(),
-  repositories: [],
-  selectedRepo: null,
-  recentlyViewedRepos: [],
-  loadedRepos: new Set(),
-  filters: ['open'],
-  groups: [],
-  loading: false,
-  error: null,
+// Load recently viewed repos from electron store on initialization
+const loadRecentlyViewedRepos = async (): Promise<Repository[]> => {
+  if (window.electron) {
+    try {
+      const result = await window.electron.settings.get('recentlyViewedRepos');
+      if (result.success && result.value) {
+        return result.value as Repository[];
+      }
+    } catch (error) {
+      console.error('Failed to load recently viewed repos:', error);
+    }
+  }
+  return [];
+};
+
+// Save recently viewed repos to electron store
+const saveRecentlyViewedRepos = async (repos: Repository[]) => {
+  if (window.electron) {
+    try {
+      await window.electron.settings.set('recentlyViewedRepos', repos);
+    } catch (error) {
+      console.error('Failed to save recently viewed repos:', error);
+    }
+  }
+};
+
+// Load selected repo from electron store
+const loadSelectedRepo = async (): Promise<Repository | null> => {
+  if (window.electron) {
+    try {
+      const result = await window.electron.settings.get('selectedRepo');
+      if (result.success && result.value) {
+        return result.value as Repository;
+      }
+    } catch (error) {
+      console.error('Failed to load selected repo:', error);
+    }
+  }
+  return null;
+};
+
+// Save selected repo to electron store
+const saveSelectedRepo = async (repo: Repository | null) => {
+  if (window.electron) {
+    try {
+      await window.electron.settings.set('selectedRepo', repo);
+    } catch (error) {
+      console.error('Failed to save selected repo:', error);
+    }
+  }
+};
+
+export const usePRStore = create<PRState>((set, get) => {
+  // Initialize from storage
+  Promise.all([
+    loadRecentlyViewedRepos(),
+    loadSelectedRepo()
+  ]).then(([recentRepos, selectedRepo]) => {
+    const updates: Partial<PRState> = {};
+    
+    if (recentRepos.length > 0) {
+      updates.recentlyViewedRepos = recentRepos;
+    }
+    
+    // Use the saved selected repo, or fall back to the most recent one
+    if (selectedRepo) {
+      updates.selectedRepo = selectedRepo;
+    } else if (recentRepos.length > 0) {
+      updates.selectedRepo = recentRepos[0];
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      set(updates);
+      
+      // Auto-fetch PRs for the selected repo
+      const repoToLoad = updates.selectedRepo;
+      if (repoToLoad) {
+        get().fetchPullRequests(repoToLoad.owner, repoToLoad.name);
+      }
+    }
+  });
+
+  return {
+    pullRequests: new Map(),
+    repositories: [],
+    selectedRepo: null,
+    recentlyViewedRepos: [],
+    loadedRepos: new Set(),
+    filters: ['open'],
+    groups: [],
+    loading: false,
+    error: null,
 
   fetchPullRequests: async (owner: string, repo: string, force = false) => {
     const repoFullName = `${owner}/${repo}`;
@@ -57,13 +140,29 @@ export const usePRStore = create<PRState>((set, get) => ({
       return;
     }
     
-    // Skip if already loaded (unless forced)
-    if (get().loadedRepos.has(repoFullName) && !force) {
-      // Still have data, just return without setting loading
-      return;
+    // Check if we need to fetch
+    // We need to fetch if:
+    // 1. Force is true
+    // 2. We have no PRs at all
+    // 3. The PRs we have are for a different repository
+    const currentPRs = Array.from(get().pullRequests.values());
+    const currentRepoFullName = currentPRs[0] ? 
+      `${currentPRs[0].base?.repo?.owner?.login}/${currentPRs[0].base?.repo?.name}` : 
+      null;
+    const needsFetch = force || 
+                       currentPRs.length === 0 || 
+                       currentRepoFullName !== repoFullName;
+    
+    if (!needsFetch) {
+      return; // We already have the right PRs
     }
-
-    set({ loading: true, error: null });
+    
+    // Clear existing PRs and show loading state
+    set({ 
+      pullRequests: new Map(),
+      loading: true, 
+      error: null 
+    });
     
     try {
       let token: string | null = null;
@@ -100,8 +199,6 @@ export const usePRStore = create<PRState>((set, get) => ({
         pullRequests: prMap,
         loading: false 
       });
-      
-      get().loadedRepos.add(repoFullName);
 
       // Auto-group PRs after fetching
       get().groupPRsByPrefix();
@@ -240,6 +337,10 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   setSelectedRepo: (repo) => {
     set({ selectedRepo: repo });
+    
+    // Save to electron store
+    saveSelectedRepo(repo);
+    
     if (repo) {
       get().addToRecentlyViewed(repo);
     }
@@ -249,7 +350,22 @@ export const usePRStore = create<PRState>((set, get) => ({
     set((state) => {
       const filtered = state.recentlyViewedRepos.filter(r => r.id !== repo.id);
       const newRecent = [repo, ...filtered].slice(0, 5); // Keep only 5 most recent
+      
+      // Save to electron store
+      saveRecentlyViewedRepos(newRecent);
+      
       return { recentlyViewedRepos: newRecent };
+    });
+  },
+
+  removeFromRecentlyViewed: (repoId) => {
+    set((state) => {
+      const filtered = state.recentlyViewedRepos.filter(r => r.id !== repoId);
+      
+      // Save to electron store
+      saveRecentlyViewedRepos(filtered);
+      
+      return { recentlyViewedRepos: filtered };
     });
   },
 
@@ -403,4 +519,5 @@ export const usePRStore = create<PRState>((set, get) => ({
       );
     }
   },
-}));
+  };
+});
