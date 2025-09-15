@@ -58,6 +58,10 @@
     "@octokit/auth-oauth-app": "^7.0.1",
     "@octokit/auth-oauth-device": "^6.0.1",
     "@octokit/rest": "^20.0.2",
+    "@remotion/bundler": "^4.0.347",
+    "@remotion/cli": "^4.0.347",
+    "@remotion/lambda": "^4.0.347",
+    "@remotion/transitions": "^4.0.347",
     "@tanstack/react-query": "^5.17.9",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@xterm/addon-fit": "^0.10.0",
@@ -79,6 +83,7 @@
     "react-window": "^2.1.0",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
+    "remotion": "^4.0.347",
     "simple-git": "^3.22.0",
     "sqlite3": "^5.1.7",
     "zustand": "^4.4.7"
