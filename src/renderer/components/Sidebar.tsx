@@ -90,8 +90,30 @@ export default function Sidebar({ className }: SidebarProps) {
 
   // Group PRs by agent and then by title prefix
   const getGroupedPRs = () => {
-    const prs = Array.from(pullRequests.values());
+    let prs = Array.from(pullRequests.values());
     const groups: Record<string, Record<string, any[]>> = {};
+
+    // Apply filters
+    if (filters.length > 0) {
+      prs = prs.filter(pr => {
+        return filters.some(filter => {
+          switch (filter) {
+            case 'open':
+              return pr.state === 'open' && !pr.draft;
+            case 'draft':
+              return !!pr.draft;
+            case 'review-requested':
+              return pr.requested_reviewers && pr.requested_reviewers.length > 0;
+            case 'merged':
+              return !!pr.merged;
+            case 'closed':
+              return pr.state === 'closed' && !pr.merged;
+            default:
+              return false;
+          }
+        });
+      });
+    }
     
     prs.forEach(pr => {
       const agent = getAgentFromPR(pr);

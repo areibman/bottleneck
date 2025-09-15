@@ -8,7 +8,6 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronRight,
-  Filter,
   MoreHorizontal,
   Bot,
   User,
@@ -350,11 +349,22 @@ export default function PRListView() {
     // Apply filters
     if (filters.length > 0) {
       prs = prs.filter(pr => {
-        if (filters.includes('open') && pr.state === 'open') return true;
-        if (filters.includes('draft') && pr.draft) return true;
-        if (filters.includes('merged') && pr.merged) return true;
-        if (filters.includes('closed') && pr.state === 'closed' && !pr.merged) return true;
-        return false;
+        return filters.some(filter => {
+          switch (filter) {
+            case 'open':
+              return pr.state === 'open' && !pr.draft;
+            case 'draft':
+              return !!pr.draft;
+            case 'review-requested':
+              return pr.requested_reviewers && pr.requested_reviewers.length > 0;
+            case 'merged':
+              return !!pr.merged;
+            case 'closed':
+              return pr.state === 'closed' && !pr.merged;
+            default:
+              return false;
+          }
+        });
       });
     }
     
