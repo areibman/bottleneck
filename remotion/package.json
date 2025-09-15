@@ -1,0 +1,29 @@
+{
+  "name": "remotion",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "preview": "remotion preview",
+    "render": "remotion render MyComp --codec=h264 --quality=90",
+    "still": "remotion still MyComp --frame=0 --output=thumb.png"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@remotion/bundler": "^4.0.347",
+    "@remotion/cli": "^4.0.347",
+    "@remotion/eslint-config": "^4.0.347",
+    "@remotion/transitions": "^4.0.347",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "remotion": "^4.0.347",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@remotion/gif": "^4.0.347",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  }
+}
