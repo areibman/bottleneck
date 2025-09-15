@@ -1,0 +1,27 @@
+{
+  "name": "bottleneck-promo-video",
+  "version": "1.0.0",
+  "description": "Promotional video for Bottleneck - GitHub PR Review Tool",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render src/index.tsx BottleneckPromo out/video.mp4",
+    "upgrade": "remotion upgrade",
+    "test": "eslint src --ext ts,tsx,js,jsx && tsc"
+  },
+  "repository": {},
+  "license": "MIT",
+  "dependencies": {
+    "@remotion/gif": "4.0.347",
+    "@remotion/transitions": "4.0.347",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "remotion": "4.0.347"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.347",
+    "@types/react": "^18.0.0",
+    "@types/web": "^0.0.99",
+    "eslint": "^8.43.0",
+    "typescript": "^5.0.0"
+  }
+}
