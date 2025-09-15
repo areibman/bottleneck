@@ -12,8 +12,7 @@ import {
   MoreHorizontal,
   Bot,
   User,
-  Tag,
-  UserCheck
+  FileText
 } from 'lucide-react';
 import { usePRStore } from '../stores/prStore';
 import { useUIStore } from '../stores/uiStore';
@@ -32,35 +31,69 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
 }) => {
   const prId = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
   
+  // Debug: Log PR stats
+  console.log(`PR #${pr.number} stats:`, {
+    changed_files: pr.changed_files,
+    additions: pr.additions,
+    deletions: pr.deletions
+  });
+  
+  const handleRowClick = (e: React.MouseEvent) => {
+    // If clicking on checkbox or its label area, toggle selection
+    const target = e.target as HTMLElement;
+    const isCheckboxArea = target.closest('.checkbox-area');
+    
+    if (e.metaKey || e.ctrlKey || isCheckboxArea) {
+      // Multi-select with cmd/ctrl or clicking checkbox area
+      e.stopPropagation();
+      onCheckboxChange(prId, !isSelected);
+    } else if (e.shiftKey) {
+      // Range select with shift (to be implemented)
+      e.stopPropagation();
+      onCheckboxChange(prId, true);
+    }
+    // Removed automatic navigation on row click
+  };
+  
+  const handleContentClick = (e: React.MouseEvent) => {
+    // Only navigate if clicking on the content area
+    if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
+      e.stopPropagation();
+      onPRClick(pr);
+    }
+  };
+  
   return (
     <div
       className={cn(
-        'px-4 py-3 cursor-pointer',
+        'px-4 py-3 select-none',
         theme === 'dark' 
           ? 'hover:bg-gray-800' 
           : 'hover:bg-gray-100',
         isSelected && (theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'),
         isNested && 'pl-12'
       )}
-      onClick={() => onPRClick(pr)}
+      onClick={handleRowClick}
     >
-      <div className="flex items-start space-x-3">
-        {/* Checkbox */}
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={(e) => {
-            e.stopPropagation();
-            onCheckboxChange(prId, e.target.checked);
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className={cn(
-            "mt-1 rounded focus:ring-blue-500",
-            theme === 'dark'
-              ? "border-gray-600 bg-gray-700 text-blue-500"
-              : "border-gray-300 bg-white text-blue-600"
-          )}
-        />
+      <div className="flex items-center space-x-3">
+        {/* Checkbox with larger click area */}
+        <div className="checkbox-area flex items-center -ml-2 pl-2 pr-2 py-2 -my-2">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => {
+              e.stopPropagation();
+              onCheckboxChange(prId, e.target.checked);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
+              theme === 'dark'
+                ? "border-gray-600 bg-gray-700 text-blue-500"
+                : "border-gray-300 bg-white text-blue-600"
+            )}
+          />
+        </div>
         
         {/* PR Icon/Status */}
         <div className="flex-shrink-0 flex items-center" title={
@@ -93,8 +126,11 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
           />
         </div>
         
-        {/* PR Details */}
-        <div className="flex-1 min-w-0">
+        {/* PR Details - Clickable content area */}
+        <div 
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={handleContentClick}
+        >
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               <h3 className={cn(
@@ -128,6 +164,16 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
                     {pr.comments}
                   </span>
                 )}
+                {/* File change statistics - Force display for debugging */}
+                <span className="flex items-center space-x-1.5">
+                  <span className="text-gray-500">•</span>
+                  <span className="flex items-center">
+                    <FileText className="w-3 h-3 mr-1" />
+                    <span>{pr.changed_files || 0}</span>
+                  </span>
+                  <span className="text-green-500 font-semibold">+{pr.additions || 0}</span>
+                  <span className="text-red-500 font-semibold">−{pr.deletions || 0}</span>
+                </span>
               </div>
               
               {/* Labels */}
@@ -157,8 +203,11 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
               )}
             </div>
             
-            {/* Right side info */}
-            <div className="flex items-center space-x-3 ml-4">
+            {/* Right side info - Not clickable */}
+            <div 
+              className="flex items-center space-x-3 ml-4"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Review status */}
               <div className="flex -space-x-2">
                 {pr.requested_reviewers.slice(0, 3).map((reviewer: any) => (
@@ -184,6 +233,7 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   // Handle more actions
                 }}
                 className={cn(
@@ -208,12 +258,36 @@ export default function PRListView() {
     filters, 
     loading, 
     fetchPullRequests, 
-    selectedRepo 
+    selectedRepo,
+    fetchPRDetails 
   } = usePRStore();
   const { selectedPRs, selectPR, deselectPR, clearSelection, theme } = useUIStore();
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated');
   const [groupBy, setGroupBy] = useState<'none' | 'agent' | 'author' | 'label'>('agent');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  
+  // Debug: Log all PRs data
+  console.log('PRListView - pullRequests:', Array.from(pullRequests.values()));
+  
+  // Function to fetch detailed PR data in the background
+  const fetchDetailedPRsInBackground = useCallback(async (prs: PullRequest[]) => {
+    if (!selectedRepo) return;
+    
+    // Fetch details for each PR in parallel
+    const detailPromises = prs.map(pr => 
+      fetchPRDetails(selectedRepo.owner, selectedRepo.name, pr.number)
+        .catch(error => {
+          console.error(`Failed to fetch details for PR #${pr.number}:`, error);
+          return null;
+        })
+    );
+    
+    // Execute all fetches in parallel but don't wait for them
+    Promise.all(detailPromises).then(results => {
+      const successCount = results.filter(r => r !== null).length;
+      console.log(`Successfully fetched details for ${successCount}/${prs.length} sibling PRs`);
+    });
+  }, [selectedRepo, fetchPRDetails]);
 
   useEffect(() => {
     // Fetch PRs when the selected repo changes
@@ -391,8 +465,28 @@ export default function PRListView() {
   }, []);
 
   const handlePRClick = useCallback((pr: PullRequest) => {
+    // Find if this PR belongs to a task subgroup and fetch all siblings
+    if (groupBy === 'agent') {
+      const prMetadata = prsWithMetadata.find(item => item.pr.id === pr.id);
+      if (prMetadata) {
+        const { agent, titlePrefix } = prMetadata;
+        
+        // Find all sibling PRs in the same task group
+        const siblingPRs = prsWithMetadata
+          .filter(item => item.agent === agent && item.titlePrefix === titlePrefix)
+          .map(item => item.pr);
+        
+        if (siblingPRs.length > 1) {
+          console.log(`Fetching detailed data for ${siblingPRs.length} sibling PRs in task: ${titlePrefix}`);
+          
+          // Fetch detailed data for all siblings in the background
+          fetchDetailedPRsInBackground(siblingPRs);
+        }
+      }
+    }
+    
     navigate(`/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`);
-  }, [navigate]);
+  }, [navigate, groupBy, prsWithMetadata, fetchDetailedPRsInBackground]);
 
   const handleCheckboxChange = useCallback((prId: string, checked: boolean) => {
     if (checked) {
@@ -401,6 +495,16 @@ export default function PRListView() {
       deselectPR(prId);
     }
   }, [selectPR, deselectPR]);
+
+  const handleMergeSelected = useCallback(() => {
+    // TODO: Implement merge functionality
+    console.log('Merging PRs:', Array.from(selectedPRs));
+  }, [selectedPRs]);
+
+  const handleCloseSelected = useCallback(() => {
+    // TODO: Implement close functionality
+    console.log('Closing PRs:', Array.from(selectedPRs));
+  }, [selectedPRs]);
 
   const hasSelection = selectedPRs.size > 0;
 
@@ -418,21 +522,77 @@ export default function PRListView() {
           ? "bg-gray-800 border-gray-700" 
           : "bg-gray-50 border-gray-200"
       )}>
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-semibold flex items-center">
-            <GitPullRequest className="w-5 h-5 mr-2" />
-            Pull Requests
-            {selectedRepo && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <h1 className="text-xl font-semibold flex items-center">
+              <GitPullRequest className="w-5 h-5 mr-2" />
+              Pull Requests
+              {selectedRepo && (
+                <span className={cn(
+                  "ml-2 text-sm",
+                  theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                )}>in {selectedRepo.name}</span>
+              )}
               <span className={cn(
                 "ml-2 text-sm",
-                theme === 'dark' ? "text-gray-400" : "text-gray-600"
-              )}>in {selectedRepo.name}</span>
+                theme === 'dark' ? "text-gray-500" : "text-gray-600"
+              )}>({getFilteredPRs.length})</span>
+            </h1>
+            {/* Selection help text or bulk actions */}
+            {hasSelection ? (
+              <div className="ml-4 flex items-center space-x-3">
+                <span className={cn(
+                  "text-sm",
+                  theme === 'dark' ? "text-gray-300" : "text-gray-600"
+                )}>
+                  {selectedPRs.size} selected
+                </span>
+                
+                <button
+                  onClick={handleMergeSelected}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    theme === 'dark'
+                      ? "text-green-400 hover:text-green-300 hover:bg-green-900/20"
+                      : "text-green-600 hover:text-green-700 hover:bg-green-50"
+                  )}
+                >
+                  Merge
+                </button>
+                
+                <button
+                  onClick={handleCloseSelected}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    theme === 'dark'
+                      ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                      : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                  )}
+                >
+                  Close
+                </button>
+                
+                <button
+                  onClick={clearSelection}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    theme === 'dark'
+                      ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                      : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
+                  )}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <span className={cn(
+                "ml-4 text-xs",
+                theme === 'dark' ? "text-gray-500" : "text-gray-600"
+              )}>
+                ⌘/Ctrl+Click to multi-select
+              </span>
             )}
-            <span className={cn(
-              "ml-2 text-sm",
-              theme === 'dark' ? "text-gray-500" : "text-gray-600"
-            )}>({getFilteredPRs.length})</span>
-          </h1>
+          </div>
           
           <div className="flex items-center space-x-2">
             <select
@@ -465,59 +625,9 @@ export default function PRListView() {
               <option value="author">By author</option>
               <option value="label">By label</option>
             </select>
-            
-            <button className="btn btn-ghost p-2">
-              <Filter className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
-        {/* Bulk actions bar */}
-        {hasSelection && (
-          <div className={cn(
-            "-mx-4 -mb-4 px-4 py-2 flex items-center justify-between animate-slide-in",
-            theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
-          )}>
-            <div className="flex items-center space-x-2">
-              <span className={cn(
-                "text-sm",
-                theme === 'dark' ? "text-gray-300" : "text-gray-700"
-              )}>
-                {selectedPRs.size} selected
-              </span>
-              <button
-                onClick={clearSelection}
-                className={cn(
-                  "text-sm",
-                  theme === 'dark' 
-                    ? "text-blue-400 hover:text-blue-300" 
-                    : "text-blue-600 hover:text-blue-500"
-                )}
-              >
-                Clear
-              </button>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <button className="btn btn-secondary text-sm">
-                <GitMerge className="w-3 h-3 mr-1" />
-                Merge
-              </button>
-              <button className="btn btn-secondary text-sm">
-                <X className="w-3 h-3 mr-1" />
-                Close
-              </button>
-              <button className="btn btn-secondary text-sm">
-                <Tag className="w-3 h-3 mr-1" />
-                Add Label
-              </button>
-              <button className="btn btn-secondary text-sm">
-                <UserCheck className="w-3 h-3 mr-1" />
-                Request Review
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* PR List */}
@@ -569,32 +679,73 @@ export default function PRListView() {
               const isAgentCollapsed = collapsedGroups.has(agentKey);
               const totalPRs = Object.values(subGroups).reduce((sum: number, prs: any) => sum + prs.length, 0);
               
+              // Get all PR IDs in this agent group
+              const allAgentPRIds: string[] = [];
+              Object.values(subGroups).forEach((prs: any) => {
+                prs.forEach((pr: any) => {
+                  allAgentPRIds.push(`${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`);
+                });
+              });
+              const allAgentSelected = allAgentPRIds.every(id => selectedPRs.has(id));
+              const someAgentSelected = allAgentPRIds.some(id => selectedPRs.has(id));
+              
               return (
                 <div key={agentName}>
                   {/* Agent Group Header */}
                   <div
                     className={cn(
-                      "px-4 py-2 cursor-pointer flex items-center justify-between",
+                      "px-4 py-2 flex items-center justify-between",
                       theme === 'dark' 
                         ? "bg-gray-750 hover:bg-gray-700" 
                         : "bg-gray-100 hover:bg-gray-200"
                     )}
-                    onClick={() => toggleGroup(agentKey)}
                   >
                     <div className="flex items-center space-x-2">
-                      <button className="p-0.5 hover:bg-gray-600 rounded">
+                      <button 
+                        className="p-0.5 hover:bg-gray-600 rounded"
+                        onClick={() => toggleGroup(agentKey)}
+                      >
                         {isAgentCollapsed ? (
                           <ChevronRight className="w-4 h-4" />
                         ) : (
                           <ChevronDown className="w-4 h-4" />
                         )}
                       </button>
+                      <input
+                        type="checkbox"
+                        checked={allAgentSelected}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          if (allAgentSelected) {
+                            // Deselect all
+                            allAgentPRIds.forEach(id => deselectPR(id));
+                          } else {
+                            // Select all
+                            allAgentPRIds.forEach(id => selectPR(id));
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className={cn(
+                          "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
+                          theme === 'dark'
+                            ? "border-gray-600 bg-gray-700 text-blue-500"
+                            : "border-gray-300 bg-white text-blue-600"
+                        )}
+                        ref={(el) => {
+                          if (el) {
+                            el.indeterminate = someAgentSelected && !allAgentSelected;
+                          }
+                        }}
+                      />
                       {agentName === 'cursor' ? (
                         <Bot className="w-4 h-4 text-purple-400" />
                       ) : (
                         <User className="w-4 h-4 text-blue-400" />
                       )}
-                      <span className="font-medium text-sm">
+                      <span 
+                        className="font-medium text-sm cursor-pointer"
+                        onClick={() => toggleGroup(agentKey)}
+                      >
                         {agentName === 'ai' ? 'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
                       </span>
                       <span className={cn(
@@ -627,30 +778,68 @@ export default function PRListView() {
                           ));
                         }
                         
+                        // Check if all PRs in this group are selected
+                        const groupPRIds = (prefixPRs as any[]).map(pr => 
+                          `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`
+                        );
+                        const allSelected = groupPRIds.every(id => selectedPRs.has(id));
+                        const someSelected = groupPRIds.some(id => selectedPRs.has(id));
+                        
                         return (
                           <div key={prefix}>
                             {/* Prefix Sub-group Header */}
                             <div
                               className={cn(
-                                "pl-8 pr-4 py-2 cursor-pointer flex items-center justify-between border-l-2",
+                                "pl-8 pr-4 py-2 flex items-center justify-between border-l-2",
                                 theme === 'dark' 
                                   ? "bg-gray-800 hover:bg-gray-750 border-gray-600" 
                                   : "bg-gray-50 hover:bg-gray-100 border-gray-300"
                               )}
-                              onClick={() => toggleGroup(prefixKey)}
                             >
                               <div className="flex items-center space-x-2">
-                                <button className="p-0.5 hover:bg-gray-600 rounded">
+                                <button 
+                                  className="p-0.5 hover:bg-gray-600 rounded"
+                                  onClick={() => toggleGroup(prefixKey)}
+                                >
                                   {isPrefixCollapsed ? (
                                     <ChevronRight className="w-3 h-3" />
                                   ) : (
                                     <ChevronDown className="w-3 h-3" />
                                   )}
                                 </button>
-                                <span className={cn(
-                                  "text-sm",
-                                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
-                                )}>{prefix}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={allSelected}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    if (allSelected) {
+                                      // Deselect all
+                                      groupPRIds.forEach(id => deselectPR(id));
+                                    } else {
+                                      // Select all
+                                      groupPRIds.forEach(id => selectPR(id));
+                                    }
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
+                                    theme === 'dark'
+                                      ? "border-gray-600 bg-gray-700 text-blue-500"
+                                      : "border-gray-300 bg-white text-blue-600"
+                                  )}
+                                  ref={(el) => {
+                                    if (el) {
+                                      el.indeterminate = someSelected && !allSelected;
+                                    }
+                                  }}
+                                />
+                                <span 
+                                  className={cn(
+                                    "text-sm cursor-pointer",
+                                    theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                                  )}
+                                  onClick={() => toggleGroup(prefixKey)}
+                                >{prefix}</span>
                                 <span className={cn(
                                   "text-xs",
                                   theme === 'dark' ? "text-gray-500" : "text-gray-600"

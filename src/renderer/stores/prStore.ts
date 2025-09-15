@@ -25,6 +25,7 @@ interface PRState {
   error: string | null;
   
   fetchPullRequests: (owner: string, repo: string, force?: boolean) => Promise<void>;
+  fetchPRDetails: (owner: string, repo: string, pullNumber: number) => Promise<PullRequest | null>;
   fetchRepositories: () => Promise<void>;
   setSelectedRepo: (repo: Repository | null) => void;
   addToRecentlyViewed: (repo: Repository) => void;
@@ -188,12 +189,18 @@ export const usePRStore = create<PRState>((set, get) => {
       } else {
         const api = new GitHubAPI(token);
         prs = await api.getPullRequests(owner, repo, 'all');
+        console.log('Fetched PRs from API:', prs);
       }
       
       const prMap = new Map<string, PullRequest>();
       prs.forEach(pr => {
         prMap.set(`${owner}/${repo}#${pr.number}`, pr);
       });
+      
+      console.log('Setting PR map with', prs.length, 'PRs');
+      if (prs.length > 0) {
+        console.log('First PR:', prs[0]);
+      }
       
       set({ 
         pullRequests: prMap,
@@ -212,6 +219,63 @@ export const usePRStore = create<PRState>((set, get) => {
         error: (error as Error).message,
         loading: false 
       });
+    }
+  },
+
+  fetchPRDetails: async (owner: string, repo: string, pullNumber: number) => {
+    try {
+      let token: string | null = null;
+      
+      // Check if we're using electron or dev mode
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        // In dev mode, get token from auth store
+        const authStore = require('./authStore').useAuthStore.getState();
+        token = authStore.token;
+      }
+      
+      if (!token) return null;
+      
+      // Don't fetch details if using mock data
+      if (token === 'dev-token') {
+        return null;
+      }
+      
+      const api = new GitHubAPI(token);
+      const detailedPR = await api.getPullRequest(owner, repo, pullNumber);
+      
+      // Update the PR in our store with the detailed data
+      const prKey = `${owner}/${repo}#${pullNumber}`;
+      const currentPR = get().pullRequests.get(prKey);
+      
+      if (currentPR) {
+        // Merge the detailed data with existing data
+        const updatedPR = {
+          ...currentPR,
+          ...detailedPR,
+          // Ensure we keep the file stats from the detailed fetch
+          changed_files: detailedPR.changed_files,
+          additions: detailedPR.additions,
+          deletions: detailedPR.deletions
+        };
+        
+        // Update the store
+        get().updatePR(updatedPR);
+        
+        console.log(`Updated PR #${pullNumber} with detailed data:`, {
+          changed_files: updatedPR.changed_files,
+          additions: updatedPR.additions,
+          deletions: updatedPR.deletions
+        });
+        
+        return updatedPR;
+      }
+      
+      return detailedPR;
+    } catch (error) {
+      console.error(`Failed to fetch PR details for #${pullNumber}:`, error);
+      return null;
     }
   },
 

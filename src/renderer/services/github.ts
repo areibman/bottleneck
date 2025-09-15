@@ -51,6 +51,10 @@ export interface PullRequest {
   updated_at: string;
   closed_at: string | null;
   merged_at: string | null;
+  // File change statistics
+  changed_files?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 export interface Repository {
@@ -179,6 +183,16 @@ export class GitHubAPI {
       per_page: 100,
     });
     
+    // Debug: Check what fields are available in the response
+    if (data.length > 0) {
+      console.log('GitHub API response - first PR fields:', Object.keys(data[0]));
+      console.log('GitHub API response - checking for stats:', {
+        changed_files: (data[0] as any).changed_files,
+        additions: (data[0] as any).additions,
+        deletions: (data[0] as any).deletions
+      });
+    }
+    
     // The pulls.list endpoint doesn't include comment counts, but we can get them from the issues API
     // Since every PR is also an issue, we can fetch the issues to get comment counts
     const issuesData = await this.octokit.issues.listForRepo({
@@ -196,13 +210,39 @@ export class GitHubAPI {
       }
     });
     
-    // Add comment counts to the PR data
-    const prsWithComments = data.map(pr => ({
-      ...pr,
-      comments: commentCounts.get(pr.number) || 0
-    }));
+    // Fetch detailed PR data for each PR to get file stats
+    // Note: This requires additional API calls but is necessary for file stats
+    const detailedPRs = await Promise.all(
+      data.map(async (pr) => {
+        try {
+          const { data: detailedPR } = await this.octokit.pulls.get({
+            owner,
+            repo,
+            pull_number: pr.number,
+          });
+          
+          return {
+            ...pr,
+            comments: commentCounts.get(pr.number) || 0,
+            changed_files: detailedPR.changed_files,
+            additions: detailedPR.additions,
+            deletions: detailedPR.deletions
+          };
+        } catch (error) {
+          console.error(`Failed to fetch details for PR #${pr.number}:`, error);
+          // Fallback to basic PR data without stats
+          return {
+            ...pr,
+            comments: commentCounts.get(pr.number) || 0,
+            changed_files: undefined,
+            additions: undefined,
+            deletions: undefined
+          };
+        }
+      })
+    );
     
-    return prsWithComments as unknown as PullRequest[];
+    return detailedPRs as unknown as PullRequest[];
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {
@@ -221,7 +261,10 @@ export class GitHubAPI {
     
     return {
       ...data,
-      comments: issueData.data.comments
+      comments: issueData.data.comments,
+      changed_files: (data as any).changed_files,
+      additions: (data as any).additions,
+      deletions: (data as any).deletions
     } as PullRequest;
   }
 

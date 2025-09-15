@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore';
 import { useUIStore } from './stores/uiStore';
 import { usePRStore } from './stores/prStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { useSyncStore } from './stores/syncStore';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import RightPanel from './components/RightPanel';
@@ -45,7 +46,7 @@ function App() {
     if (isAuthenticated && token) {
       fetchRepositories().then(() => {
         // Check if we should do an initial sync
-        const syncStore = require('./stores/syncStore').useSyncStore.getState();
+        const syncStore = useSyncStore.getState();
         const lastSync = syncStore.lastSyncTime;
         const now = new Date();
         

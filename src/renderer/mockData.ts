@@ -41,7 +41,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 86400000).toISOString(),
     updated_at: new Date(Date.now() - 3600000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 8,
+    additions: 247,
+    deletions: 43
   },
   {
     id: 2,
@@ -83,7 +86,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 172800000).toISOString(),
     updated_at: new Date(Date.now() - 7200000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 3,
+    additions: 45,
+    deletions: 128
   },
   {
     id: 3,
@@ -124,7 +130,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 259200000).toISOString(),
     updated_at: new Date(Date.now() - 86400000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 15,
+    additions: 523,
+    deletions: 189
   },
   {
     id: 4,
@@ -166,7 +175,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 604800000).toISOString(),
     updated_at: new Date(Date.now() - 345600000).toISOString(),
     closed_at: new Date(Date.now() - 345600000).toISOString(),
-    merged_at: new Date(Date.now() - 345600000).toISOString()
+    merged_at: new Date(Date.now() - 345600000).toISOString(),
+    changed_files: 12,
+    additions: 384,
+    deletions: 95
   },
   // Add more mock PRs with prefix patterns for grouping
   {
@@ -208,7 +220,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 3600000).toISOString(),
     updated_at: new Date(Date.now() - 1800000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 5,
+    additions: 67,
+    deletions: 23
   },
   {
     id: 6,
@@ -249,7 +264,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 5400000).toISOString(),
     updated_at: new Date(Date.now() - 2700000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 2,
+    additions: 18,
+    deletions: 5
   },
   {
     id: 7,
@@ -290,7 +308,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 7200000).toISOString(),
     updated_at: new Date(Date.now() - 3600000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 4,
+    additions: 92,
+    deletions: 31
   },
   {
     id: 8,
@@ -332,7 +353,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 9000000).toISOString(),
     updated_at: new Date(Date.now() - 4500000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 7,
+    additions: 156,
+    deletions: 42
   },
   {
     id: 9,
@@ -374,7 +398,10 @@ export const mockPullRequests = [
     created_at: new Date(Date.now() - 10800000).toISOString(),
     updated_at: new Date(Date.now() - 5400000).toISOString(),
     closed_at: null,
-    merged_at: null
+    merged_at: null,
+    changed_files: 6,
+    additions: 203,
+    deletions: 78
   }
 ];
 
