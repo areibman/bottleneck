@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   GitPullRequest,
   GitBranch,
   Settings,
   // Terminal, // TODO: Re-enable terminal tab when ready
-  Search,
   ChevronDown,
   ChevronRight,
   Filter,
@@ -13,10 +12,12 @@ import {
   FolderOpen,
   Bot,
   User,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { usePRStore } from '../stores/prStore';
+import { useIssueStore } from '../stores/issueStore';
 import { useUIStore } from '../stores/uiStore';
 
 interface SidebarProps {
@@ -26,10 +27,17 @@ interface SidebarProps {
 export default function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { filters, groups, setFilter, pullRequests, selectedRepo } = usePRStore();
+  const { filters, setFilter, pullRequests } = usePRStore();
+  const { 
+    issues, 
+    filters: issueFilters, 
+    setFilter: setIssueFilter,
+    resetFilters: resetIssueFilters 
+  } = useIssueStore();
   const { theme } = useUIStore();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
+  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
 
   const toggleGroup = (groupId: string, event?: React.MouseEvent) => {
     if (event) {
@@ -105,6 +113,39 @@ export default function Sidebar({ className }: SidebarProps) {
     navigate(`/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`);
   };
 
+  // Extract available labels and assignees from issues
+  const { availableLabels, availableAssignees } = useMemo(() => {
+    const labelsMap = new Map<string, { name: string; color: string }>();
+    const assigneesMap = new Map<string, { login: string; avatar_url: string }>();
+    
+    issues.forEach(issue => {
+      issue.labels.forEach(label => {
+        if (!labelsMap.has(label.name)) {
+          labelsMap.set(label.name, label);
+        }
+      });
+      
+      issue.assignees.forEach(assignee => {
+        if (!assigneesMap.has(assignee.login)) {
+          assigneesMap.set(assignee.login, assignee);
+        }
+      });
+    });
+    
+    return {
+      availableLabels: Array.from(labelsMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      availableAssignees: Array.from(assigneesMap.values()).sort((a, b) => a.login.localeCompare(b.login))
+    };
+  }, [issues]);
+
+  const toggleLabel = (labelName: string) => {
+    setIssueFilter('labels', 
+      issueFilters.labels.includes(labelName)
+        ? issueFilters.labels.filter(l => l !== labelName)
+        : [...issueFilters.labels, labelName]
+    );
+  };
+
   const navItems = [
     { path: '/pulls', icon: GitPullRequest, label: 'Pull Requests' },
     { path: '/issues', icon: AlertCircle, label: 'Issues' },
@@ -153,7 +194,8 @@ export default function Sidebar({ className }: SidebarProps) {
       className
     )}>
       {/* Search */}
-      <div className={cn(
+      {/* TODO: Re-enable search when ready */}
+      {/* <div className={cn(
         "p-4 border-b",
         theme === 'dark' ? "border-gray-700" : "border-gray-200"
       )}>
@@ -175,7 +217,7 @@ export default function Sidebar({ className }: SidebarProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-      </div>
+      </div> */}
 
       {/* Navigation */}
       <nav className="p-4">
@@ -196,6 +238,278 @@ export default function Sidebar({ className }: SidebarProps) {
           ))}
         </div>
       </nav>
+
+      {/* Issue Filters - Only show when on Issues view */}
+      {location.pathname.startsWith('/issues') && (
+        <>
+          <div className={cn(
+            "px-4 py-2 border-t",
+            theme === 'dark' ? "border-gray-700" : "border-gray-200"
+          )}>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className={cn(
+                "text-xs font-semibold uppercase tracking-wider",
+                theme === 'dark' ? "text-gray-400" : "text-gray-600"
+              )}>
+                Filters
+              </h3>
+              {(issueFilters.status !== 'all' || issueFilters.labels.length > 0 || issueFilters.assignee !== 'all') && (
+                <button
+                  onClick={resetIssueFilters}
+                  className={cn(
+                    "text-xs px-2 py-1 rounded",
+                    theme === 'dark'
+                      ? "text-gray-400 hover:text-white hover:bg-gray-800"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  )}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            
+            <div className="space-y-3">
+              {/* Status Filter */}
+              <div>
+                <label className={cn(
+                  "block text-xs font-medium mb-1",
+                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                )}>
+                  Status
+                </label>
+                <div className="space-y-1">
+                  {['all', 'open', 'closed'].map(status => (
+                    <label key={status} className="flex items-center">
+                      <input
+                        type="radio"
+                        name="issue-status"
+                        value={status}
+                        checked={issueFilters.status === status}
+                        onChange={(e) => setIssueFilter('status', e.target.value as any)}
+                        className="mr-2"
+                      />
+                      <span className={cn(
+                        "text-sm capitalize",
+                        theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                      )}>
+                        {status === 'all' ? 'All Issues' : status}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Labels Filter */}
+              <div>
+                <label className={cn(
+                  "block text-xs font-medium mb-1",
+                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                )}>
+                  Labels
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowLabelDropdown(!showLabelDropdown)}
+                    className={cn(
+                      "w-full px-2 py-1 text-left rounded-md border flex items-center justify-between text-sm",
+                      theme === 'dark'
+                        ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                        : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"
+                    )}
+                  >
+                    <span className="text-xs">
+                      {issueFilters.labels.length > 0
+                        ? `${issueFilters.labels.length} selected`
+                        : 'Select labels'}
+                    </span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  
+                  {showLabelDropdown && (
+                    <div className={cn(
+                      "absolute top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border shadow-lg z-10",
+                      theme === 'dark'
+                        ? "bg-gray-700 border-gray-600"
+                        : "bg-white border-gray-300"
+                    )}>
+                      {availableLabels.length === 0 ? (
+                        <div className={cn(
+                          "px-3 py-2 text-xs",
+                          theme === 'dark' ? "text-gray-400" : "text-gray-500"
+                        )}>
+                          No labels available
+                        </div>
+                      ) : (
+                        availableLabels.map(label => (
+                          <label
+                            key={label.name}
+                            className={cn(
+                              "flex items-center px-2 py-1 cursor-pointer",
+                              theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={issueFilters.labels.includes(label.name)}
+                              onChange={() => toggleLabel(label.name)}
+                              className="mr-2"
+                            />
+                            <span
+                              className="px-1 py-0.5 text-xs rounded"
+                              style={{
+                                backgroundColor: `#${label.color}30`,
+                                color: `#${label.color}`,
+                              }}
+                            >
+                              {label.name}
+                            </span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {issueFilters.labels.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {issueFilters.labels.map(labelName => {
+                      const label = availableLabels.find(l => l.name === labelName);
+                      return label ? (
+                        <span
+                          key={labelName}
+                          className="inline-flex items-center px-1 py-0.5 text-xs rounded"
+                          style={{
+                            backgroundColor: `#${label.color}30`,
+                            color: `#${label.color}`,
+                          }}
+                        >
+                          {labelName}
+                          <button
+                            onClick={() => toggleLabel(labelName)}
+                            className="ml-1 hover:opacity-70"
+                          >
+                            <X className="w-2 h-2" />
+                          </button>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Assignee Filter */}
+              <div>
+                <label className={cn(
+                  "block text-xs font-medium mb-1",
+                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                )}>
+                  Assignee
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
+                    className={cn(
+                      "w-full px-2 py-1 text-left rounded-md border flex items-center justify-between text-sm",
+                      theme === 'dark'
+                        ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                        : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"
+                    )}
+                  >
+                    <span className="text-xs">
+                      {issueFilters.assignee === 'all' 
+                        ? 'All'
+                        : issueFilters.assignee === 'assigned'
+                        ? 'Assigned'
+                        : issueFilters.assignee === 'unassigned'
+                        ? 'Unassigned'
+                        : issueFilters.assignee}
+                    </span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  
+                  {showAssigneeDropdown && (
+                    <div className={cn(
+                      "absolute top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border shadow-lg z-10",
+                      theme === 'dark'
+                        ? "bg-gray-700 border-gray-600"
+                        : "bg-white border-gray-300"
+                    )}>
+                      <button
+                        onClick={() => {
+                          setIssueFilter('assignee', 'all');
+                          setShowAssigneeDropdown(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-2 py-1 text-xs",
+                          theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
+                          issueFilters.assignee === 'all' && "font-semibold"
+                        )}
+                      >
+                        All Issues
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIssueFilter('assignee', 'assigned');
+                          setShowAssigneeDropdown(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-2 py-1 text-xs",
+                          theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
+                          issueFilters.assignee === 'assigned' && "font-semibold"
+                        )}
+                      >
+                        Assigned
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIssueFilter('assignee', 'unassigned');
+                          setShowAssigneeDropdown(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-2 py-1 text-xs",
+                          theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
+                          issueFilters.assignee === 'unassigned' && "font-semibold"
+                        )}
+                      >
+                        Unassigned
+                      </button>
+                      {availableAssignees.length > 0 && (
+                        <>
+                          <div className={cn(
+                            "border-t my-1",
+                            theme === 'dark' ? "border-gray-600" : "border-gray-200"
+                          )} />
+                          {availableAssignees.map(assignee => (
+                            <button
+                              key={assignee.login}
+                              onClick={() => {
+                                setIssueFilter('assignee', assignee.login);
+                                setShowAssigneeDropdown(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-2 py-1 text-xs flex items-center",
+                                theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
+                                issueFilters.assignee === assignee.login && "font-semibold"
+                              )}
+                            >
+                              <img
+                                src={assignee.avatar_url}
+                                alt={assignee.login}
+                                className="w-4 h-4 rounded-full mr-1"
+                              />
+                              {assignee.login}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* PR Filters - Only show when on PR view */}
       {location.pathname.startsWith('/pulls') && (

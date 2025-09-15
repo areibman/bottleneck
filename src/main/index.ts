@@ -29,8 +29,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
-    minWidth: 1200,
-    minHeight: 700,
+    minWidth: 400,
+    minHeight: 300,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: preloadPath,

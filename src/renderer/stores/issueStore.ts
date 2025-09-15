@@ -2,14 +2,24 @@ import { create } from 'zustand';
 import { GitHubAPI, Issue, Repository } from '../services/github';
 import { mockIssues } from '../mockData';
 
+export interface IssueFilters {
+  status: 'all' | 'open' | 'closed';
+  labels: string[];
+  assignee: 'all' | 'assigned' | 'unassigned' | string;
+}
+
 interface IssueState {
   issues: Map<string, Issue>;
   loadedRepos: Set<string>;
   loading: boolean;
   error: string | null;
+  filters: IssueFilters;
   
   fetchIssues: (owner: string, repo: string, force?: boolean) => Promise<void>;
   updateIssue: (issue: Issue) => void;
+  setFilter: (key: keyof IssueFilters, value: any) => void;
+  setFilters: (filters: IssueFilters) => void;
+  resetFilters: () => void;
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
@@ -17,6 +27,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   loadedRepos: new Set(),
   loading: false,
   error: null,
+  filters: {
+    status: 'all',
+    labels: [],
+    assignee: 'all'
+  },
 
   fetchIssues: async (owner: string, repo: string, force = false) => {
     const repoFullName = `${owner}/${repo}`;
@@ -83,6 +98,29 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       const key = `${issue.repository.owner.login}/${issue.repository.name}#${issue.number}`;
       newIssues.set(key, issue);
       return { issues: newIssues };
+    });
+  },
+
+  setFilter: (key, value) => {
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        [key]: value
+      }
+    }));
+  },
+
+  setFilters: (filters) => {
+    set({ filters });
+  },
+
+  resetFilters: () => {
+    set({
+      filters: {
+        status: 'all',
+        labels: [],
+        assignee: 'all'
+      }
     });
   },
 }));

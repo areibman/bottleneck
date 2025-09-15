@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   AlertCircle,
   CheckCircle,
-  MessageSquare,
-  X,
-  ChevronDown
+  MessageSquare
 } from 'lucide-react';
 import { useIssueStore } from '../stores/issueStore';
 import { usePRStore } from '../stores/prStore';
@@ -112,330 +110,12 @@ const IssueItem = React.memo(({ issue, onIssueClick, theme }: {
   );
 });
 
-interface IssueFilters {
-  status: 'all' | 'open' | 'closed';
-  labels: string[];
-  assignee: 'all' | 'assigned' | 'unassigned' | string; // specific username or status
-}
-
-const FilterPanel = ({ 
-  filters, 
-  onFiltersChange, 
-  availableLabels,
-  availableAssignees,
-  theme
-}: {
-  filters: IssueFilters;
-  onFiltersChange: (filters: IssueFilters) => void;
-  availableLabels: Array<{ name: string; color: string }>;
-  availableAssignees: Array<{ login: string; avatar_url: string }>;
-  theme: 'light' | 'dark';
-}) => {
-  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
-  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
-
-  const handleReset = () => {
-    const resetFilters: IssueFilters = {
-      status: 'all',
-      labels: [],
-      assignee: 'all'
-    };
-    onFiltersChange(resetFilters);
-  };
-
-  const toggleLabel = (labelName: string) => {
-    onFiltersChange({
-      ...filters,
-      labels: filters.labels.includes(labelName)
-        ? filters.labels.filter(l => l !== labelName)
-        : [...filters.labels, labelName]
-    });
-  };
-
-  return (
-    <div className={cn(
-      "w-64 h-full border-r overflow-y-auto",
-      theme === 'dark'
-        ? "bg-gray-900 border-gray-700"
-        : "bg-gray-50 border-gray-200"
-    )}>
-      <div className={cn(
-        "p-4 border-b",
-        theme === 'dark' ? "border-gray-700" : "border-gray-200"
-      )}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Filters</h3>
-          {(filters.status !== 'all' || filters.labels.length > 0 || filters.assignee !== 'all') && (
-            <button
-              onClick={handleReset}
-              className={cn(
-                "text-xs px-2 py-1 rounded",
-                theme === 'dark'
-                  ? "text-gray-400 hover:text-white hover:bg-gray-800"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              )}
-            >
-              Reset
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
-        {/* Status Filter */}
-        <div>
-          <label className={cn(
-            "block text-sm font-medium mb-2",
-            theme === 'dark' ? "text-gray-300" : "text-gray-700"
-          )}>
-            Status
-          </label>
-          <div className="space-y-2">
-            {['all', 'open', 'closed'].map(status => (
-              <label key={status} className="flex items-center">
-                <input
-                  type="radio"
-                  name="status"
-                  value={status}
-                  checked={filters.status === status}
-                  onChange={(e) => onFiltersChange({ ...filters, status: e.target.value as any })}
-                  className="mr-2"
-                />
-                <span className={cn(
-                  "text-sm capitalize",
-                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
-                )}>
-                  {status === 'all' ? 'All Issues' : status}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Labels Filter */}
-        <div>
-          <label className={cn(
-            "block text-sm font-medium mb-2",
-            theme === 'dark' ? "text-gray-300" : "text-gray-700"
-          )}>
-            Labels
-          </label>
-          <div className="relative">
-            <button
-              onClick={() => setShowLabelDropdown(!showLabelDropdown)}
-              className={cn(
-                "w-full px-3 py-2 text-left rounded-md border flex items-center justify-between",
-                theme === 'dark'
-                  ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                  : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"
-              )}
-            >
-              <span className="text-sm">
-                {filters.labels.length > 0
-                  ? `${filters.labels.length} selected`
-                  : 'Select labels'}
-              </span>
-              <ChevronDown className="w-4 h-4" />
-            </button>
-            
-            {showLabelDropdown && (
-              <div className={cn(
-                "absolute top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border shadow-lg z-10",
-                theme === 'dark'
-                  ? "bg-gray-700 border-gray-600"
-                  : "bg-white border-gray-300"
-              )}>
-                {availableLabels.length === 0 ? (
-                  <div className={cn(
-                    "px-3 py-2 text-sm",
-                    theme === 'dark' ? "text-gray-400" : "text-gray-500"
-                  )}>
-                    No labels available
-                  </div>
-                ) : (
-                  availableLabels.map(label => (
-                    <label
-                      key={label.name}
-                      className={cn(
-                        "flex items-center px-3 py-2 cursor-pointer",
-                        theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filters.labels.includes(label.name)}
-                        onChange={() => toggleLabel(label.name)}
-                        className="mr-2"
-                      />
-                      <span
-                        className="px-2 py-0.5 text-xs rounded"
-                        style={{
-                          backgroundColor: `#${label.color}30`,
-                          color: `#${label.color}`,
-                        }}
-                      >
-                        {label.name}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-          
-          {filters.labels.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {filters.labels.map(labelName => {
-                const label = availableLabels.find(l => l.name === labelName);
-                return label ? (
-                  <span
-                    key={labelName}
-                    className="inline-flex items-center px-2 py-0.5 text-xs rounded"
-                    style={{
-                      backgroundColor: `#${label.color}30`,
-                      color: `#${label.color}`,
-                    }}
-                  >
-                    {labelName}
-                    <button
-                      onClick={() => toggleLabel(labelName)}
-                      className="ml-1 hover:opacity-70"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ) : null;
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Assignee Filter */}
-        <div>
-          <label className={cn(
-            "block text-sm font-medium mb-2",
-            theme === 'dark' ? "text-gray-300" : "text-gray-700"
-          )}>
-            Assignee
-          </label>
-          <div className="relative">
-            <button
-              onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
-              className={cn(
-                "w-full px-3 py-2 text-left rounded-md border flex items-center justify-between",
-                theme === 'dark'
-                  ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                  : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"
-              )}
-            >
-              <span className="text-sm">
-                {filters.assignee === 'all' 
-                  ? 'All'
-                  : filters.assignee === 'assigned'
-                  ? 'Assigned'
-                  : filters.assignee === 'unassigned'
-                  ? 'Unassigned'
-                  : filters.assignee}
-              </span>
-              <ChevronDown className="w-4 h-4" />
-            </button>
-            
-            {showAssigneeDropdown && (
-              <div className={cn(
-                "absolute top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border shadow-lg z-10",
-                theme === 'dark'
-                  ? "bg-gray-700 border-gray-600"
-                  : "bg-white border-gray-300"
-              )}>
-                <button
-                  onClick={() => {
-                    onFiltersChange({ ...filters, assignee: 'all' });
-                    setShowAssigneeDropdown(false);
-                  }}
-                  className={cn(
-                    "w-full text-left px-3 py-2 text-sm",
-                    theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
-                    filters.assignee === 'all' && "font-semibold"
-                  )}
-                >
-                  All Issues
-                </button>
-                <button
-                  onClick={() => {
-                    onFiltersChange({ ...filters, assignee: 'assigned' });
-                    setShowAssigneeDropdown(false);
-                  }}
-                  className={cn(
-                    "w-full text-left px-3 py-2 text-sm",
-                    theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
-                    filters.assignee === 'assigned' && "font-semibold"
-                  )}
-                >
-                  Assigned
-                </button>
-                <button
-                  onClick={() => {
-                    onFiltersChange({ ...filters, assignee: 'unassigned' });
-                    setShowAssigneeDropdown(false);
-                  }}
-                  className={cn(
-                    "w-full text-left px-3 py-2 text-sm",
-                    theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
-                    filters.assignee === 'unassigned' && "font-semibold"
-                  )}
-                >
-                  Unassigned
-                </button>
-                {availableAssignees.length > 0 && (
-                  <>
-                    <div className={cn(
-                      "border-t my-1",
-                      theme === 'dark' ? "border-gray-600" : "border-gray-200"
-                    )} />
-                    {availableAssignees.map(assignee => (
-                      <button
-                        key={assignee.login}
-                        onClick={() => {
-                          onFiltersChange({ ...filters, assignee: assignee.login });
-                          setShowAssigneeDropdown(false);
-                        }}
-                        className={cn(
-                          "w-full text-left px-3 py-2 text-sm flex items-center",
-                          theme === 'dark' ? "hover:bg-gray-600" : "hover:bg-gray-50",
-                          filters.assignee === assignee.login && "font-semibold"
-                        )}
-                      >
-                        <img
-                          src={assignee.avatar_url}
-                          alt={assignee.login}
-                          className="w-5 h-5 rounded-full mr-2"
-                        />
-                        {assignee.login}
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-};
-
 export default function IssuesView() {
   const navigate = useNavigate();
-  const { issues, loading, fetchIssues } = useIssueStore();
+  const { issues, loading, fetchIssues, filters } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'comments'>('updated');
-  const [filters, setFilters] = useState<IssueFilters>({
-    status: 'all',
-    labels: [],
-    assignee: 'all'
-  });
 
   useEffect(() => {
     if (selectedRepo) {
@@ -453,31 +133,6 @@ export default function IssuesView() {
       });
     });
     return dateMap;
-  }, [issues]);
-
-  // Extract available labels and assignees from issues
-  const { availableLabels, availableAssignees } = useMemo(() => {
-    const labelsMap = new Map<string, { name: string; color: string }>();
-    const assigneesMap = new Map<string, { login: string; avatar_url: string }>();
-    
-    issues.forEach(issue => {
-      issue.labels.forEach(label => {
-        if (!labelsMap.has(label.name)) {
-          labelsMap.set(label.name, label);
-        }
-      });
-      
-      issue.assignees.forEach(assignee => {
-        if (!assigneesMap.has(assignee.login)) {
-          assigneesMap.set(assignee.login, assignee);
-        }
-      });
-    });
-    
-    return {
-      availableLabels: Array.from(labelsMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
-      availableAssignees: Array.from(assigneesMap.values()).sort((a, b) => a.login.localeCompare(b.login))
-    };
   }, [issues]);
 
   const filteredIssues = useMemo(() => {
@@ -554,18 +209,7 @@ export default function IssuesView() {
   }
 
   return (
-    <div className="flex h-full">
-      {/* Filter Sidebar */}
-      <FilterPanel
-        filters={filters}
-        onFiltersChange={setFilters}
-        availableLabels={availableLabels}
-        availableAssignees={availableAssignees}
-        theme={theme}
-      />
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+    <div className="flex flex-col h-full">
         <div className={cn(
           "p-4 border-b",
           theme === 'dark' 
@@ -640,7 +284,6 @@ export default function IssuesView() {
             ))}
           </div>
         )}
-      </div>
       </div>
     </div>
   );
