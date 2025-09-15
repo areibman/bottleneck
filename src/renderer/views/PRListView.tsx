@@ -30,14 +30,7 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
   theme: 'light' | 'dark';
 }) => {
   const prId = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
-  
-  // Debug: Log PR stats
-  console.log(`PR #${pr.number} stats:`, {
-    changed_files: pr.changed_files,
-    additions: pr.additions,
-    deletions: pr.deletions
-  });
-  
+
   const handleRowClick = (e: React.MouseEvent) => {
     // If clicking on checkbox or its label area, toggle selection
     const target = e.target as HTMLElement;
@@ -265,9 +258,6 @@ export default function PRListView() {
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated');
   const [groupBy, setGroupBy] = useState<'none' | 'agent' | 'author' | 'label'>('agent');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  
-  // Debug: Log all PRs data
-  console.log('PRListView - pullRequests:', Array.from(pullRequests.values()));
   
   // Function to fetch detailed PR data in the background
   const fetchDetailedPRsInBackground = useCallback(async (prs: PullRequest[]) => {

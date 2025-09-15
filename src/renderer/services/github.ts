@@ -183,16 +183,6 @@ export class GitHubAPI {
       per_page: 100,
     });
     
-    // Debug: Check what fields are available in the response
-    if (data.length > 0) {
-      console.log('GitHub API response - first PR fields:', Object.keys(data[0]));
-      console.log('GitHub API response - checking for stats:', {
-        changed_files: (data[0] as any).changed_files,
-        additions: (data[0] as any).additions,
-        deletions: (data[0] as any).deletions
-      });
-    }
-    
     // The pulls.list endpoint doesn't include comment counts, but we can get them from the issues API
     // Since every PR is also an issue, we can fetch the issues to get comment counts
     const issuesData = await this.octokit.issues.listForRepo({
@@ -226,7 +216,9 @@ export class GitHubAPI {
             comments: commentCounts.get(pr.number) || 0,
             changed_files: detailedPR.changed_files,
             additions: detailedPR.additions,
-            deletions: detailedPR.deletions
+            deletions: detailedPR.deletions,
+            merged: detailedPR.merged,
+            merged_at: detailedPR.merged_at
           };
         } catch (error) {
           console.error(`Failed to fetch details for PR #${pr.number}:`, error);

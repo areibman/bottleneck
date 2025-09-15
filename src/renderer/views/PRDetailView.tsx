@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -8,12 +8,9 @@ import {
   Check,
   MessageSquare,
   Eye,
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  Minus,
   FileDiff,
-  Terminal
+  Terminal,
+  Folder,
 } from 'lucide-react';
 import { DiffEditor } from '../components/DiffEditor';
 import { ConversationTab } from '../components/ConversationTab';
@@ -23,6 +20,20 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../utils/cn';
 import { mockPullRequests, mockFiles, mockComments, mockReviews } from '../mockData';
 import { useUIStore } from '../stores/uiStore';
+import {
+  UncontrolledTreeEnvironment,
+  Tree,
+  StaticTreeDataProvider,
+  TreeItem,
+  TreeItemIndex,
+} from 'react-complex-tree';
+import 'react-complex-tree/lib/style-modern.css';
+import { useMemo } from 'react';
+
+type TreeData = {
+  isFolder: boolean;
+  file?: File;
+};
 
 export default function PRDetailView() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
@@ -37,8 +48,73 @@ export default function PRDetailView() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set());
+  const [fileListWidth, setFileListWidth] = useState(320);
+  const [isResizing, setIsResizing] = useState(false);
+  const fileListRef = useRef<HTMLDivElement>(null);
+
+  const treeItems = useMemo(() => {
+    if (!files || files.length === 0) {
+      return {};
+    }
+  
+    const items: Record<TreeItemIndex, TreeItem<TreeData>> = {
+      root: {
+        index: 'root',
+        isFolder: true,
+        children: [],
+        data: { isFolder: true },
+      },
+    };
+  
+    for (const file of files) {
+      const pathParts = file.filename.split('/');
+      let currentPath = '';
+      let parentIndex: TreeItemIndex = 'root';
+  
+      for (let i = 0; i < pathParts.length; i++) {
+        const part = pathParts[i];
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        const isFolder = i < pathParts.length - 1;
+  
+        if (!items[currentPath]) {
+          items[currentPath] = {
+            index: currentPath,
+            isFolder,
+            children: [],
+            data: { isFolder, file: isFolder ? undefined : file },
+          };
+  
+          const parent: TreeItem<TreeData> = items[parentIndex];
+          if (parent && parent.children) {
+            // Check if the child is already there before adding
+            if (!parent.children.includes(currentPath)) {
+              parent.children.push(currentPath);
+            }
+          }
+        }
+        parentIndex = currentPath;
+      }
+    }
+  
+    // Sort children alphabetically, folders first
+    for (const item of Object.values(items)) {
+      if (item.children) {
+        item.children.sort((a, b) => {
+          const itemA = items[a];
+          const itemB = items[b];
+          if (itemA.isFolder && !itemB.isFolder) return -1;
+          if (!itemA.isFolder && itemB.isFolder) return 1;
+          return a > b ? 1 : -1;
+        });
+      }
+    }
+    return items;
+  }, [files]);
+
+  const treeDataProvider: StaticTreeDataProvider<TreeData> = useMemo(() => {
+    return new StaticTreeDataProvider<TreeData>(treeItems);
+  }, [treeItems]);
 
   useEffect(() => {
     // Load data even without token if in dev mode
@@ -105,21 +181,46 @@ export default function PRDetailView() {
     }
   };
 
-  const toggleFileExpanded = (filename: string) => {
-    const newExpanded = new Set(expandedFiles);
-    if (newExpanded.has(filename)) {
-      newExpanded.delete(filename);
-    } else {
-      newExpanded.add(filename);
-    }
-    setExpandedFiles(newExpanded);
-  };
 
   const markFileViewed = (filename: string) => {
     const newViewed = new Set(viewedFiles);
     newViewed.add(filename);
     setViewedFiles(newViewed);
   };
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    
+    const newWidth = e.clientX - (fileListRef.current?.getBoundingClientRect().left || 0);
+    if (newWidth >= 200 && newWidth <= 600) {
+      setFileListWidth(newWidth);
+    }
+  }, [isResizing]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   if (loading) {
     return (
@@ -175,17 +276,17 @@ export default function PRDetailView() {
               {pr.draft ? (
                 <div className="w-5 h-5 rounded-full bg-gray-600" title="Draft" />
               ) : pr.merged ? (
-                <GitMerge className="w-5 h-5 text-purple-400" title="Merged" />
+                <GitMerge className="w-5 h-5 text-purple-400" />
               ) : pr.state === 'open' ? (
-                <GitPullRequest className="w-5 h-5 text-green-400" title="Open" />
+                <GitPullRequest className="w-5 h-5 text-green-400" />
               ) : (
-                <X className="w-5 h-5 text-red-400" title="Closed" />
+                <X className="w-5 h-5 text-red-400" />
               )}
               
-              <h1 className="text-lg font-semibold">
+              <h1 className="text-base font-semibold">
                 {pr.title}
                 <span className={cn(
-                  "ml-2 text-sm",
+                  "ml-2 text-xs",
                   theme === 'dark' ? "text-gray-500" : "text-gray-600"
                 )}>#{pr.number}</span>
               </h1>
@@ -195,20 +296,20 @@ export default function PRDetailView() {
           <div className="flex items-center space-x-2">
             <button
               onClick={handleCheckout}
-              className="btn btn-secondary text-sm"
+              className="btn btn-secondary text-xs"
             >
-              <Terminal className="w-4 h-4 mr-1" />
+              <Terminal className="w-3 h-3 mr-1" />
               Checkout
             </button>
             
             {pr.state === 'open' && !pr.merged && (
               <>
-                <button className="btn btn-success text-sm">
-                  <Check className="w-4 h-4 mr-1" />
+                <button className="btn btn-success text-xs">
+                  <Check className="w-3 h-3 mr-1" />
                   Approve
                 </button>
-                <button className="btn btn-primary text-sm">
-                  <GitMerge className="w-4 h-4 mr-1" />
+                <button className="btn btn-primary text-xs">
+                  <GitMerge className="w-3 h-3 mr-1" />
                   Merge
                 </button>
               </>
@@ -218,14 +319,14 @@ export default function PRDetailView() {
         
         {/* PR Info */}
         <div className={cn(
-          "flex items-center space-x-4 text-sm",
+          "flex items-center space-x-4 text-xs",
           theme === 'dark' ? "text-gray-400" : "text-gray-600"
         )}>
           <div className="flex items-center space-x-2">
             <img
               src={pr.user.avatar_url}
               alt={pr.user.login}
-              className="w-5 h-5 rounded-full"
+              className="w-4 h-4 rounded-full"
             />
             <span>{pr.user.login}</span>
           </div>
@@ -249,32 +350,32 @@ export default function PRDetailView() {
         "flex border-b",
         theme === 'dark' ? "border-gray-700" : "border-gray-200"
       )}>
-        <button
+        <div
           onClick={() => setActiveTab('conversation')}
-          className={cn('tab', activeTab === 'conversation' && 'active')}
+          className={cn('tab flex items-center', activeTab === 'conversation' && 'active')}
         >
-          <MessageSquare className="w-4 h-4 mr-1" />
-          Conversation
+          <MessageSquare className="w-3 h-3 mr-1" />
+          <span className="text-xs">Conversation</span>
           <span className={cn(
-            "ml-2 px-1.5 py-0.5 rounded text-xs",
+            "ml-2 px-1 py-0.5 rounded text-xs",
             theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
           )}>
             {comments.length + reviews.length}
           </span>
-        </button>
-        <button
+        </div>
+        <div
           onClick={() => setActiveTab('files')}
-          className={cn('tab', activeTab === 'files' && 'active')}
+          className={cn('tab flex items-center', activeTab === 'files' && 'active')}
         >
-          <FileDiff className="w-4 h-4 mr-1" />
-          Files changed
+          <FileDiff className="w-3 h-3 mr-1" />
+          <span className="text-xs">Files changed</span>
           <span className={cn(
-            "ml-2 px-1.5 py-0.5 rounded text-xs",
+            "ml-2 px-1 py-0.5 rounded text-xs",
             theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
           )}>
             {files.length}
           </span>
-        </button>
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -289,70 +390,110 @@ export default function PRDetailView() {
         ) : (
           <>
             {/* File list */}
-            <div className={cn(
-              "w-80 border-r overflow-y-auto",
-              theme === 'dark'
-                ? "bg-gray-800 border-gray-700"
-                : "bg-gray-50 border-gray-200"
-            )}>
-              <div className={cn(
-                "p-3 border-b",
-                theme === 'dark' ? "border-gray-700" : "border-gray-200"
-              )}>
-                <input
-                  type="text"
-                  placeholder="Filter files..."
-                  className="input w-full text-sm"
-                />
-              </div>
-
-              <div className={cn(
-                "divide-y",
-                theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
-              )}>
-                {files.map((file) => {
-                  const isSelected = selectedFile?.filename === file.filename;
-                  const isViewed = viewedFiles.has(file.filename);
-
-                  return (
-                    <div
-                      key={file.filename}
-                      className={cn(
-                        'px-3 py-2 cursor-pointer transition-colors',
-                        theme === 'dark'
-                          ? 'hover:bg-gray-700'
-                          : 'hover:bg-gray-100',
-                        isSelected && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100')
+            <div 
+              ref={fileListRef}
+              className={cn(
+                "border-r overflow-y-auto relative",
+                theme === 'dark'
+                  ? "bg-gray-800 border-gray-700"
+                  : "bg-gray-50 border-gray-200"
+              )}
+              style={{ width: `${fileListWidth}px` }}
+            >
+              <UncontrolledTreeEnvironment
+                dataProvider={treeDataProvider}
+                getItemTitle={(item) => item.index.toString().split('/').pop() || ''}
+                viewState={{
+                  'pr-files': {
+                    expandedItems: Array.from(
+                      (Object.values(treeItems) as TreeItem<TreeData>[])
+                        .filter(
+                          (item: TreeItem<TreeData>) =>
+                            item.isFolder && (item.children?.length ?? 0) > 0
+                        )
+                        .map((item: TreeItem<TreeData>) => item.index)
+                    ),
+                  },
+                }}
+                onPrimaryAction={(item: TreeItem<TreeData>) => {
+                  if (item && !item.isFolder && item.data.file) {
+                    setSelectedFile(item.data.file);
+                  }
+                }}
+                renderItemTitle={({ title, item }) => (
+                  <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                  <span className="text-xs truncate font-mono flex items-center"> 
+                    {item.isFolder ? (
+                      <Folder className={cn(
+                        "w-3 h-3 flex-shrink-0 mx-1",
+                        theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                      )} />
+                    ) : (
+                      <FileDiff className={cn(
+                        "w-3 h-3 flex-shrink-0 mx-1",
+                        theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                      )} />
+                    )}
+                    
+                      {title}
+                    </span>
+                  </div>
+        
+                  {item.data.file && (
+                    <div className="flex items-center space-x-1 ml-2">
+                      {viewedFiles.has(item.data.file.filename) && (
+                        <Eye className={cn(
+                          "w-3 h-3",
+                          theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                        )} />
                       )}
-                      onClick={() => setSelectedFile(file)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          <FileDiff className={cn(
-                            "w-4 h-4 flex-shrink-0",
-                            theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                          )} />
-                          <span className="text-sm truncate font-mono">
-                            {file.filename}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center space-x-2 ml-2">
-                          {isViewed && (
-                            <Eye className={cn(
-                              "w-3 h-3",
-                              theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                            )} />
-                          )}
-                          <div className="flex items-center space-x-1 text-xs">
-                            <span className="text-green-400">+{file.additions}</span>
-                            <span className="text-red-400">-{file.deletions}</span>
-                          </div>
-                        </div>
+                      <div className="flex items-center space-x-0.5 text-xs">
+                        <span className="text-green-400 text-[10px]">+{item.data.file.additions}</span>
+                        <span className="text-red-400 text-[10px]">-{item.data.file.deletions}</span>
                       </div>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+                )}
+                
+              >
+                <Tree treeId="pr-files" rootItem="root" />
+              </UncontrolledTreeEnvironment>
+            </div>
+
+            {/* Resize handle */}
+            <div
+              className="relative cursor-col-resize group flex-shrink-0"
+              style={{ width: '3px', marginLeft: '-1px', marginRight: '-1px', padding: '0 1px' }}
+              onMouseDown={handleMouseDown}
+            >
+              <div
+                className={cn(
+                  "w-px h-full transition-colors",
+                  isResizing && "bg-blue-500",
+                  theme === 'dark' ? "bg-gray-700" : "bg-gray-300",
+                  "group-hover:bg-blue-500"
+                )}
+              />
+              <div
+                className={cn(
+                  "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                )}
+              >
+                <div className={cn(
+                  "flex space-x-0.5 px-1 py-0.5 rounded",
+                  theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
+                )}>
+                  <div className={cn(
+                    "w-0.5 h-3 rounded-full",
+                    theme === 'dark' ? "bg-gray-500" : "bg-gray-400"
+                  )} />
+                  <div className={cn(
+                    "w-0.5 h-3 rounded-full",
+                    theme === 'dark' ? "bg-gray-500" : "bg-gray-400"
+                  )} />
+                </div>
               </div>
             </div>
 
