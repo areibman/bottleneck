@@ -16,7 +16,9 @@
     "start": "npm run build && npm run electron",
     "dist": "npm run build && electron-builder",
     "postinstall": "electron-rebuild",
-    "rebuild": "electron-rebuild"
+    "rebuild": "electron-rebuild",
+    "remotion:preview": "remotion preview",
+    "remotion:render": "remotion render MyComp out/bottleneck.mp4 --codec=h264"
   },
   "keywords": [
     "electron",
@@ -27,6 +29,9 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@remotion/cli": "^4.0.347",
+    "@remotion/renderer": "^4.0.347",
+    "@remotion/transitions": "^4.0.347",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.48",
@@ -46,6 +51,7 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "node-pty": "^1.0.0",
     "postcss": "^8.5.6",
+    "remotion": "^4.0.347",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
