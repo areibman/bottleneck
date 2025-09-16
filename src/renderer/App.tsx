@@ -21,7 +21,7 @@ import { cn } from './utils/cn';
 
 function App() {
   const { isAuthenticated, checkAuth, token } = useAuthStore();
-  const { sidebarOpen, rightPanelOpen, theme } = useUIStore();
+  const { sidebarOpen, sidebarWidth, setSidebarWidth, rightPanelOpen, theme } = useUIStore();
   const { loadSettings } = useSettingsStore();
   const { fetchRepositories } = usePRStore();
   const [loading, setLoading] = useState(true);
@@ -85,10 +85,10 @@ function App() {
       <TopBar />
       
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar className={cn({
-          'w-64': sidebarOpen,
-          'w-0': !sidebarOpen,
-        })} />
+        <Sidebar 
+          width={sidebarOpen ? sidebarWidth : 0}
+          onWidthChange={setSidebarWidth}
+        />
         
         <main className="flex-1 overflow-hidden">
           <Routes>

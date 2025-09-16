@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   GitPullRequest,
@@ -29,6 +29,8 @@ import { useUIStore } from '../stores/uiStore';
 
 interface SidebarProps {
   className?: string;
+  width?: number;
+  onWidthChange?: (width: number) => void;
 }
 
 type TreeData = {
@@ -37,7 +39,7 @@ type TreeData = {
   count?: number;
 };
 
-export default function Sidebar({ className }: SidebarProps) {
+export default function Sidebar({ className, width = 256, onWidthChange }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { filters, setFilter, pullRequests } = usePRStore();
@@ -47,9 +49,13 @@ export default function Sidebar({ className }: SidebarProps) {
     setFilter: setIssueFilter,
     resetFilters: resetIssueFilters 
   } = useIssueStore();
-  const { theme } = useUIStore();
+  const { theme, setSidebarWidth } = useUIStore();
   const [showLabelDropdown, setShowLabelDropdown] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
 
   // Extract agent from PR (e.g., "cursor" from branch name or title)
   const getAgentFromPR = useCallback((pr: any): string => {
@@ -279,14 +285,66 @@ export default function Sidebar({ className }: SidebarProps) {
     },
   ];
 
+  // Handle resize
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const deltaX = e.clientX - startXRef.current;
+      const newWidth = Math.min(Math.max(startWidthRef.current + deltaX, 200), 500);
+      
+      if (onWidthChange) {
+        onWidthChange(newWidth);
+      }
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, onWidthChange, setSidebarWidth]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    startXRef.current = e.clientX;
+    startWidthRef.current = width;
+  };
+
+  // Don't render anything when width is 0 (sidebar hidden)
+  if (width === 0) {
+    return null;
+  }
+
   return (
-    <aside className={cn(
-      'flex flex-col overflow-hidden border-r',
-      theme === 'dark' 
-        ? 'bg-gray-800 border-gray-700' 
-        : 'bg-gray-50 border-gray-200',
-      className
-    )}>
+    <aside 
+      ref={sidebarRef}
+      className={cn(
+        "relative",
+        className
+      )}
+      style={{ width: `${width}px` }}
+    >
+      <div className={cn(
+        'flex flex-col h-full overflow-hidden border-r',
+        theme === 'dark' 
+          ? 'bg-gray-800 border-gray-700' 
+          : 'bg-gray-50 border-gray-200'
+      )}>
       {/* Search */}
       {/* TODO: Re-enable search when ready */}
       {/* <div className={cn(
@@ -302,7 +360,7 @@ export default function Sidebar({ className }: SidebarProps) {
             type="text"
             placeholder="Search PRs..."
             className={cn(
-              "pl-10 w-full px-3 py-2 rounded-md text-sm transition-colors",
+              "pl-10 w-full px-3 py-2 rounded-md text-sm ",
               theme === 'dark'
                 ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
                 : "bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-400 border"
@@ -313,8 +371,8 @@ export default function Sidebar({ className }: SidebarProps) {
         </div>
       </div> */}
 
-      {/* Navigation */}
-      <nav className="p-4">
+        {/* Navigation */}
+        <nav className="p-4">
         <div className="space-y-1">
           {navItems.map((item) => (
             <NavLink
@@ -620,7 +678,7 @@ export default function Sidebar({ className }: SidebarProps) {
                 Filters
               </h3>
               <button className={cn(
-                "transition-colors",
+                "",
                 theme === 'dark' 
                   ? "text-gray-400 hover:text-white" 
                   : "text-gray-600 hover:text-gray-900"
@@ -660,7 +718,7 @@ export default function Sidebar({ className }: SidebarProps) {
                 Groups
               </h3>
               <button className={cn(
-                "transition-colors",
+                "",
                 theme === 'dark' 
                   ? "text-gray-400 hover:text-white" 
                   : "text-gray-600 hover:text-gray-900"
@@ -756,7 +814,22 @@ export default function Sidebar({ className }: SidebarProps) {
           <Plus className="w-4 h-4 mr-2" />
           New Filter
         </button>
+        </div>
       </div>
+      
+      {/* Resize handle */}
+      <div
+        className={cn(
+          "absolute top-0 right-0 w-1 h-full cursor-col-resize",
+          isResizing ? "bg-blue-500" : "",
+          !isResizing && theme === 'dark' ? "hover:bg-blue-400" : "",
+          !isResizing && theme === 'light' ? "hover:bg-blue-500" : ""
+        )}
+        onMouseDown={handleResizeStart}
+        style={{
+          touchAction: 'none',
+        }}
+      />
     </aside>
   );
 }

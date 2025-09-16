@@ -76,6 +76,29 @@
     @apply ring-2 ring-blue-500 ring-offset-2 ring-offset-white;
   }
 
+  /* Sidebar resize handle */
+  .resize-handle {
+    position: relative;
+  }
+  
+  .resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -2px;
+    right: -2px;
+    bottom: 0;
+    cursor: col-resize;
+  }
+
+  /* Prevent text selection while resizing */
+  .resizing {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+
   /* Global button and input borders and sizing */
   .dark button:not(.btn) {
     @apply border border-gray-500/70 px-4 py-1.5 rounded-lg;

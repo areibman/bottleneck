@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 interface UIState {
   sidebarOpen: boolean;
+  sidebarWidth: number;
   rightPanelOpen: boolean;
   commandPaletteOpen: boolean;
   keyboardShortcutsOpen: boolean;
@@ -14,6 +15,7 @@ interface UIState {
   theme: 'light' | 'dark';
   
   toggleSidebar: () => void;
+  setSidebarWidth: (width: number) => void;
   toggleRightPanel: () => void;
   toggleCommandPalette: () => void;
   toggleKeyboardShortcuts: () => void;
@@ -31,6 +33,7 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
   sidebarOpen: true,
+  sidebarWidth: 200, // 200px minimum width
   rightPanelOpen: false,
   commandPaletteOpen: false,
   keyboardShortcutsOpen: false,
@@ -42,6 +45,7 @@ export const useUIStore = create<UIState>()(
   theme: 'dark',
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  setSidebarWidth: (width) => set({ sidebarWidth: width }),
   toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
   toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
   toggleKeyboardShortcuts: () => set((state) => ({ keyboardShortcutsOpen: !state.keyboardShortcutsOpen })),
@@ -71,7 +75,11 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'ui-storage',
-      partialize: (state) => ({ theme: state.theme }), // Only persist theme
+      partialize: (state) => ({ 
+        theme: state.theme,
+        sidebarWidth: state.sidebarWidth,
+        sidebarOpen: state.sidebarOpen
+      }), // Persist theme, sidebar width and open state
     }
   )
 );
