@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   GitPullRequest,
+  GitPullRequestDraft,
   GitMerge,
   X,
   Check,
@@ -522,7 +523,9 @@ export default function PRDetailView() {
             
             <div className="flex items-center space-x-2">
               {pr.draft ? (
-                <div className="w-5 h-5 rounded-full bg-gray-600" title="Draft" />
+                <div title="Draft">
+                  <GitPullRequestDraft className="w-5 h-5 text-gray-400" />
+                </div>
               ) : pr.merged ? (
                 <GitMerge className="w-5 h-5 text-purple-400" />
               ) : pr.state === 'open' ? (

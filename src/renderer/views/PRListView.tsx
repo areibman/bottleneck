@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GitPullRequest,
+  GitPullRequestDraft,
   GitMerge,
   X,
   MessageSquare,
@@ -98,7 +99,7 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
           "Closed"
         }>
           {pr.draft ? (
-            <GitPullRequest className="w-5 h-5 text-gray-400" />
+            <GitPullRequestDraft className="w-5 h-5 text-gray-400" />
           ) : pr.merged ? (
             <GitMerge className="w-5 h-5 text-purple-400" />
           ) : pr.state === 'open' ? (
