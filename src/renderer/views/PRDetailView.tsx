@@ -14,6 +14,13 @@ import {
   FilePlus,
   FileMinus,
   FileEdit,
+  ChevronDown,
+  Copy,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ExternalLink,
 } from 'lucide-react';
 import { DiffEditor } from '../components/DiffEditor';
 import { ConversationTab } from '../components/ConversationTab';
@@ -23,6 +30,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../utils/cn';
 import { mockPullRequests, mockFiles, mockComments, mockReviews } from '../mockData';
 import { useUIStore } from '../stores/uiStore';
+import { usePRStore } from '../stores/prStore';
 import {
   UncontrolledTreeEnvironment,
   Tree,
@@ -43,6 +51,7 @@ export default function PRDetailView() {
   const navigate = useNavigate();
   const { token } = useAuthStore();
   const { theme } = useUIStore();
+  const { fetchPullRequests } = usePRStore();
   
   const [activeTab, setActiveTab] = useState<'conversation' | 'files'>('files');
   const [pr, setPR] = useState<PullRequest | null>(null);
@@ -56,6 +65,16 @@ export default function PRDetailView() {
   const [fileListWidth, setFileListWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const fileListRef = useRef<HTMLDivElement>(null);
+  const [showCheckoutDropdown, setShowCheckoutDropdown] = useState(false);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeMethod, setMergeMethod] = useState<'merge' | 'squash' | 'rebase'>('merge');
+  const [copiedCommand, setCopiedCommand] = useState(false);
+  const checkoutDropdownRef = useRef<HTMLDivElement>(null);
+  const [currentUser, setCurrentUser] = useState<{ login: string; avatar_url?: string } | null>(null);
+  const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
+  const [requestChangesFeedback, setRequestChangesFeedback] = useState('');
 
   const treeItems = useMemo(() => {
     if (!files || files.length === 0) {
@@ -125,6 +144,16 @@ export default function PRDetailView() {
     if (!window.electron || (owner && repo && number)) {
       loadPRData();
     }
+    
+    // Load current user if we have a token
+    if (token) {
+      const api = new GitHubAPI(token);
+      api.getCurrentUser().then(user => {
+        setCurrentUser(user);
+      }).catch(err => {
+        console.error('Failed to get current user:', err);
+      });
+    }
   }, [owner, repo, number, token]);
 
   useEffect(() => {
@@ -132,6 +161,21 @@ export default function PRDetailView() {
       handleFileSelect(files[0]);
     }
   }, [files, selectedFile]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (checkoutDropdownRef.current && !checkoutDropdownRef.current.contains(event.target as Node)) {
+        setShowCheckoutDropdown(false);
+      }
+    };
+
+    if (showCheckoutDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showCheckoutDropdown]);
 
   const handleFileSelect = async (file: File) => {
     setSelectedFile(file);
@@ -181,7 +225,7 @@ export default function PRDetailView() {
         const [prData, filesData, commentsData, reviewsData] = await Promise.all([
           api.getPullRequest(owner, repo, prNumber),
           api.getPullRequestFiles(owner, repo, prNumber),
-          api.getPullRequestComments(owner, repo, prNumber),
+          api.getPullRequestConversationComments(owner, repo, prNumber), // Use conversation comments only
           api.getPullRequestReviews(owner, repo, prNumber),
         ]);
         
@@ -199,16 +243,185 @@ export default function PRDetailView() {
     }
   };
 
-  const handleCheckout = async () => {
-    if (!pr) return;
+  const handleCheckout = () => {
+    setShowCheckoutDropdown(!showCheckoutDropdown);
+  };
+
+  const copyCheckoutCommand = (command: string) => {
+    navigator.clipboard.writeText(command);
+    setCopiedCommand(true);
+    setTimeout(() => {
+      setCopiedCommand(false);
+      setShowCheckoutDropdown(false);
+    }, 2000);
+  };
+
+  const handleApprove = async () => {
+    if (!pr || !token || !owner || !repo || !currentUser) return;
     
-    if (window.electron) {
-      const localPath = await window.electron.app.selectDirectory();
-      if (localPath) {
-        await window.electron.git.checkout(localPath, pr.head.ref);
+    setIsApproving(true);
+    
+    // Optimistically update the PR state immediately
+    const updatedPR = {
+      ...pr,
+      approvalStatus: 'approved' as const,
+      approvedBy: [
+        ...(pr.approvedBy || []),
+        { login: currentUser.login, avatar_url: currentUser.avatar_url || '' }
+      ],
+      // Remove from changes requested if present
+      changesRequestedBy: pr.changesRequestedBy?.filter(r => r.login !== currentUser.login) || []
+    };
+    setPR(updatedPR);
+    
+    try {
+      const api = new GitHubAPI(token);
+      
+      // Create approval review
+      await api.createReview(
+        owner,
+        repo,
+        pr.number,
+        '', // Empty body for simple approval
+        'APPROVE'
+      );
+      
+      // Reload PR data to get the actual server state
+      await loadPRData();
+      
+      // Also refresh the PR list in the background to update approval status there
+      if (owner && repo) {
+        fetchPullRequests(owner, repo, true);
       }
-    } else {
-      console.log('Checkout not available in dev mode');
+      
+      // Show success feedback
+      console.log('Successfully approved PR #' + pr.number);
+    } catch (error: any) {
+      console.error('Failed to approve PR:', error);
+      
+      // Revert the optimistic update on error
+      setPR(pr);
+      
+      // Provide more detailed error message
+      let errorMessage = 'Failed to approve pull request.';
+      
+      if (error?.response?.status === 422) {
+        // This could be because user already reviewed or is the author
+        errorMessage = 'Unable to approve: You may have already reviewed this PR, or you cannot approve your own pull request.';
+      } else if (error?.response?.status === 403) {
+        errorMessage = 'You do not have permission to approve this pull request.';
+      } else if (error?.response?.data?.message) {
+        errorMessage = `Failed to approve: ${error.response.data.message}`;
+      } else if (error?.message) {
+        errorMessage = `Failed to approve: ${error.message}`;
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleRequestChanges = async () => {
+    if (!pr || !token || !owner || !repo) return;
+    
+    // Show the modal instead of using prompt
+    setShowRequestChangesModal(true);
+  };
+
+  const submitRequestChanges = async () => {
+    if (!pr || !token || !owner || !repo || !requestChangesFeedback.trim() || !currentUser) {
+      return;
+    }
+    
+    setIsApproving(true);
+    setShowRequestChangesModal(false);
+    
+    // Optimistically update the PR state immediately
+    const updatedPR = {
+      ...pr,
+      approvalStatus: 'changes_requested' as const,
+      changesRequestedBy: [
+        ...(pr.changesRequestedBy || []),
+        { login: currentUser.login, avatar_url: currentUser.avatar_url || '' }
+      ],
+      // Remove from approved if present
+      approvedBy: pr.approvedBy?.filter(r => r.login !== currentUser.login) || []
+    };
+    setPR(updatedPR);
+    
+    try {
+      const api = new GitHubAPI(token);
+      
+      // Create review requesting changes
+      await api.createReview(
+        owner,
+        repo,
+        pr.number,
+        requestChangesFeedback,
+        'REQUEST_CHANGES'
+      );
+      
+      // Clear the feedback for next time
+      setRequestChangesFeedback('');
+      
+      // Reload PR data to get the actual server state
+      await loadPRData();
+      
+      // Also refresh the PR list in the background
+      if (owner && repo) {
+        fetchPullRequests(owner, repo, true);
+      }
+      
+      // Show success feedback
+      console.log('Successfully requested changes for PR #' + pr.number);
+    } catch (error: any) {
+      console.error('Failed to request changes:', error);
+      
+      // Revert the optimistic update on error
+      setPR(pr);
+      
+      let errorMessage = 'Failed to request changes.';
+      
+      if (error?.response?.status === 422) {
+        errorMessage = 'Unable to request changes: You may have already reviewed this PR, or you cannot review your own pull request.';
+      } else if (error?.response?.status === 403) {
+        errorMessage = 'You do not have permission to review this pull request.';
+      } else if (error?.response?.data?.message) {
+        errorMessage = `Failed to request changes: ${error.response.data.message}`;
+      } else if (error?.message) {
+        errorMessage = `Failed to request changes: ${error.message}`;
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleMerge = async () => {
+    if (!pr || !token || !owner || !repo) return;
+    
+    setIsMerging(true);
+    try {
+      const api = new GitHubAPI(token);
+      await api.mergePullRequest(
+        owner,
+        repo,
+        pr.number,
+        mergeMethod,
+        pr.title,
+        pr.body || undefined
+      );
+      
+      setShowMergeConfirm(false);
+      // Reload PR data to reflect the merge
+      await loadPRData();
+    } catch (error) {
+      console.error('Failed to merge PR:', error);
+      alert('Failed to merge pull request. Please check if the PR is mergeable and try again.');
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -325,25 +538,173 @@ export default function PRDetailView() {
                   theme === 'dark' ? "text-gray-500" : "text-gray-600"
                 )}>#{pr.number}</span>
               </h1>
+              
+              {/* GitHub Link */}
+              <a
+                href={`https://github.com/${pr.base.repo.owner.login}/${pr.base.repo.name}/pull/${pr.number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "p-1 rounded transition-colors",
+                  theme === 'dark' 
+                    ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" 
+                    : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+                )}
+                title="Open in GitHub"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
             </div>
           </div>
           
           <div className="flex items-center space-x-2">
-            <button
-              onClick={handleCheckout}
-              className="btn btn-secondary text-xs"
-            >
-              <Terminal className="w-3 h-3 mr-1" />
-              Checkout
-            </button>
+            <div className="relative" ref={checkoutDropdownRef}>
+              <button
+                onClick={handleCheckout}
+                className="btn btn-secondary text-xs flex items-center"
+              >
+                <Terminal className="w-3 h-3 mr-1" />
+                Checkout
+                <ChevronDown className="w-3 h-3 ml-1" />
+              </button>
+              
+              {showCheckoutDropdown && (
+                <div className={cn(
+                  "absolute right-0 mt-1 w-80 rounded-md shadow-lg z-50",
+                  theme === 'dark' 
+                    ? "bg-gray-800 border border-gray-700" 
+                    : "bg-white border border-gray-200"
+                )}>
+                  <div className="p-3 space-y-2">
+                    <div className={cn(
+                      "text-xs font-semibold mb-2",
+                      theme === 'dark' ? "text-gray-300" : "text-gray-700"
+                    )}>
+                      Checkout this branch locally:
+                    </div>
+                    
+                    {/* GitHub CLI command */}
+                    <div className={cn(
+                      "p-2 rounded font-mono text-xs flex items-center justify-between",
+                      theme === 'dark' ? "bg-gray-900" : "bg-gray-100"
+                    )}>
+                      <span>gh pr checkout {pr.number}</span>
+                      <button
+                        onClick={() => copyCheckoutCommand(`gh pr checkout ${pr.number}`)}
+                        className={cn(
+                          "ml-2 p-1 rounded transition-colors",
+                          theme === 'dark' 
+                            ? "hover:bg-gray-700" 
+                            : "hover:bg-gray-200"
+                        )}
+                      >
+                        {copiedCommand ? (
+                          <Check className="w-3 h-3 text-green-500" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* Git commands */}
+                    <div className={cn(
+                      "text-xs mt-2",
+                      theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                    )}>
+                      Or using git:
+                    </div>
+                    <div className={cn(
+                      "p-2 rounded font-mono text-xs space-y-1",
+                      theme === 'dark' ? "bg-gray-900" : "bg-gray-100"
+                    )}>
+                      <div>git fetch origin pull/{pr.number}/head:{pr.head.ref}</div>
+                      <div>git checkout {pr.head.ref}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             
             {pr.state === 'open' && !pr.merged && (
               <>
-                <button className="btn btn-success text-xs">
-                  <Check className="w-3 h-3 mr-1" />
-                  Approve
-                </button>
-                <button className="btn btn-primary text-xs">
+                {(() => {
+                  const isAuthor = currentUser && pr.user.login === currentUser.login;
+                  const hasApproved = currentUser && pr.approvedBy?.some(
+                    r => r.login === currentUser.login
+                  );
+                  const hasRequestedChanges = currentUser && pr.changesRequestedBy?.some(
+                    r => r.login === currentUser.login
+                  );
+                  
+                  // Don't show review buttons for PR authors
+                  if (!isAuthor) {
+                    return (
+                      <>
+                        <button 
+                          onClick={handleApprove}
+                          disabled={isApproving || !!hasApproved}
+                          className={cn(
+                            "btn text-xs",
+                            hasApproved ? "btn-success" : "btn-secondary"
+                          )}
+                          title={
+                            hasApproved ? "You have already approved this PR" :
+                            "Approve this pull request"
+                          }
+                        >
+                          {isApproving ? (
+                            <>
+                              <div className="w-3 h-3 mr-1 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Reviewing...
+                            </>
+                          ) : hasApproved ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              Approved
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3 h-3 mr-1" />
+                              Approve
+                            </>
+                          )}
+                        </button>
+                        
+                        <button 
+                          onClick={handleRequestChanges}
+                          disabled={isApproving}
+                          className={cn(
+                            "btn text-xs",
+                            hasRequestedChanges ? "btn-danger" : "btn-secondary"
+                          )}
+                          title={
+                            hasRequestedChanges ? "You have requested changes on this PR" :
+                            "Request changes to this pull request"
+                          }
+                        >
+                          {hasRequestedChanges ? (
+                            <>
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Changes Requested
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Request Changes
+                            </>
+                          )}
+                        </button>
+                      </>
+                    );
+                  }
+                  
+                  return null;
+                })()}
+                
+                <button 
+                  onClick={() => setShowMergeConfirm(true)}
+                  className="btn btn-primary text-xs"
+                >
                   <GitMerge className="w-3 h-3 mr-1" />
                   Merge
                 </button>
@@ -377,6 +738,30 @@ export default function PRDetailView() {
             <span className="text-red-400">-{fileStats.deletions}</span>
             <span>{fileStats.changed} files</span>
           </div>
+          
+          {/* Approval Status Badge */}
+          {pr.state === 'open' && !pr.merged && (
+            <div className="flex items-center">
+              {pr.approvalStatus === 'approved' ? (
+                <div className="flex items-center px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  <span className="text-xs">
+                    Approved {pr.approvedBy && pr.approvedBy.length > 0 && `(${pr.approvedBy.length})`}
+                  </span>
+                </div>
+              ) : pr.approvalStatus === 'changes_requested' ? (
+                <div className="flex items-center px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
+                  <XCircle className="w-3 h-3 mr-1" />
+                  <span className="text-xs">Changes requested</span>
+                </div>
+              ) : pr.approvalStatus === 'pending' ? (
+                <div className="flex items-center px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">
+                  <Clock className="w-3 h-3 mr-1" />
+                  <span className="text-xs">Review pending</span>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
@@ -568,6 +953,167 @@ export default function PRDetailView() {
           </>
         )}
       </div>
+
+      {/* Merge Confirmation Dialog */}
+      {showMergeConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={cn(
+            "rounded-lg shadow-xl p-6 max-w-md w-full mx-4",
+            theme === 'dark' 
+              ? "bg-gray-800 border border-gray-700" 
+              : "bg-white border border-gray-200"
+          )}>
+            <div className="flex items-center mb-4">
+              <AlertTriangle className="w-5 h-5 text-yellow-500 mr-2" />
+              <h2 className="text-lg font-semibold">Confirm Merge</h2>
+            </div>
+            
+            <p className={cn(
+              "text-sm mb-4",
+              theme === 'dark' ? "text-gray-300" : "text-gray-700"
+            )}>
+              Are you sure you want to merge <strong>#{pr.number} {pr.title}</strong>?
+            </p>
+            
+            <div className="mb-4">
+              <label className={cn(
+                "block text-xs font-medium mb-2",
+                theme === 'dark' ? "text-gray-400" : "text-gray-600"
+              )}>
+                Merge method:
+              </label>
+              <select
+                value={mergeMethod}
+                onChange={(e) => setMergeMethod(e.target.value as 'merge' | 'squash' | 'rebase')}
+                className={cn(
+                  "w-full px-3 py-2 text-sm rounded border",
+                  theme === 'dark'
+                    ? "bg-gray-900 border-gray-700 text-gray-300"
+                    : "bg-white border-gray-300 text-gray-900"
+                )}
+              >
+                <option value="merge">Create a merge commit</option>
+                <option value="squash">Squash and merge</option>
+                <option value="rebase">Rebase and merge</option>
+              </select>
+            </div>
+            
+            {pr.mergeable === false && (
+              <div className={cn(
+                "mb-4 p-3 rounded text-sm",
+                theme === 'dark' 
+                  ? "bg-red-900/20 text-red-400 border border-red-800" 
+                  : "bg-red-50 text-red-700 border border-red-200"
+              )}>
+                <strong>Warning:</strong> This pull request has conflicts that must be resolved before merging.
+              </div>
+            )}
+            
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setShowMergeConfirm(false)}
+                className="btn btn-secondary text-sm"
+                disabled={isMerging}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMerge}
+                disabled={isMerging || pr.mergeable === false}
+                className="btn btn-primary text-sm"
+              >
+                {isMerging ? (
+                  <>
+                    <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Merging...
+                  </>
+                ) : (
+                  <>
+                    <GitMerge className="w-4 h-4 mr-2" />
+                    Confirm Merge
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Changes Modal */}
+      {showRequestChangesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={cn(
+            "rounded-lg shadow-xl p-6 max-w-md w-full mx-4",
+            theme === 'dark' 
+              ? "bg-gray-800 border border-gray-700" 
+              : "bg-white border border-gray-200"
+          )}>
+            <div className="flex items-center mb-4">
+              <XCircle className="w-5 h-5 text-red-500 mr-2" />
+              <h2 className="text-lg font-semibold">Request Changes</h2>
+            </div>
+            
+            <p className={cn(
+              "text-sm mb-4",
+              theme === 'dark' ? "text-gray-300" : "text-gray-700"
+            )}>
+              Please describe what changes need to be made to <strong>#{pr.number} {pr.title}</strong>
+            </p>
+            
+            <div className="mb-4">
+              <label className={cn(
+                "block text-xs font-medium mb-2",
+                theme === 'dark' ? "text-gray-400" : "text-gray-600"
+              )}>
+                Feedback (required):
+              </label>
+              <textarea
+                value={requestChangesFeedback}
+                onChange={(e) => setRequestChangesFeedback(e.target.value)}
+                placeholder="Describe the changes that need to be made..."
+                className={cn(
+                  "w-full px-3 py-2 text-sm rounded border resize-none",
+                  theme === 'dark'
+                    ? "bg-gray-900 border-gray-700 text-gray-300 placeholder-gray-500"
+                    : "bg-white border-gray-300 text-gray-900 placeholder-gray-400"
+                )}
+                rows={6}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowRequestChangesModal(false);
+                  setRequestChangesFeedback('');
+                }}
+                className="btn btn-secondary text-sm"
+                disabled={isApproving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRequestChanges}
+                disabled={isApproving || !requestChangesFeedback.trim()}
+                className="btn btn-danger text-sm"
+              >
+                {isApproving ? (
+                  <>
+                    <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Request Changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

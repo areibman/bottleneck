@@ -56,6 +56,16 @@ export interface PullRequest {
   changed_files?: number;
   additions?: number;
   deletions?: number;
+  // Review status
+  approvalStatus?: 'approved' | 'changes_requested' | 'pending' | 'none';
+  approvedBy?: Array<{
+    login: string;
+    avatar_url: string;
+  }>;
+  changesRequestedBy?: Array<{
+    login: string;
+    avatar_url: string;
+  }>;
 }
 
 export interface Repository {
@@ -201,16 +211,68 @@ export class GitHubAPI {
       }
     });
     
-    // Fetch detailed PR data for each PR to get file stats
-    // Note: This requires additional API calls but is necessary for file stats
+    // Fetch detailed PR data and reviews for each PR
     const detailedPRs = await Promise.all(
       data.map(async (pr) => {
         try {
-          const { data: detailedPR } = await this.octokit.pulls.get({
-            owner,
-            repo,
-            pull_number: pr.number,
+          const [detailedPRResponse, reviewsResponse] = await Promise.all([
+            this.octokit.pulls.get({
+              owner,
+              repo,
+              pull_number: pr.number,
+            }),
+            this.octokit.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            })
+          ]);
+          
+          const detailedPR = detailedPRResponse.data;
+          const reviews = reviewsResponse.data;
+          
+          // Process reviews to determine approval status
+          const approvedBy: Array<{ login: string; avatar_url: string }> = [];
+          const changesRequestedBy: Array<{ login: string; avatar_url: string }> = [];
+          
+          // Get the latest review from each reviewer
+          const latestReviews = new Map<string, typeof reviews[0]>();
+          reviews.forEach(review => {
+            if (review.user && review.state !== 'PENDING' && review.state !== 'COMMENTED') {
+              const existing = latestReviews.get(review.user.login);
+              if (!existing || new Date(review.submitted_at!) > new Date(existing.submitted_at!)) {
+                latestReviews.set(review.user.login, review);
+              }
+            }
           });
+          
+          // Categorize reviews
+          latestReviews.forEach(review => {
+            if (review.user) {
+              if (review.state === 'APPROVED') {
+                approvedBy.push({
+                  login: review.user.login,
+                  avatar_url: review.user.avatar_url
+                });
+              } else if (review.state === 'CHANGES_REQUESTED') {
+                changesRequestedBy.push({
+                  login: review.user.login,
+                  avatar_url: review.user.avatar_url
+                });
+              }
+            }
+          });
+          
+          // Determine overall approval status
+          let approvalStatus: 'approved' | 'changes_requested' | 'pending' | 'none' = 'none';
+          if (changesRequestedBy.length > 0) {
+            approvalStatus = 'changes_requested';
+          } else if (approvedBy.length > 0) {
+            approvalStatus = 'approved';
+          } else if (pr.requested_reviewers && pr.requested_reviewers.length > 0) {
+            approvalStatus = 'pending';
+          }
           
           return {
             ...pr,
@@ -219,7 +281,10 @@ export class GitHubAPI {
             additions: detailedPR.additions,
             deletions: detailedPR.deletions,
             merged: detailedPR.merged,
-            merged_at: detailedPR.merged_at
+            merged_at: detailedPR.merged_at,
+            approvalStatus,
+            approvedBy,
+            changesRequestedBy
           };
         } catch (error) {
           console.error(`Failed to fetch details for PR #${pr.number}:`, error);
@@ -229,7 +294,10 @@ export class GitHubAPI {
             comments: commentCounts.get(pr.number) || 0,
             changed_files: undefined,
             additions: undefined,
-            deletions: undefined
+            deletions: undefined,
+            approvalStatus: 'none' as const,
+            approvedBy: [],
+            changesRequestedBy: []
           };
         }
       })
@@ -239,25 +307,79 @@ export class GitHubAPI {
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {
-    const { data } = await this.octokit.pulls.get({
-      owner,
-      repo,
-      pull_number: pullNumber,
+    const [prResponse, issueResponse, reviewsResponse] = await Promise.all([
+      this.octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: pullNumber,
+      }),
+      this.octokit.issues.get({
+        owner,
+        repo,
+        issue_number: pullNumber,
+      }),
+      this.octokit.pulls.listReviews({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 100,
+      })
+    ]);
+    
+    const data = prResponse.data;
+    const reviews = reviewsResponse.data;
+    
+    // Process reviews to determine approval status
+    const approvedBy: Array<{ login: string; avatar_url: string }> = [];
+    const changesRequestedBy: Array<{ login: string; avatar_url: string }> = [];
+    
+    // Get the latest review from each reviewer
+    const latestReviews = new Map<string, typeof reviews[0]>();
+    reviews.forEach(review => {
+      if (review.user && review.state !== 'PENDING' && review.state !== 'COMMENTED') {
+        const existing = latestReviews.get(review.user.login);
+        if (!existing || new Date(review.submitted_at!) > new Date(existing.submitted_at!)) {
+          latestReviews.set(review.user.login, review);
+        }
+      }
     });
     
-    // Get comment count from issues API
-    const issueData = await this.octokit.issues.get({
-      owner,
-      repo,
-      issue_number: pullNumber,
+    // Categorize reviews
+    latestReviews.forEach(review => {
+      if (review.user) {
+        if (review.state === 'APPROVED') {
+          approvedBy.push({
+            login: review.user.login,
+            avatar_url: review.user.avatar_url
+          });
+        } else if (review.state === 'CHANGES_REQUESTED') {
+          changesRequestedBy.push({
+            login: review.user.login,
+            avatar_url: review.user.avatar_url
+          });
+        }
+      }
     });
+    
+    // Determine overall approval status
+    let approvalStatus: 'approved' | 'changes_requested' | 'pending' | 'none' = 'none';
+    if (changesRequestedBy.length > 0) {
+      approvalStatus = 'changes_requested';
+    } else if (approvedBy.length > 0) {
+      approvalStatus = 'approved';
+    } else if (data.requested_reviewers && data.requested_reviewers.length > 0) {
+      approvalStatus = 'pending';
+    }
     
     return {
       ...data,
-      comments: issueData.data.comments,
+      comments: issueResponse.data.comments,
       changed_files: (data as any).changed_files,
       additions: (data as any).additions,
-      deletions: (data as any).deletions
+      deletions: (data as any).deletions,
+      approvalStatus,
+      approvedBy,
+      changesRequestedBy
     } as PullRequest;
   }
 
@@ -381,7 +503,22 @@ export class GitHubAPI {
       }),
     ]);
     
+    // Return both types but we'll filter them appropriately in the UI
+    // Issue comments are for the conversation tab
+    // Review comments are for inline diff comments
     return [...issueComments.data, ...reviewComments.data] as Comment[];
+  }
+  
+  async getPullRequestConversationComments(owner: string, repo: string, pullNumber: number) {
+    // Only get issue comments for the conversation tab
+    const { data } = await this.octokit.issues.listComments({
+      owner,
+      repo,
+      issue_number: pullNumber,
+      per_page: 100,
+    });
+    
+    return data as Comment[];
   }
 
   async getPullRequestReviews(owner: string, repo: string, pullNumber: number) {
@@ -408,14 +545,37 @@ export class GitHubAPI {
       body: string;
     }>
   ) {
-    const { data } = await this.octokit.pulls.createReview({
+    // GitHub API requires body for REQUEST_CHANGES but it's optional for APPROVE
+    // Empty string is fine for APPROVE but we need actual content for REQUEST_CHANGES
+    if (event === 'REQUEST_CHANGES' && (!body || body.trim() === '')) {
+      throw new Error('Body is required when requesting changes');
+    }
+    
+    // Get the latest commit SHA for the PR (often required by GitHub API)
+    const latestCommitSha = await this.getLatestCommitSha(owner, repo, pullNumber);
+    
+    // Build the parameters object
+    const params: any = {
       owner,
       repo,
       pull_number: pullNumber,
-      body,
       event,
-      comments,
-    });
+      commit_id: latestCommitSha, // This is often required to prevent stale reviews
+    };
+    
+    // Only include body if it's not empty
+    // For APPROVE, body is optional and can be omitted
+    // For REQUEST_CHANGES, body is required (checked above)
+    if (body && body.trim()) {
+      params.body = body;
+    }
+    
+    // Only include comments if provided
+    if (comments && comments.length > 0) {
+      params.comments = comments;
+    }
+    
+    const { data } = await this.octokit.pulls.createReview(params);
     
     return data;
   }

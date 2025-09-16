@@ -128,25 +128,52 @@ export default function BranchesView() {
 
   // Extract feature/task name from branch for sub-grouping
   const getFeatureFromBranch = useCallback((branchName: string, commitMessage: string): string => {
-    // First try to extract from branch name
+    // Handle cursor branches with pattern: cursor/fix-something-hash
+    if (branchName.startsWith('cursor/')) {
+      const withoutCursor = branchName.substring(7); // Remove 'cursor/' prefix
+      
+      // Check if it has a hash at the end (like fix-local-development-console-errors-658d)
+      const lastDashIndex = withoutCursor.lastIndexOf('-');
+      if (lastDashIndex > 0) {
+        const possibleHash = withoutCursor.substring(lastDashIndex + 1);
+        // Check if last part looks like a hash (4+ alphanumeric characters)
+        if (possibleHash.length >= 4 && /^[a-z0-9]+$/i.test(possibleHash)) {
+          // Return the feature name without the hash
+          return withoutCursor.substring(0, lastDashIndex);
+        }
+      }
+      
+      // If no hash pattern, just return without cursor prefix
+      return withoutCursor;
+    }
+    
+    // First try to extract from branch name patterns
     const parts = branchName.split('/');
     if (parts.length > 1) {
-      // If it's like "cursor/feat/feature-name" or "feat/feature-name"
-      const withoutFirst = parts[0] === 'cursor' || parts[0] === 'manual' ? 
-        parts.slice(1) : parts;
-      
-      if (withoutFirst.length > 1) {
-        // Return everything after the type prefix
-        return withoutFirst.slice(1).join('/');
-      } else if (withoutFirst.length === 1 && withoutFirst[0] !== branchName) {
-        return withoutFirst[0];
+      // If it's like "feat/feature-name" or "fix/bug-name"
+      const typePatterns = ['feat', 'fix', 'chore', 'docs', 'refactor', 'test', 'style'];
+      if (typePatterns.includes(parts[0])) {
+        return parts.slice(1).join('/');
       }
+      
+      // For other patterns like "user/feature-name"
+      if (parts.length === 2) {
+        return parts[1];
+      }
+      
+      // For nested patterns, return everything after first part
+      return parts.slice(1).join('/');
     }
     
     // Try to extract from commit message patterns
     const colonMatch = commitMessage.match(/^([^:]+):/);
     if (colonMatch) {
-      return colonMatch[1].trim();
+      const feature = colonMatch[1].trim();
+      // Don't use generic prefixes as features
+      const genericPrefixes = ['feat', 'fix', 'chore', 'docs', 'refactor', 'test', 'style'];
+      if (!genericPrefixes.includes(feature.toLowerCase())) {
+        return feature;
+      }
     }
     
     // For branches without clear patterns, use the branch name itself
@@ -276,15 +303,15 @@ export default function BranchesView() {
     return (
       <div
         className={cn(
-          'px-4 py-3 flex items-center justify-between cursor-pointer transition-colors',
+          'px-3 py-2 flex items-center justify-between cursor-pointer transition-colors',
           theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100',
           isSelected && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'),
           branch.current && 'border-l-2 border-blue-500',
-          isNested && 'pl-12'
+          isNested && 'pl-10'
         )}
         onClick={() => handleBranchSelect(branch.name, !isSelected)}
       >
-        <div className="flex items-center space-x-3 flex-1">
+        <div className="flex items-center space-x-2 flex-1 min-w-0">
           {/* Checkbox */}
           <input
             type="checkbox"
@@ -305,12 +332,12 @@ export default function BranchesView() {
           <div className="flex-shrink-0">
             {branch.protected ? (
               <Shield className={cn(
-                'w-5 h-5',
+                'w-4 h-4',
                 'text-yellow-400'
               )} />
             ) : (
               <GitBranch className={cn(
-                'w-5 h-5',
+                'w-4 h-4',
                 branch.current ? 'text-blue-400' : 
                 status === 'ahead' ? 'text-green-400' :
                 status === 'behind' ? 'text-yellow-400' :
@@ -321,45 +348,45 @@ export default function BranchesView() {
           </div>
           
           {/* Branch Details */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-center space-x-2 overflow-hidden">
               <span className={cn(
-                "font-mono text-sm",
+                "font-mono text-xs truncate block",
                 theme === 'dark' ? "text-white" : "text-gray-900"
               )}>
                 {branch.name}
               </span>
               {branch.current && (
-                <span className="text-xs px-2 py-0.5 bg-blue-900 text-blue-300 rounded">
+                <span className="text-[10px] px-1.5 py-0.5 bg-blue-900 text-blue-300 rounded flex-shrink-0">
                   Default
                 </span>
               )}
               {branch.protected && (
-                <span className="text-xs px-2 py-0.5 bg-yellow-900 text-yellow-300 rounded">
+                <span className="text-[10px] px-1.5 py-0.5 bg-yellow-900 text-yellow-300 rounded flex-shrink-0">
                   Protected
                 </span>
               )}
             </div>
             
             <div className={cn(
-              "flex items-center mt-1 text-xs space-x-3",
+              "flex items-center mt-0.5 text-[10px] space-x-2 overflow-hidden",
               theme === 'dark' ? "text-gray-400" : "text-gray-600"
             )}>
               {/* Author */}
-              <span className="flex items-center">
-                <User className="w-3 h-3 mr-1" />
-                {branch.commit.author}
+              <span className="flex items-center min-w-0">
+                <User className="w-3 h-3 mr-0.5 flex-shrink-0" />
+                <span className="truncate">{branch.commit.author}</span>
               </span>
               
               {/* Last commit time */}
-              <span className="flex items-center">
-                <Clock className="w-3 h-3 mr-1" />
+              <span className="flex items-center flex-shrink-0">
+                <Clock className="w-3 h-3 mr-0.5" />
                 {formatDistanceToNow(new Date(branch.commit.date), { addSuffix: true })}
               </span>
               
               {/* Ahead/Behind indicators */}
               {(branch.ahead > 0 || branch.behind > 0) && (
-                <span className="flex items-center space-x-2">
+                <span className="flex items-center space-x-2 flex-shrink-0">
                   {branch.ahead > 0 && (
                     <span className="flex items-center text-green-500">
                       <ArrowUp className="w-3 h-3" />
@@ -378,27 +405,27 @@ export default function BranchesView() {
             
             {/* Commit message */}
             <div className={cn(
-              "text-xs mt-1 truncate",
+              "text-[10px] mt-0.5 truncate",
               theme === 'dark' ? "text-gray-500" : "text-gray-600"
             )}>
-              <GitCommit className="w-3 h-3 inline mr-1" />
+              <GitCommit className="w-3 h-3 inline mr-0.5 flex-shrink-0" />
               {branch.commit.message}
             </div>
           </div>
         </div>
         
         {/* Actions */}
-        <div className="flex items-center space-x-2 ml-4">
+        <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
           {!branch.protected && !branch.current && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 // TODO: Implement delete via GitHub API
               }}
-              className="btn btn-ghost p-2 text-sm text-red-400 hover:text-red-300"
+              className="btn btn-ghost p-1 text-xs text-red-400 hover:text-red-300"
               title="Delete branch"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -417,19 +444,19 @@ export default function BranchesView() {
       )}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
-          <h1 className="text-xl font-semibold flex items-center">
-            <GitBranch className="w-5 h-5 mr-2" />
+          <h1 className="text-lg font-semibold flex items-center">
+            <GitBranch className="w-4 h-4 mr-2" />
             Branches
               {selectedRepo && (
                 <>
                   <span className={cn(
-                    "ml-2 text-sm",
+                    "ml-2 text-xs",
                     theme === 'dark' ? "text-gray-400" : "text-gray-600"
                   )}>
                     in {selectedRepo.name}
                   </span>
                   <span className={cn(
-                    "ml-2 text-sm",
+                    "ml-2 text-xs",
                     theme === 'dark' ? "text-gray-500" : "text-gray-600"
                   )}>
                     ({filteredAndSortedBranches.length})
@@ -440,9 +467,9 @@ export default function BranchesView() {
             
             {/* Bulk actions */}
             {selectedBranches.size > 0 && (
-              <div className="ml-4 flex items-center space-x-3">
+              <div className="ml-4 flex items-center space-x-2">
                 <span className={cn(
-                  "text-sm",
+                  "text-xs",
                   theme === 'dark' ? "text-gray-300" : "text-gray-600"
                 )}>
                   {selectedBranches.size} selected
@@ -451,7 +478,7 @@ export default function BranchesView() {
                 <button
                   onClick={handleDeleteSelected}
                   className={cn(
-                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
                     theme === 'dark'
                       ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
                       : "text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -463,7 +490,7 @@ export default function BranchesView() {
                 <button
                   onClick={() => setSelectedBranches(new Set())}
                   className={cn(
-                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
                     theme === 'dark'
                       ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
                       : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
@@ -483,7 +510,7 @@ export default function BranchesView() {
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
                   className={cn(
-                    "text-sm px-3 py-1.5 rounded-lg transition-colors border",
+                    "text-xs px-2 py-1 rounded-lg transition-colors border",
                     theme === 'dark'
                       ? "bg-gray-700 border-gray-600 text-white"
                       : "bg-white border-gray-200 text-gray-900"
@@ -498,7 +525,7 @@ export default function BranchesView() {
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value as any)}
                   className={cn(
-                    "text-sm px-3 py-1.5 rounded-lg transition-colors border",
+                    "text-xs px-2 py-1 rounded-lg transition-colors border",
                     theme === 'dark'
                       ? "bg-gray-700 border-gray-600 text-white"
                       : "bg-white border-gray-200 text-gray-900"
@@ -536,7 +563,7 @@ export default function BranchesView() {
                   type="text"
                   placeholder="Search branches by name, author, or commit message..."
                   className={cn(
-                    "pl-10 pr-4 py-2 w-full rounded-lg border transition-colors",
+                    "pl-8 pr-3 py-1.5 w-full rounded-lg border transition-colors text-xs",
                     theme === 'dark'
                       ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                       : "bg-white border-gray-200 text-gray-900 placeholder-gray-500"
@@ -619,7 +646,7 @@ export default function BranchesView() {
                     {/* Author Group Header */}
                     <div
                       className={cn(
-                        "px-4 py-2 flex items-center justify-between",
+                        "px-3 py-1.5 flex items-center justify-between",
                         theme === 'dark' 
                           ? "bg-gray-750 hover:bg-gray-700" 
                           : "bg-gray-100 hover:bg-gray-200"
@@ -664,13 +691,13 @@ export default function BranchesView() {
                           <User className="w-4 h-4 text-blue-400" />
                         )}
                         <span 
-                          className="font-medium text-sm cursor-pointer"
+                          className="font-medium text-xs cursor-pointer"
                           onClick={() => toggleGroup(authorKey)}
                         >
                           {authorName}
                         </span>
                         <span className={cn(
-                          "text-xs",
+                          "text-[10px]",
                           theme === 'dark' ? "text-gray-400" : "text-gray-600"
                         )}>({totalBranches})</span>
                       </div>
@@ -705,7 +732,7 @@ export default function BranchesView() {
                               {/* Feature Sub-group Header */}
                               <div
                                 className={cn(
-                                  "pl-8 pr-4 py-2 flex items-center justify-between border-l-2",
+                                  "pl-6 pr-3 py-1.5 flex items-center justify-between border-l-2",
                                   theme === 'dark' 
                                     ? "bg-gray-800 hover:bg-gray-750 border-gray-600" 
                                     : "bg-gray-50 hover:bg-gray-100 border-gray-300"
@@ -745,13 +772,13 @@ export default function BranchesView() {
                                   />
                                   <span 
                                     className={cn(
-                                      "text-sm cursor-pointer",
+                                      "text-xs cursor-pointer",
                                       theme === 'dark' ? "text-gray-300" : "text-gray-700"
                                     )}
                                     onClick={() => toggleGroup(featureKey)}
                                   >{featureName}</span>
                                   <span className={cn(
-                                    "text-xs",
+                                    "text-[10px]",
                                     theme === 'dark' ? "text-gray-500" : "text-gray-600"
                                   )}>({featureBranches.length})</span>
                                 </div>
@@ -822,7 +849,7 @@ export default function BranchesView() {
                     {/* Group Header */}
                     <div
                         className={cn(
-                        "px-4 py-2 flex items-center justify-between sticky top-0",
+                        "px-3 py-1.5 flex items-center justify-between sticky top-0",
                         theme === 'dark' 
                           ? "bg-gray-750 hover:bg-gray-700" 
                           : "bg-gray-100 hover:bg-gray-200"
@@ -862,13 +889,13 @@ export default function BranchesView() {
                         />
                         {getGroupIcon()}
                         <span 
-                          className="font-medium text-sm cursor-pointer"
+                          className="font-medium text-xs cursor-pointer"
                           onClick={() => toggleGroup(groupKey)}
                         >
                           {getGroupLabel()}
                         </span>
                         <span className={cn(
-                          "text-xs",
+                          "text-[10px]",
                           theme === 'dark' ? "text-gray-400" : "text-gray-600"
                         )}>({branches.length})</span>
                       </div>

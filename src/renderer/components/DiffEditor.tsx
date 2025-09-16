@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
+import { DiffEditor as MonacoDiffEditor, Editor as MonacoEditor } from '@monaco-editor/react';
 import { 
   Eye, 
   MessageSquare, 
@@ -269,13 +269,16 @@ export function DiffEditor({
         </div>
         
         <div className="flex items-center space-x-2">
-          <button
-            onClick={toggleDiffView}
-            className="btn btn-ghost p-1 text-xs"
-            title={diffView === 'unified' ? 'Switch to split view' : 'Switch to unified view'}
-          >
-            {diffView === 'unified' ? <Columns className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-          </button>
+          {/* Only show diff view toggle for modified/removed files */}
+          {file.status !== 'added' && (
+            <button
+              onClick={toggleDiffView}
+              className="btn btn-ghost p-1 text-xs"
+              title={diffView === 'unified' ? 'Switch to split view' : 'Switch to unified view'}
+            >
+              {diffView === 'unified' ? <Columns className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+            </button>
+          )}
           
           <button
             onClick={toggleWhitespace}
@@ -288,27 +291,30 @@ export function DiffEditor({
             W
           </button>
           
-          <button
-            onClick={() => {
-              if (originalContent !== undefined || modifiedContent !== undefined) {
-                setShowFullFile(!showFullFile);
+          {/* Only show Full/Diff toggle for modified files, not for new or removed files */}
+          {file.status === 'modified' && (
+            <button
+              onClick={() => {
+                if (originalContent !== undefined || modifiedContent !== undefined) {
+                  setShowFullFile(!showFullFile);
+                }
+              }}
+              className={cn(
+                'btn btn-ghost px-2 py-1 text-xs flex items-center gap-1',
+                showFullFile && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'),
+                originalContent === undefined && modifiedContent === undefined && 'opacity-50 cursor-not-allowed'
+              )}
+              disabled={originalContent === undefined && modifiedContent === undefined}
+              title={
+                originalContent === undefined && modifiedContent === undefined 
+                  ? 'Full file content not available' 
+                  : (showFullFile ? 'Show diff' : 'Show full file')
               }
-            }}
-            className={cn(
-              'btn btn-ghost px-2 py-1 text-xs flex items-center gap-1',
-              showFullFile && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'),
-              originalContent === undefined && modifiedContent === undefined && 'opacity-50 cursor-not-allowed'
-            )}
-            disabled={originalContent === undefined && modifiedContent === undefined}
-            title={
-              originalContent === undefined && modifiedContent === undefined 
-                ? 'Full file content not available' 
-                : (showFullFile ? 'Show diff' : 'Show full file')
-            }
-          >
-            <WholeWord className="w-4 h-4" />
-            <span>{showFullFile ? 'Diff' : 'Full'}</span>
-          </button>
+            >
+              <WholeWord className="w-4 h-4" />
+              <span>{showFullFile ? 'Diff' : 'Full'}</span>
+            </button>
+          )}
 
           <button
             onClick={toggleWordWrap}
@@ -333,47 +339,82 @@ export function DiffEditor({
 
       {/* Editor */}
       <div className="flex-1 relative">
-        <MonacoDiffEditor
-          original={showFullFile && originalContent !== undefined ? originalContent : patchOriginalContent}
-          modified={showFullFile && modifiedContent !== undefined ? modifiedContent : patchModifiedContent}
-          language={language}
-          theme={theme === 'dark' ? "vs-dark" : "vs"}
-          options={{
-            readOnly: true,
-            renderSideBySide: diffView === 'split',
-            renderWhitespace: showWhitespace ? 'all' : 'none',
-            wordWrap: wordWrap ? 'on' : 'off',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            fontSize: 12,
-            lineHeight: 18,
-            renderLineHighlight: 'none',
-            glyphMargin: true,
-            folding: true,
-            lineNumbers: 'on',
-            lineDecorationsWidth: 0,
-            lineNumbersMinChars: 3,
-            renderValidationDecorations: 'off',
-            scrollbar: {
-              vertical: 'visible',
-              horizontal: 'visible',
-              verticalScrollbarSize: 10,
-              horizontalScrollbarSize: 10,
-            },
-            // Enable collapsing of unchanged regions (works best with full file view)
-            hideUnchangedRegions: {
-              enabled: !showFullFile ? false : true, // Only enable for full file view
-              revealLineCount: 3, // Show 3 lines of context around changes
-              minimumLineCount: 3, // Minimum lines to show in collapsed region
-              contextLineCount: 3, // Context lines to show around changes
-            },
-            // Improve diff algorithm
-            diffAlgorithm: 'advanced',
-          }}
-          onMount={(editor) => {
-            editorRef.current = editor;
-          }}
-        />
+        {file.status === 'added' ? (
+          // For new files, show a regular editor with just the new content
+          <MonacoEditor
+            value={showFullFile && modifiedContent !== undefined ? modifiedContent : patchModifiedContent}
+            language={language}
+            theme={theme === 'dark' ? "vs-dark" : "vs"}
+            options={{
+              readOnly: true,
+              renderWhitespace: showWhitespace ? 'all' : 'none',
+              wordWrap: wordWrap ? 'on' : 'off',
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 12,
+              lineHeight: 18,
+              renderLineHighlight: 'none',
+              glyphMargin: true,
+              folding: true,
+              lineNumbers: 'on',
+              lineDecorationsWidth: 0,
+              lineNumbersMinChars: 3,
+              renderValidationDecorations: 'off',
+              scrollbar: {
+                vertical: 'visible',
+                horizontal: 'visible',
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+              },
+            }}
+            onMount={(editor) => {
+              editorRef.current = editor;
+            }}
+          />
+        ) : (
+          // For modified or removed files, show the diff editor
+          <MonacoDiffEditor
+            original={showFullFile && originalContent !== undefined ? originalContent : patchOriginalContent}
+            modified={showFullFile && modifiedContent !== undefined ? modifiedContent : patchModifiedContent}
+            language={language}
+            theme={theme === 'dark' ? "vs-dark" : "vs"}
+            options={{
+              readOnly: true,
+              renderSideBySide: diffView === 'split',
+              renderWhitespace: showWhitespace ? 'all' : 'none',
+              wordWrap: wordWrap ? 'on' : 'off',
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 12,
+              lineHeight: 18,
+              renderLineHighlight: 'none',
+              glyphMargin: true,
+              folding: true,
+              lineNumbers: 'on',
+              lineDecorationsWidth: 0,
+              lineNumbersMinChars: 3,
+              renderValidationDecorations: 'off',
+              scrollbar: {
+                vertical: 'visible',
+                horizontal: 'visible',
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+              },
+              // Enable collapsing of unchanged regions (works best with full file view)
+              hideUnchangedRegions: {
+                enabled: !showFullFile ? false : true, // Only enable for full file view
+                revealLineCount: 3, // Show 3 lines of context around changes
+                minimumLineCount: 3, // Minimum lines to show in collapsed region
+                contextLineCount: 3, // Context lines to show around changes
+              },
+              // Improve diff algorithm
+              diffAlgorithm: 'advanced',
+            }}
+            onMount={(editor) => {
+              editorRef.current = editor;
+            }}
+          />
+        )}
 
         {/* Comment overlay */}
         {showCommentForm !== null && (

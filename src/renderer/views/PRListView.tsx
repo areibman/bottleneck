@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   GitPullRequest,
   GitMerge,
-  Check,
   X,
   MessageSquare,
   ChevronDown,
@@ -11,7 +10,11 @@ import {
   MoreHorizontal,
   Bot,
   User,
-  FileText
+  FileText,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { usePRStore } from '../stores/prStore';
 import { useUIStore } from '../stores/uiStore';
@@ -200,26 +203,91 @@ const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelect
               className="flex items-center space-x-3 ml-4"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Review status */}
-              <div className="flex -space-x-2">
-                {pr.requested_reviewers.slice(0, 3).map((reviewer: any) => (
-                  <img
-                    key={reviewer.login}
-                    src={reviewer.avatar_url}
-                    alt={reviewer.login}
-                    className={cn(
-                      "w-6 h-6 rounded-full border-2",
-                      theme === 'dark' ? "border-gray-800" : "border-white"
+              {/* Approval Status */}
+              <div className="flex items-center space-x-2">
+                {pr.state === 'open' && !pr.merged && (
+                  <div className="flex items-center space-x-1">
+                    {pr.approvalStatus === 'approved' ? (
+                      <div className="flex items-center" title={`Approved by ${pr.approvedBy?.map(r => r.login).join(', ')}`}>
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span className={cn(
+                          "ml-1 text-xs",
+                          theme === 'dark' ? "text-green-400" : "text-green-600"
+                        )}>
+                          Approved
+                        </span>
+                      </div>
+                    ) : pr.approvalStatus === 'changes_requested' ? (
+                      <div className="flex items-center" title={`Changes requested by ${pr.changesRequestedBy?.map(r => r.login).join(', ')}`}>
+                        <XCircle className="w-4 h-4 text-red-500" />
+                        <span className={cn(
+                          "ml-1 text-xs",
+                          theme === 'dark' ? "text-red-400" : "text-red-600"
+                        )}>
+                          Changes
+                        </span>
+                      </div>
+                    ) : pr.approvalStatus === 'pending' ? (
+                      <div className="flex items-center" title="Review pending">
+                        <Clock className="w-4 h-4 text-yellow-500" />
+                        <span className={cn(
+                          "ml-1 text-xs",
+                          theme === 'dark' ? "text-yellow-400" : "text-yellow-600"
+                        )}>
+                          Pending
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center" title="No reviews">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        <span className={cn(
+                          "ml-1 text-xs",
+                          theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                        )}>
+                          No review
+                        </span>
+                      </div>
                     )}
-                    title={`Review requested: ${reviewer.login}`}
-                  />
-                ))}
+                  </div>
+                )}
               </div>
+
+              {/* Review status avatars */}
+              {pr.requested_reviewers.length > 0 && (
+                <div className="flex -space-x-2">
+                  {pr.requested_reviewers.slice(0, 3).map((reviewer: any) => (
+                    <img
+                      key={reviewer.login}
+                      src={reviewer.avatar_url}
+                      alt={reviewer.login}
+                      className={cn(
+                        "w-6 h-6 rounded-full border-2",
+                        theme === 'dark' ? "border-gray-800" : "border-white"
+                      )}
+                      title={`Review requested: ${reviewer.login}`}
+                    />
+                  ))}
+                </div>
+              )}
               
-              {/* CI Status */}
-              <div className="flex items-center space-x-1" title="Checks passed">
-                <Check className="w-4 h-4 text-green-400" />
-              </div>
+              {/* GitHub Link */}
+              <a
+                href={`https://github.com/${pr.base.repo.owner.login}/${pr.base.repo.name}/pull/${pr.number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                className={cn(
+                  "p-1 rounded transition-colors",
+                  theme === 'dark' 
+                    ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200" 
+                    : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+                )}
+                title="Open in GitHub"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
               
               {/* More actions */}
               <button

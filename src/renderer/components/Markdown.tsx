@@ -89,10 +89,13 @@ const MarkdownRenderer = memo(({ content, theme }: { content: string; theme: 'li
     <div 
       className={cn(
         "prose prose-sm max-w-none markdown-content",
-        theme === 'dark' ? "prose-invert" : "prose-light",
+        theme === 'dark' ? "prose-invert" : "",
         // Base prose styles
         "prose-headings:font-semibold",
         "prose-p:leading-relaxed",
+        "prose-p:my-2",
+        "prose-strong:font-bold",
+        "prose-em:italic",
         // Remove default pre/code styles since we're using custom components
         "[&>pre]:contents",
         // Table styles
@@ -105,7 +108,11 @@ const MarkdownRenderer = memo(({ content, theme }: { content: string; theme: 'li
         // Blockquote styles
         theme === 'dark'
           ? "prose-blockquote:border-gray-600 prose-blockquote:text-gray-300"
-          : "prose-blockquote:border-gray-300 prose-blockquote:text-gray-600"
+          : "prose-blockquote:border-gray-300 prose-blockquote:text-gray-600",
+        // Text color
+        theme === 'dark'
+          ? "prose-p:text-gray-300 prose-li:text-gray-300 prose-headings:text-gray-100"
+          : "prose-p:text-gray-700 prose-li:text-gray-700 prose-headings:text-gray-900"
       )}
     >
       <ReactMarkdown 
