@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   GitPullRequest,
@@ -22,6 +22,8 @@ import {
   XCircle,
   Clock,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { DiffEditor } from '../components/DiffEditor';
 import { ConversationTab } from '../components/ConversationTab';
@@ -50,9 +52,10 @@ type TreeData = {
 export default function PRDetailView() {
   const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { token } = useAuthStore();
   const { theme } = useUIStore();
-  const { fetchPullRequests } = usePRStore();
+  const { fetchPullRequests, pullRequests, fetchPRDetails, bulkUpdatePRs } = usePRStore();
   
   const [activeTab, setActiveTab] = useState<'conversation' | 'files'>('files');
   const [pr, setPR] = useState<PullRequest | null>(null);
@@ -76,6 +79,15 @@ export default function PRDetailView() {
   const [currentUser, setCurrentUser] = useState<{ login: string; avatar_url?: string } | null>(null);
   const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
   const [requestChangesFeedback, setRequestChangesFeedback] = useState('');
+  const [showPRSwitcher, setShowPRSwitcher] = useState(false);
+  const prSwitcherRef = useRef<HTMLDivElement>(null);
+  
+  // Extract sibling PRs from navigation state
+  const [navigationState, setNavigationState] = useState<{
+    siblingPRs?: any[];
+    currentTaskGroup?: string;
+    currentAgent?: string;
+  } | null>(location.state as any);
 
   const treeItems = useMemo(() => {
     if (!files || files.length === 0) {
@@ -140,6 +152,110 @@ export default function PRDetailView() {
     return new StaticTreeDataProvider<TreeData>(treeItems);
   }, [treeItems]);
 
+  // Helper functions to detect subgroups
+  const getAgentFromPR = useCallback((pr: PullRequest): string => {
+    const branchName = pr.head?.ref || '';
+    const agentMatch = branchName.match(/^([^/]+)\//); 
+    if (agentMatch) {
+      return agentMatch[1];
+    }
+    
+    const titleLower = pr.title.toLowerCase();
+    if (titleLower.includes('cursor') || branchName.includes('cursor')) {
+      return 'cursor';
+    }
+    
+    const hasAILabel = pr.labels?.some((label: any) => 
+      label.name.toLowerCase().includes('ai') || 
+      label.name.toLowerCase().includes('cursor')
+    );
+    if (hasAILabel) {
+      return 'cursor';
+    }
+    
+    return 'manual';
+  }, []);
+
+  const getTitlePrefix = useCallback((title: string): string => {
+    const withoutNumber = title.replace(/^#?\d+\s*/, '');
+    const colonMatch = withoutNumber.match(/^([^:]+):/);
+    if (colonMatch) {
+      return colonMatch[1].trim();
+    }
+    const words = withoutNumber.split(/\s+/);
+    const prefixWords = words.slice(0, Math.min(3, words.length));
+    return prefixWords.join(' ');
+  }, []);
+
+  // Function to fetch sibling PRs
+  const fetchSiblingPRs = useCallback(async (currentPR: PullRequest) => {
+    if (!owner || !repo) return;
+    
+    // First ensure we have all PRs for this repo
+    await fetchPullRequests(owner, repo);
+    
+    // Get all PRs from the store
+    const allPRs = Array.from(pullRequests.values()).filter(
+      pr => pr.base.repo.owner.login === owner && pr.base.repo.name === repo
+    );
+    
+    if (allPRs.length === 0) return;
+    
+    // Find siblings based on agent and title prefix
+    const currentAgent = getAgentFromPR(currentPR);
+    const currentPrefix = getTitlePrefix(currentPR.title);
+    
+    const siblingPRs = allPRs.filter(pr => {
+      const prAgent = getAgentFromPR(pr);
+      const prPrefix = getTitlePrefix(pr.title);
+      return prAgent === currentAgent && prPrefix === currentPrefix;
+    });
+    
+    if (siblingPRs.length > 1) {
+      console.log(`Found ${siblingPRs.length} sibling PRs for task: ${currentPrefix}`);
+      
+      // Fetch detailed data for all siblings in parallel
+      const detailPromises = siblingPRs.map(pr => 
+        fetchPRDetails(owner, repo, pr.number)
+          .catch(error => {
+            console.error(`Failed to fetch details for PR #${pr.number}:`, error);
+            return pr; // Return the basic PR data if fetch fails
+          })
+      );
+      
+      const detailedPRs = await Promise.all(detailPromises);
+      const validPRs = detailedPRs.filter(pr => pr !== null) as PullRequest[];
+      
+      // Update the navigation state with fetched siblings
+      const newNavState = {
+        siblingPRs: validPRs.map(p => ({
+          id: p.id,
+          number: p.number,
+          title: p.title,
+          state: p.state,
+          draft: p.draft,
+          merged: p.merged,
+          user: p.user,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
+          approvalStatus: p.approvalStatus,
+          additions: p.additions,
+          deletions: p.deletions,
+          changed_files: p.changed_files
+        })),
+        currentTaskGroup: currentPrefix,
+        currentAgent: currentAgent
+      };
+      
+      setNavigationState(newNavState);
+      
+      // Cache the detailed PRs in the store
+      if (validPRs.length > 0) {
+        bulkUpdatePRs(validPRs);
+      }
+    }
+  }, [owner, repo, fetchPullRequests, pullRequests, getAgentFromPR, getTitlePrefix, fetchPRDetails, bulkUpdatePRs]);
+
   useEffect(() => {
     // Load data even without token if in dev mode
     if (!window.electron || (owner && repo && number)) {
@@ -156,6 +272,47 @@ export default function PRDetailView() {
       });
     }
   }, [owner, repo, number, token]);
+  
+  // Add keyboard shortcuts for navigating between sibling PRs
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if we have sibling PRs and not typing in an input
+      if (!navigationState?.siblingPRs || navigationState.siblingPRs.length <= 1) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      const currentIndex = navigationState.siblingPRs.findIndex(p => p.number === parseInt(number || '0'));
+      
+      // Alt/Option + Arrow keys for navigation
+      if (e.altKey) {
+        if (e.key === 'ArrowLeft' && currentIndex > 0) {
+          e.preventDefault();
+          const prevPR = navigationState.siblingPRs[currentIndex - 1];
+          navigate(`/pulls/${owner}/${repo}/${prevPR.number}`, { state: navigationState });
+        } else if (e.key === 'ArrowRight' && currentIndex < navigationState.siblingPRs.length - 1) {
+          e.preventDefault();
+          const nextPR = navigationState.siblingPRs[currentIndex + 1];
+          navigate(`/pulls/${owner}/${repo}/${nextPR.number}`, { state: navigationState });
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setShowPRSwitcher(!showPRSwitcher);
+        }
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [navigationState, number, owner, repo, navigate, showPRSwitcher]);
+  
+  // Update browser history state when navigation state changes
+  useEffect(() => {
+    if (navigationState?.siblingPRs && navigationState.siblingPRs.length > 1) {
+      // Update the current history entry with the navigation state
+      window.history.replaceState(
+        { ...window.history.state, usr: navigationState },
+        ''
+      );
+    }
+  }, [navigationState]);
 
   useEffect(() => {
     if (files.length > 0 && !selectedFile) {
@@ -168,15 +325,18 @@ export default function PRDetailView() {
       if (checkoutDropdownRef.current && !checkoutDropdownRef.current.contains(event.target as Node)) {
         setShowCheckoutDropdown(false);
       }
+      if (prSwitcherRef.current && !prSwitcherRef.current.contains(event.target as Node)) {
+        setShowPRSwitcher(false);
+      }
     };
 
-    if (showCheckoutDropdown) {
+    if (showCheckoutDropdown || showPRSwitcher) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [showCheckoutDropdown]);
+  }, [showCheckoutDropdown, showPRSwitcher]);
 
   const handleFileSelect = async (file: File) => {
     setSelectedFile(file);
@@ -236,6 +396,11 @@ export default function PRDetailView() {
         setReviews(reviewsData);
         
         // Auto-select first file is now handled by useEffect
+        
+        // If we don't have navigation state yet, try to fetch sibling PRs
+        if (!navigationState?.siblingPRs) {
+          fetchSiblingPRs(prData);
+        }
       }
     } catch (error) {
       console.error('Failed to load PR data:', error);
@@ -541,6 +706,159 @@ export default function PRDetailView() {
                   theme === 'dark' ? "text-gray-500" : "text-gray-600"
                 )}>#{pr.number}</span>
               </h1>
+              
+              {/* PR Subgroup Switcher */}
+              {navigationState?.siblingPRs && navigationState.siblingPRs.length > 1 && (
+                <div className="relative ml-3" ref={prSwitcherRef}>
+                  <button
+                    onClick={() => setShowPRSwitcher(!showPRSwitcher)}
+                    className={cn(
+                      "flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                      theme === 'dark'
+                        ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                        : "bg-gray-100 hover:bg-gray-200 text-gray-700",
+                      showPRSwitcher && (theme === 'dark' ? "bg-gray-600" : "bg-gray-200")
+                    )}
+                    title={`Switch between ${navigationState.siblingPRs.length} related PRs in task: ${navigationState.currentTaskGroup}\n\nKeyboard shortcuts:\n• Alt/⌥ + ← : Previous PR\n• Alt/⌥ + → : Next PR\n• Alt/⌥ + ↓ : Open switcher`}
+                  >
+                    <span className="flex items-center">
+                      {(() => {
+                        const currentIndex = navigationState.siblingPRs.findIndex(p => p.number === pr.number);
+                        const hasPrev = currentIndex > 0;
+                        const hasNext = currentIndex < navigationState.siblingPRs.length - 1;
+                        
+                        return (
+                          <>
+                            <ChevronLeft className={cn(
+                              "w-3 h-3 mr-1",
+                              hasPrev ? "" : "opacity-30"
+                            )} />
+                            <span>
+                              {currentIndex + 1} of {navigationState.siblingPRs.length}
+                            </span>
+                            <ChevronRight className={cn(
+                              "w-3 h-3 ml-1",
+                              hasNext ? "" : "opacity-30"
+                            )} />
+                          </>
+                        );
+                      })()}
+                    </span>
+                    <ChevronDown className="w-3 h-3 ml-1" />
+                  </button>
+                  
+                  {showPRSwitcher && (
+                    <div className={cn(
+                      "absolute top-full mt-1 left-0 w-80 max-h-96 overflow-y-auto rounded-md shadow-lg z-50",
+                      theme === 'dark'
+                        ? "bg-gray-800 border border-gray-700"
+                        : "bg-white border border-gray-200"
+                    )}>
+                      <div className="p-2">
+                        <div className={cn(
+                          "text-xs font-semibold px-2 py-1 mb-1",
+                          theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                        )}>
+                          {navigationState.currentTaskGroup} ({navigationState.siblingPRs.length} PRs)
+                        </div>
+                        
+                        {navigationState.siblingPRs.map((siblingPR) => {
+                          const isCurrentPR = siblingPR.number === pr.number;
+                          const isPROpen = siblingPR.state === 'open' && !siblingPR.merged;
+                          const isPRDraft = siblingPR.draft;
+                          const isPRMerged = siblingPR.merged;
+                          
+                          return (
+                            <button
+                              key={siblingPR.id}
+                              onClick={() => {
+                                if (!isCurrentPR) {
+                                  // Navigate with the current navigation state
+                                  navigate(`/pulls/${owner}/${repo}/${siblingPR.number}`, { 
+                                    state: navigationState 
+                                  });
+                                  setShowPRSwitcher(false);
+                                }
+                              }}
+                              disabled={isCurrentPR}
+                              className={cn(
+                                "w-full text-left px-2 py-2 rounded flex items-start space-x-2 transition-colors",
+                                isCurrentPR
+                                  ? theme === 'dark'
+                                    ? "bg-blue-900/30 border border-blue-700"
+                                    : "bg-blue-50 border border-blue-200"
+                                  : theme === 'dark'
+                                    ? "hover:bg-gray-700"
+                                    : "hover:bg-gray-100"
+                              )}
+                            >
+                              <div className="flex-shrink-0 mt-0.5">
+                                {isPRDraft ? (
+                                  <GitPullRequestDraft className="w-4 h-4 text-gray-400" />
+                                ) : isPRMerged ? (
+                                  <GitMerge className="w-4 h-4 text-purple-400" />
+                                ) : isPROpen ? (
+                                  <GitPullRequest className="w-4 h-4 text-green-400" />
+                                ) : (
+                                  <X className="w-4 h-4 text-red-400" />
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center">
+                                  <span className={cn(
+                                    "text-xs font-medium truncate",
+                                    theme === 'dark' ? "text-gray-200" : "text-gray-900"
+                                  )}>
+                                    #{siblingPR.number}
+                                  </span>
+                                  {isCurrentPR && (
+                                    <span className={cn(
+                                      "ml-2 text-xs px-1.5 py-0.5 rounded",
+                                      theme === 'dark'
+                                        ? "bg-blue-800 text-blue-200"
+                                        : "bg-blue-100 text-blue-700"
+                                    )}>
+                                      Current
+                                    </span>
+                                  )}
+                                  {siblingPR.approvalStatus === 'approved' && (
+                                    <span title="Approved">
+                                      <CheckCircle2 className="w-3 h-3 text-green-500 ml-2" />
+                                    </span>
+                                  )}
+                                  {siblingPR.approvalStatus === 'changes_requested' && (
+                                    <span title="Changes requested">
+                                      <XCircle className="w-3 h-3 text-red-500 ml-2" />
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={cn(
+                                  "text-xs truncate mt-0.5",
+                                  theme === 'dark' ? "text-gray-400" : "text-gray-600"
+                                )}>
+                                  {siblingPR.title}
+                                </div>
+                                {(siblingPR.additions > 0 || siblingPR.deletions > 0) && (
+                                  <div className="flex items-center space-x-2 mt-1 text-xs">
+                                    <span className="text-green-500">+{siblingPR.additions || 0}</span>
+                                    <span className="text-red-500">−{siblingPR.deletions || 0}</span>
+                                    <span className={cn(
+                                      theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                                    )}>
+                                      {siblingPR.changed_files || 0} files
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* GitHub Link */}
               <a
