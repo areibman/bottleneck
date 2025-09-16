@@ -37,39 +37,66 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true, // Enable web security
+      allowRunningInsecureContent: false, // Prevent mixed content
+      experimentalFeatures: false, // Disable experimental web features
+      enableBlinkFeatures: '', // Disable additional Blink features
     },
     backgroundColor: '#1e1e1e',
     show: false,
   });
 
-  // Disable Content Security Policy in development mode to allow API calls
-  if (!isDev) {
-    // Only apply CSP in production
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self' https://api.github.com; " +
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-            "style-src 'self' 'unsafe-inline'; " +
-            "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; " +
-            "font-src 'self' data:; " +
-            "connect-src 'self' https://api.github.com https://github.com http://localhost:* ws://localhost:*; " +
-            "worker-src 'self' blob:;"
-          ]
+  // Configure Content Security Policy for both development and production
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    // Base CSP that works for both development and production
+    let csp = [
+      "default-src 'self'",
+      // Allow scripts from self and inline scripts (needed for Vite in dev and React)
+      // Remove unsafe-eval for security - Monaco Editor workers should work without it
+      "script-src 'self' 'unsafe-inline'",
+      // Allow inline styles (needed for styled components and CSS-in-JS)
+      "style-src 'self' 'unsafe-inline'",
+      // Allow images from GitHub and data URLs
+      "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com",
+      // Allow fonts from self and data URLs
+      "font-src 'self' data:",
+      // Allow connections to GitHub API and localhost (for development)
+      "connect-src 'self' https://api.github.com https://github.com",
+      // Allow workers for Monaco Editor
+      "worker-src 'self' blob:",
+      // Allow object and embed for potential file viewers
+      "object-src 'none'",
+      // Base URI restrictions
+      "base-uri 'self'",
+      // Form action restrictions
+      "form-action 'self'"
+    ];
+
+    // Add development-specific permissions
+    if (isDev) {
+      csp = csp.map(directive => {
+        if (directive.startsWith('connect-src')) {
+          // Allow localhost connections for development server and WebSocket
+          return directive + " http://localhost:* ws://localhost:* ws://127.0.0.1:*";
         }
+        return directive;
       });
+    }
+
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp.join('; ')],
+        // Additional security headers
+        'X-Content-Type-Options': ['nosniff'],
+        'X-Frame-Options': ['DENY'],
+        'X-XSS-Protection': ['1; mode=block'],
+        'Referrer-Policy': ['strict-origin-when-cross-origin'],
+        // Remove server information
+        'Server': [''],
+        'X-Powered-By': ['']
+      }
     });
-  } else {
-    // Remove CSP entirely in development
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      const responseHeaders = { ...details.responseHeaders };
-      delete responseHeaders['Content-Security-Policy'];
-      delete responseHeaders['content-security-policy'];
-      callback({ responseHeaders });
-    });
-  }
+  });
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
