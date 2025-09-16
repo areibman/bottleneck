@@ -62,8 +62,9 @@ export class GitHubAuth {
       modal: true,
       parent: BrowserWindow.getFocusedWindow() || undefined,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: true
       },
       autoHideMenuBar: true,
       resizable: false,
@@ -89,6 +90,23 @@ export class GitHubAuth {
       tokenWindow.on('closed', () => {
         reject(new Error('Authentication window closed'));
       });
+    });
+
+    // Handle navigation requests for auth communication
+    tokenWindow.webContents.on('will-navigate', (event, url) => {
+      event.preventDefault();
+      
+      if (url.startsWith('auth://submit?')) {
+        const urlParams = new URL(url);
+        const token = urlParams.searchParams.get('token');
+        if (token) {
+          const { ipcMain } = require('electron');
+          ipcMain.emit('token-submitted', event, decodeURIComponent(token));
+        }
+      } else if (url === 'auth://cancel') {
+        const { ipcMain } = require('electron');
+        ipcMain.emit('token-cancelled', event);
+      }
     });
 
     // Load token input HTML
@@ -176,7 +194,7 @@ export class GitHubAuth {
           <h2>Enter GitHub Personal Access Token</h2>
           <p>
             Paste your GitHub Personal Access Token below. 
-            Need to create one? <a href="#" onclick="require('electron').shell.openExternal('https://github.com/settings/tokens/new?description=Bottleneck%20App&scopes=repo,read:org,read:user,workflow'); return false;">Create token on GitHub</a>
+            Need to create one? <a href="https://github.com/settings/tokens/new?description=Bottleneck%20App&scopes=repo,read:org,read:user,workflow" target="_blank">Create token on GitHub</a>
           </p>
           <input 
             type="password" 
@@ -190,15 +208,17 @@ export class GitHubAuth {
             <button class="primary" onclick="submitToken()">Authenticate</button>
           </div>
           <script>
-            const { ipcRenderer } = require('electron');
+            // Since we can't use ipcRenderer directly, we'll use a different approach
+            // The main process will handle the communication
             
             function submitToken() {
               const token = document.getElementById('token').value;
-              ipcRenderer.send('token-submitted', token);
+              // Send message to be caught by the main process
+              window.location.href = 'auth://submit?token=' + encodeURIComponent(token);
             }
             
             function cancel() {
-              ipcRenderer.send('token-cancelled');
+              window.location.href = 'auth://cancel';
             }
           </script>
         </body>
