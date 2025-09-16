@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- CSP is handled by Electron main process -->
+    <!-- Content Security Policy - configured by Electron main process, this is a fallback -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; font-src 'self' data:; connect-src 'self' https://api.github.com https://github.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>Bottleneck - GitHub PR Review</title>
   </head>
   <body>
