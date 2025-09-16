@@ -271,6 +271,74 @@ export class GitHubAPI {
     return data as Issue;
   }
 
+  async getBranches(owner: string, repo: string) {
+    const { data } = await this.octokit.repos.listBranches({
+      owner,
+      repo,
+      per_page: 100,
+    });
+    
+    // Get additional details for each branch
+    const branchesWithDetails = await Promise.all(
+      data.map(async (branch) => {
+        try {
+          // Get the commit details for the branch
+          const { data: commit } = await this.octokit.repos.getCommit({
+            owner,
+            repo,
+            ref: branch.commit.sha,
+          });
+          
+          // Get comparison with default branch to check ahead/behind
+          let ahead = 0;
+          let behind = 0;
+          try {
+            const { data: comparison } = await this.octokit.repos.compareCommitsWithBasehead({
+              owner,
+              repo,
+              basehead: `main...${branch.name}`,
+            });
+            ahead = comparison.ahead_by;
+            behind = comparison.behind_by;
+          } catch (error) {
+            // Comparison might fail for some branches
+          }
+          
+          return {
+            name: branch.name,
+            commit: {
+              sha: branch.commit.sha,
+              author: commit.commit.author?.name || 'Unknown',
+              authorEmail: commit.commit.author?.email || '',
+              message: commit.commit.message,
+              date: commit.commit.author?.date || new Date().toISOString(),
+            },
+            protected: branch.protected,
+            ahead,
+            behind,
+          };
+        } catch (error) {
+          // If we can't get commit details, return basic info
+          return {
+            name: branch.name,
+            commit: {
+              sha: branch.commit.sha,
+              author: 'Unknown',
+              authorEmail: '',
+              message: '',
+              date: new Date().toISOString(),
+            },
+            protected: branch.protected,
+            ahead: 0,
+            behind: 0,
+          };
+        }
+      })
+    );
+    
+    return branchesWithDetails;
+  }
+
   async getIssues(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
     const { data } = await this.octokit.issues.listForRepo({
       owner,
