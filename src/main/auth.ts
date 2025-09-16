@@ -97,6 +97,7 @@ export class GitHubAuth {
       <html>
         <head>
           <title>Enter GitHub Token</title>
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'">
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -176,7 +177,7 @@ export class GitHubAuth {
           <h2>Enter GitHub Personal Access Token</h2>
           <p>
             Paste your GitHub Personal Access Token below. 
-            Need to create one? <a href="#" onclick="require('electron').shell.openExternal('https://github.com/settings/tokens/new?description=Bottleneck%20App&scopes=repo,read:org,read:user,workflow'); return false;">Create token on GitHub</a>
+            Need to create one? <a id="create-token" href="https://github.com/settings/tokens/new?description=Bottleneck%20App&scopes=repo,read:org,read:user,workflow" rel="noreferrer noopener">Create token on GitHub</a>
           </p>
           <input 
             type="password" 
@@ -190,13 +191,20 @@ export class GitHubAuth {
             <button class="primary" onclick="submitToken()">Authenticate</button>
           </div>
           <script>
-            const { ipcRenderer } = require('electron');
-            
+            const { ipcRenderer, shell } = require('electron');
+            (function(){
+              const link = document.getElementById('create-token');
+              if (link) {
+                link.addEventListener('click', function(e){
+                  e.preventDefault();
+                  shell.openExternal(link.href);
+                });
+              }
+            })();
             function submitToken() {
               const token = document.getElementById('token').value;
               ipcRenderer.send('token-submitted', token);
             }
-            
             function cancel() {
               ipcRenderer.send('token-cancelled');
             }

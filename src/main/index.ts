@@ -42,34 +42,40 @@ function createWindow() {
     show: false,
   });
 
-  // Disable Content Security Policy in development mode to allow API calls
-  if (!isDev) {
-    // Only apply CSP in production
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self' https://api.github.com; " +
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-            "style-src 'self' 'unsafe-inline'; " +
-            "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; " +
-            "font-src 'self' data:; " +
-            "connect-src 'self' https://api.github.com https://github.com http://localhost:* ws://localhost:*; " +
-            "worker-src 'self' blob:;"
-          ]
-        }
-      });
+  // Apply a secure Content Security Policy in all environments
+  // Note: avoid 'unsafe-eval'; allow websocket localhost only in development
+  const csp = isDev
+    ? [
+        "default-src 'self'; ",
+        "base-uri 'self'; ",
+        "frame-ancestors 'none'; ",
+        "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; ",
+        "font-src 'self' data:; ",
+        "style-src 'self' 'unsafe-inline'; ",
+        "script-src 'self'; ",
+        "connect-src 'self' https://api.github.com https://github.com http://localhost:* ws://localhost:*; ",
+        "worker-src 'self' blob:;"
+      ].join('')
+    : [
+        "default-src 'self' https://api.github.com; ",
+        "base-uri 'self'; ",
+        "frame-ancestors 'none'; ",
+        "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; ",
+        "font-src 'self' data:; ",
+        "style-src 'self' 'unsafe-inline'; ",
+        "script-src 'self'; ",
+        "connect-src 'self' https://api.github.com https://github.com; ",
+        "worker-src 'self' blob:;"
+      ].join('');
+
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp]
+      }
     });
-  } else {
-    // Remove CSP entirely in development
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      const responseHeaders = { ...details.responseHeaders };
-      delete responseHeaders['Content-Security-Policy'];
-      delete responseHeaders['content-security-policy'];
-      callback({ responseHeaders });
-    });
-  }
+  });
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
