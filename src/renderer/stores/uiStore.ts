@@ -14,6 +14,14 @@ interface UIState {
   wordWrap: boolean;
   theme: 'light' | 'dark';
   
+  // PR navigation state for sidebar
+  prNavigationState: {
+    siblingPRs?: any[];
+    currentTaskGroup?: string;
+    currentAgent?: string;
+    currentPRNumber?: string;
+  } | null;
+  
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   toggleRightPanel: () => void;
@@ -27,6 +35,7 @@ interface UIState {
   deselectPR: (prId: string) => void;
   clearSelection: () => void;
   setActiveView: (view: 'list' | 'detail') => void;
+  setPRNavigationState: (state: UIState['prNavigationState']) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -43,6 +52,7 @@ export const useUIStore = create<UIState>()(
   showWhitespace: false,
   wordWrap: false,
   theme: 'dark',
+  prNavigationState: null,
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarWidth: (width) => set({ sidebarWidth: width }),
@@ -72,6 +82,7 @@ export const useUIStore = create<UIState>()(
   
   clearSelection: () => set({ selectedPRs: new Set() }),
   setActiveView: (view) => set({ activeView: view }),
+  setPRNavigationState: (state) => set({ prNavigationState: state }),
     }),
     {
       name: 'ui-storage',

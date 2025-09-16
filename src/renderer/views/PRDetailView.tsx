@@ -22,8 +22,6 @@ import {
   XCircle,
   Clock,
   ExternalLink,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { DiffEditor } from '../components/DiffEditor';
 import { ConversationTab } from '../components/ConversationTab';
@@ -54,7 +52,7 @@ export default function PRDetailView() {
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = useAuthStore();
-  const { theme } = useUIStore();
+  const { theme, setPRNavigationState } = useUIStore();
   const { fetchPullRequests, pullRequests, fetchPRDetails, bulkUpdatePRs } = usePRStore();
   
   const [activeTab, setActiveTab] = useState<'conversation' | 'files'>('files');
@@ -79,8 +77,6 @@ export default function PRDetailView() {
   const [currentUser, setCurrentUser] = useState<{ login: string; avatar_url?: string } | null>(null);
   const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
   const [requestChangesFeedback, setRequestChangesFeedback] = useState('');
-  const [showPRSwitcher, setShowPRSwitcher] = useState(false);
-  const prSwitcherRef = useRef<HTMLDivElement>(null);
   
   // Extract sibling PRs from navigation state
   const [navigationState, setNavigationState] = useState<{
@@ -255,6 +251,20 @@ export default function PRDetailView() {
       }
     }
   }, [owner, repo, fetchPullRequests, pullRequests, getAgentFromPR, getTitlePrefix, fetchPRDetails, bulkUpdatePRs]);
+  
+  // Update UI store with navigation state when PR changes
+  useEffect(() => {
+    if (navigationState && pr) {
+      setPRNavigationState({
+        ...navigationState,
+        currentPRNumber: pr.number.toString()
+      });
+    }
+    return () => {
+      // Clear navigation state when leaving PR detail view
+      setPRNavigationState(null);
+    };
+  }, [navigationState, pr, setPRNavigationState]);
 
   useEffect(() => {
     // Load data even without token if in dev mode
@@ -292,16 +302,13 @@ export default function PRDetailView() {
           e.preventDefault();
           const nextPR = navigationState.siblingPRs[currentIndex + 1];
           navigate(`/pulls/${owner}/${repo}/${nextPR.number}`, { state: navigationState });
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setShowPRSwitcher(!showPRSwitcher);
         }
       }
     };
     
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [navigationState, number, owner, repo, navigate, showPRSwitcher]);
+  }, [navigationState, number, owner, repo, navigate]);
   
   // Update browser history state when navigation state changes
   useEffect(() => {
@@ -325,18 +332,15 @@ export default function PRDetailView() {
       if (checkoutDropdownRef.current && !checkoutDropdownRef.current.contains(event.target as Node)) {
         setShowCheckoutDropdown(false);
       }
-      if (prSwitcherRef.current && !prSwitcherRef.current.contains(event.target as Node)) {
-        setShowPRSwitcher(false);
-      }
     };
 
-    if (showCheckoutDropdown || showPRSwitcher) {
+    if (showCheckoutDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [showCheckoutDropdown, showPRSwitcher]);
+  }, [showCheckoutDropdown]);
 
   const handleFileSelect = async (file: File) => {
     setSelectedFile(file);
@@ -706,159 +710,6 @@ export default function PRDetailView() {
                   theme === 'dark' ? "text-gray-500" : "text-gray-600"
                 )}>#{pr.number}</span>
               </h1>
-              
-              {/* PR Subgroup Switcher */}
-              {navigationState?.siblingPRs && navigationState.siblingPRs.length > 1 && (
-                <div className="relative ml-3" ref={prSwitcherRef}>
-                  <button
-                    onClick={() => setShowPRSwitcher(!showPRSwitcher)}
-                    className={cn(
-                      "flex items-center space-x-1 px-2 py-1 rounded text-xs font-medium transition-colors",
-                      theme === 'dark'
-                        ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                        : "bg-gray-100 hover:bg-gray-200 text-gray-700",
-                      showPRSwitcher && (theme === 'dark' ? "bg-gray-600" : "bg-gray-200")
-                    )}
-                    title={`Switch between ${navigationState.siblingPRs.length} related PRs in task: ${navigationState.currentTaskGroup}\n\nKeyboard shortcuts:\n• Alt/⌥ + ← : Previous PR\n• Alt/⌥ + → : Next PR\n• Alt/⌥ + ↓ : Open switcher`}
-                  >
-                    <span className="flex items-center">
-                      {(() => {
-                        const currentIndex = navigationState.siblingPRs.findIndex(p => p.number === pr.number);
-                        const hasPrev = currentIndex > 0;
-                        const hasNext = currentIndex < navigationState.siblingPRs.length - 1;
-                        
-                        return (
-                          <>
-                            <ChevronLeft className={cn(
-                              "w-3 h-3 mr-1",
-                              hasPrev ? "" : "opacity-30"
-                            )} />
-                            <span>
-                              {currentIndex + 1} of {navigationState.siblingPRs.length}
-                            </span>
-                            <ChevronRight className={cn(
-                              "w-3 h-3 ml-1",
-                              hasNext ? "" : "opacity-30"
-                            )} />
-                          </>
-                        );
-                      })()}
-                    </span>
-                    <ChevronDown className="w-3 h-3 ml-1" />
-                  </button>
-                  
-                  {showPRSwitcher && (
-                    <div className={cn(
-                      "absolute top-full mt-1 left-0 w-80 max-h-96 overflow-y-auto rounded-md shadow-lg z-50",
-                      theme === 'dark'
-                        ? "bg-gray-800 border border-gray-700"
-                        : "bg-white border border-gray-200"
-                    )}>
-                      <div className="p-2">
-                        <div className={cn(
-                          "text-xs font-semibold px-2 py-1 mb-1",
-                          theme === 'dark' ? "text-gray-400" : "text-gray-600"
-                        )}>
-                          {navigationState.currentTaskGroup} ({navigationState.siblingPRs.length} PRs)
-                        </div>
-                        
-                        {navigationState.siblingPRs.map((siblingPR) => {
-                          const isCurrentPR = siblingPR.number === pr.number;
-                          const isPROpen = siblingPR.state === 'open' && !siblingPR.merged;
-                          const isPRDraft = siblingPR.draft;
-                          const isPRMerged = siblingPR.merged;
-                          
-                          return (
-                            <button
-                              key={siblingPR.id}
-                              onClick={() => {
-                                if (!isCurrentPR) {
-                                  // Navigate with the current navigation state
-                                  navigate(`/pulls/${owner}/${repo}/${siblingPR.number}`, { 
-                                    state: navigationState 
-                                  });
-                                  setShowPRSwitcher(false);
-                                }
-                              }}
-                              disabled={isCurrentPR}
-                              className={cn(
-                                "w-full text-left px-2 py-2 rounded flex items-start space-x-2 transition-colors",
-                                isCurrentPR
-                                  ? theme === 'dark'
-                                    ? "bg-blue-900/30 border border-blue-700"
-                                    : "bg-blue-50 border border-blue-200"
-                                  : theme === 'dark'
-                                    ? "hover:bg-gray-700"
-                                    : "hover:bg-gray-100"
-                              )}
-                            >
-                              <div className="flex-shrink-0 mt-0.5">
-                                {isPRDraft ? (
-                                  <GitPullRequestDraft className="w-4 h-4 text-gray-400" />
-                                ) : isPRMerged ? (
-                                  <GitMerge className="w-4 h-4 text-purple-400" />
-                                ) : isPROpen ? (
-                                  <GitPullRequest className="w-4 h-4 text-green-400" />
-                                ) : (
-                                  <X className="w-4 h-4 text-red-400" />
-                                )}
-                              </div>
-                              
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center">
-                                  <span className={cn(
-                                    "text-xs font-medium truncate",
-                                    theme === 'dark' ? "text-gray-200" : "text-gray-900"
-                                  )}>
-                                    #{siblingPR.number}
-                                  </span>
-                                  {isCurrentPR && (
-                                    <span className={cn(
-                                      "ml-2 text-xs px-1.5 py-0.5 rounded",
-                                      theme === 'dark'
-                                        ? "bg-blue-800 text-blue-200"
-                                        : "bg-blue-100 text-blue-700"
-                                    )}>
-                                      Current
-                                    </span>
-                                  )}
-                                  {siblingPR.approvalStatus === 'approved' && (
-                                    <span title="Approved">
-                                      <CheckCircle2 className="w-3 h-3 text-green-500 ml-2" />
-                                    </span>
-                                  )}
-                                  {siblingPR.approvalStatus === 'changes_requested' && (
-                                    <span title="Changes requested">
-                                      <XCircle className="w-3 h-3 text-red-500 ml-2" />
-                                    </span>
-                                  )}
-                                </div>
-                                <div className={cn(
-                                  "text-xs truncate mt-0.5",
-                                  theme === 'dark' ? "text-gray-400" : "text-gray-600"
-                                )}>
-                                  {siblingPR.title}
-                                </div>
-                                {(siblingPR.additions > 0 || siblingPR.deletions > 0) && (
-                                  <div className="flex items-center space-x-2 mt-1 text-xs">
-                                    <span className="text-green-500">+{siblingPR.additions || 0}</span>
-                                    <span className="text-red-500">−{siblingPR.deletions || 0}</span>
-                                    <span className={cn(
-                                      theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                                    )}>
-                                      {siblingPR.changed_files || 0} files
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
               
               {/* GitHub Link */}
               <a
