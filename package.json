@@ -58,6 +58,7 @@
     "@octokit/auth-oauth-app": "^7.0.1",
     "@octokit/auth-oauth-device": "^6.0.1",
     "@octokit/rest": "^20.0.2",
+    "@rollup/rollup-linux-x64-gnu": "^4.50.2",
     "@tanstack/react-query": "^5.17.9",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@xterm/addon-fit": "^0.10.0",
