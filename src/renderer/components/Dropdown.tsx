@@ -6,6 +6,7 @@ import { cn } from "../utils/cn";
 export interface DropdownOption<T extends string = string> {
     value: T;
     label: string;
+    icon?: React.ReactNode;
 }
 
 interface DropdownProps<T extends string> {
@@ -63,7 +64,8 @@ export default function Dropdown<T extends string>({
                     buttonClassName,
                 )}
             >
-                <span className="truncate">
+                <span className="truncate flex items-center">
+                    {selectedOption?.icon && <span className="mr-2">{selectedOption.icon}</span>}
                     {labelPrefix}
                     {selectedOption ? selectedOption.label : ""}
                 </span>
@@ -94,6 +96,7 @@ export default function Dropdown<T extends string>({
                                     (theme === "dark" ? "bg-gray-700" : "bg-gray-100"),
                                 )}
                             >
+                                {option.icon && <span className="mr-2">{option.icon}</span>}
                                 {option.label}
                             </div>
                         ))}

@@ -141,32 +141,50 @@ export default function IssuesView() {
   }, [selectedRepo, fetchIssues]);
 
   const authors = useMemo(() => {
-    const authorSet = new Set<string>();
+    const authorMap = new Map<string, { login: string; avatar_url: string }>();
     issues.forEach((issue) => {
-      authorSet.add(issue.user.login);
+      authorMap.set(issue.user.login, issue.user);
     });
+
     const authorOptions: DropdownOption<string>[] = [
       { value: "all", label: "All Authors" },
-      ...Array.from(authorSet).map((author) => ({
-        value: author,
-        label: author,
+      ...Array.from(authorMap.values()).map((author) => ({
+        value: author.login,
+        label: author.login,
+        icon: (
+          <img
+            src={author.avatar_url}
+            alt={author.login}
+            className="w-4 h-4 rounded-full"
+          />
+        ),
       })),
     ];
     return authorOptions;
   }, [issues]);
 
   const agents = useMemo(() => {
-    const agentSet = new Set<string>();
+    const agentMap = new Map<string, { login: string; avatar_url: string }>();
     issues.forEach((issue) => {
       issue.assignees.forEach((assignee) => {
-        agentSet.add(assignee.login);
+        agentMap.set(assignee.login, assignee);
       });
     });
 
     const agentOptions: DropdownOption<string>[] = [
       { value: "all", label: "All Agents" },
       { value: "unassigned", label: "Unassigned" },
-      ...Array.from(agentSet).map((agent) => ({ value: agent, label: agent })),
+      ...Array.from(agentMap.values()).map((agent) => ({
+        value: agent.login,
+        label: agent.login,
+        icon: (
+          <img
+            src={agent.avatar_url}
+            alt={agent.login}
+            className="w-4 h-4 rounded-full"
+          />
+        ),
+      })),
     ];
 
     return agentOptions;
