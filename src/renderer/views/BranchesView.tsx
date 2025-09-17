@@ -4,7 +4,6 @@ import {
   Trash2,
   GitMerge,
   RefreshCw,
-  Search,
   ChevronDown,
   ChevronRight,
   User,
@@ -12,9 +11,10 @@ import {
   GitCommit,
   ArrowUp,
   ArrowDown,
-  Check,
   Shield,
   Bot,
+  GitPullRequest,
+  X,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useUIStore } from "../stores/uiStore";
@@ -22,6 +22,7 @@ import { usePRStore } from "../stores/prStore";
 import { useAuthStore } from "../stores/authStore";
 import { useBranchStore } from "../stores/branchStore";
 import { formatDistanceToNow } from "date-fns";
+import { GitHubAPI } from "../services/github";
 
 // Re-export Branch type from store for use in component
 interface Branch {
@@ -41,7 +42,7 @@ interface Branch {
 
 export default function BranchesView() {
   const { theme } = useUIStore();
-  const { selectedRepo } = usePRStore();
+  const { selectedRepo, pullRequests } = usePRStore();
   const { token } = useAuthStore();
   const { branches: branchesMap, loading, fetchBranches } = useBranchStore();
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(
@@ -57,6 +58,13 @@ export default function BranchesView() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
+  const [showCreatePRModal, setShowCreatePRModal] = useState(false);
+  const [selectedBranchForPR, setSelectedBranchForPR] = useState<Branch | null>(null);
+  const [prTitle, setPRTitle] = useState("");
+  const [prBody, setPRBody] = useState("");
+  const [isDraft, setIsDraft] = useState(false);
+  const [isCreatingPR, setIsCreatingPR] = useState(false);
+  const [createPRError, setCreatePRError] = useState<string | null>(null);
 
   // Get branches for current repo from the store
   const branches = useMemo(() => {
@@ -64,6 +72,25 @@ export default function BranchesView() {
     const repoKey = `${selectedRepo.owner}/${selectedRepo.name}`;
     return branchesMap.get(repoKey) || [];
   }, [branchesMap, selectedRepo]);
+
+  // Create a map of branch names to their associated PRs
+  const branchToPRMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (!selectedRepo) return map;
+
+    Array.from(pullRequests.values()).forEach(pr => {
+      // Check if this PR is for the current repo
+      if (pr.base?.repo?.owner?.login === selectedRepo.owner &&
+        pr.base?.repo?.name === selectedRepo.name) {
+        // Map the head branch to this PR
+        if (pr.head?.ref) {
+          map.set(pr.head.ref, pr);
+        }
+      }
+    });
+
+    return map;
+  }, [pullRequests, selectedRepo]);
 
   // Fetch branches when repo changes
   useEffect(() => {
@@ -248,6 +275,71 @@ export default function BranchesView() {
     setSelectedBranches(new Set());
   }, [selectedBranches]);
 
+  const handleOpenCreatePR = useCallback((branch: Branch) => {
+    setSelectedBranchForPR(branch);
+    // Generate default title from branch name
+    const branchName = branch.name;
+    // Remove common prefixes and format
+    const title = branchName
+      .replace(/^(feat|fix|chore|docs|refactor|test|style|cursor)[\/\-]/, '')
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, (l) => l.toUpperCase());
+    setPRTitle(title);
+    // Use the latest commit message as default body
+    setPRBody(branch.commit.message || "");
+    setIsDraft(false);
+    setCreatePRError(null);
+    setShowCreatePRModal(true);
+  }, []);
+
+  const handleCreatePR = useCallback(async () => {
+    if (!selectedBranchForPR || !selectedRepo || !token) return;
+
+    setIsCreatingPR(true);
+    setCreatePRError(null);
+
+    try {
+      const api = new GitHubAPI(token);
+      await api.createPullRequest(
+        selectedRepo.owner,
+        selectedRepo.name,
+        prTitle,
+        prBody,
+        selectedBranchForPR.name,
+        selectedRepo.default_branch,
+        isDraft
+      );
+
+      // Close modal and reset
+      setShowCreatePRModal(false);
+      setSelectedBranchForPR(null);
+      setPRTitle("");
+      setPRBody("");
+      setIsDraft(false);
+
+      // Refresh the PR list to update the branch-to-PR mapping
+      const { fetchPullRequests } = usePRStore.getState();
+      await fetchPullRequests(selectedRepo.owner, selectedRepo.name, true);
+
+      // Optionally refresh the branch list
+      handleRefresh();
+    } catch (error: any) {
+      console.error("Failed to create PR:", error);
+
+      // Check if it's because a PR already exists
+      if (error.message && error.message.includes("A pull request already exists")) {
+        setCreatePRError("A pull request already exists for this branch. Please refresh to see it.");
+        // Refresh PRs to update the mapping
+        const { fetchPullRequests } = usePRStore.getState();
+        fetchPullRequests(selectedRepo.owner, selectedRepo.name, true);
+      } else {
+        setCreatePRError(error.message || "Failed to create pull request");
+      }
+    } finally {
+      setIsCreatingPR(false);
+    }
+  }, [selectedBranchForPR, selectedRepo, token, prTitle, prBody, isDraft, handleRefresh]);
+
   // Filtering and sorting
   const filteredAndSortedBranches = useMemo(() => {
     let result = branches.filter((branch) => {
@@ -359,6 +451,7 @@ export default function BranchesView() {
   }) => {
     const isSelected = selectedBranches.has(branch.name);
     const status = getBranchStatus(branch);
+    const existingPR = branchToPRMap.get(branch.name);
 
     return (
       <div
@@ -431,6 +524,25 @@ export default function BranchesView() {
                   Protected
                 </span>
               )}
+              {existingPR && (
+                <a
+                  href={`#/pr/${selectedRepo?.owner}/${selectedRepo?.name}/${existingPR.number}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 transition-colors",
+                    existingPR.state === 'open'
+                      ? existingPR.draft
+                        ? "bg-gray-900 text-gray-300 hover:bg-gray-800"
+                        : "bg-green-900 text-green-300 hover:bg-green-800"
+                      : existingPR.merged
+                        ? "bg-purple-900 text-purple-300 hover:bg-purple-800"
+                        : "bg-red-900 text-red-300 hover:bg-red-800"
+                  )}
+                  title={`View PR #${existingPR.number}`}
+                >
+                  PR #{existingPR.number}
+                </a>
+              )}
             </div>
 
             <div
@@ -487,6 +599,26 @@ export default function BranchesView() {
 
         {/* Actions */}
         <div className="flex items-center space-x-1 ml-2 flex-shrink-0">
+          {!branch.current && (!existingPR || (existingPR && existingPR.state === 'closed' && !existingPR.merged)) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenCreatePR(branch);
+              }}
+              className={cn(
+                "flex items-center space-x-1 px-2 py-1 rounded text-xs transition-colors",
+                theme === "dark"
+                  ? "text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                  : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              )}
+              title={existingPR ? "Reopen pull request" : "Create pull request"}
+            >
+              <GitPullRequest className="w-3 h-3" />
+              <span className="text-[10px] font-medium">
+                {existingPR ? "Reopen PR" : "Create PR"}
+              </span>
+            </button>
+          )}
           {!branch.protected && !branch.current && (
             <button
               onClick={(e) => {
@@ -505,516 +637,325 @@ export default function BranchesView() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div
-        className={cn(
-          "p-4 border-b",
-          theme === "dark"
-            ? "bg-gray-800 border-gray-700"
-            : "bg-gray-50 border-gray-200",
-        )}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <h1 className="text-lg font-semibold flex items-center">
-              <GitBranch className="w-4 h-4 mr-2" />
-              Branches
-              {selectedRepo && (
-                <>
+    <>
+      <div className="flex flex-col h-full">
+        {/* Header */}
+        <div
+          className={cn(
+            "p-4 border-b",
+            theme === "dark"
+              ? "bg-gray-800 border-gray-700"
+              : "bg-gray-50 border-gray-200",
+          )}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <h1 className="text-lg font-semibold flex items-center">
+                <GitBranch className="w-4 h-4 mr-2" />
+                Branches
+                {selectedRepo && (
+                  <>
+                    <span
+                      className={cn(
+                        "ml-2 text-xs",
+                        theme === "dark" ? "text-gray-400" : "text-gray-600",
+                      )}
+                    >
+                      in {selectedRepo.name}
+                    </span>
+                    <span
+                      className={cn(
+                        "ml-2 text-xs",
+                        theme === "dark" ? "text-gray-500" : "text-gray-600",
+                      )}
+                    >
+                      ({filteredAndSortedBranches.length})
+                    </span>
+                  </>
+                )}
+              </h1>
+
+              {/* Bulk actions */}
+              {selectedBranches.size > 0 && (
+                <div className="ml-4 flex items-center space-x-2">
                   <span
                     className={cn(
-                      "ml-2 text-xs",
-                      theme === "dark" ? "text-gray-400" : "text-gray-600",
+                      "text-xs",
+                      theme === "dark" ? "text-gray-300" : "text-gray-600",
                     )}
                   >
-                    in {selectedRepo.name}
+                    {selectedBranches.size} selected
                   </span>
-                  <span
+
+                  <button
+                    onClick={async () => {
+                      // Create PRs for all selected branches that don't already have open/merged PRs
+                      const branchesToPromote = Array.from(selectedBranches)
+                        .map(name => branches.find(b => b.name === name))
+                        .filter(b => {
+                          if (!b || b.current) return false;
+                          const pr = branchToPRMap.get(b.name);
+                          // Allow creating PR if no PR exists or if PR is closed (not merged)
+                          return !pr || (pr.state === 'closed' && !pr.merged);
+                        }) as Branch[];
+
+                      if (branchesToPromote.length === 1) {
+                        handleOpenCreatePR(branchesToPromote[0]);
+                      } else if (branchesToPromote.length > 1) {
+                        // For multiple branches, create draft PRs automatically
+                        if (confirm(`Create ${branchesToPromote.length} draft pull requests?`)) {
+                          if (!token) {
+                            alert('Not authenticated');
+                            return;
+                          }
+                          const api = new GitHubAPI(token);
+                          let successCount = 0;
+                          for (const branch of branchesToPromote) {
+                            try {
+                              const title = branch.name
+                                .replace(/^(feat|fix|chore|docs|refactor|test|style|cursor)[\\/\\-]/, '')
+                                .replace(/[-_]/g, ' ')
+                                .replace(/\\b\\w/g, (l) => l.toUpperCase());
+                              await api.createPullRequest(
+                                selectedRepo!.owner,
+                                selectedRepo!.name,
+                                title,
+                                branch.commit.message || "",
+                                branch.name,
+                                selectedRepo!.default_branch,
+                                true // Always draft for bulk creation
+                              );
+                              successCount++;
+                            } catch (error: any) {
+                              // Skip if PR already exists
+                              if (!error.message?.includes("A pull request already exists")) {
+                                console.error(`Failed to create PR for ${branch.name}:`, error);
+                              }
+                            }
+                          }
+                          if (successCount > 0) {
+                            setSelectedBranches(new Set());
+                            // Refresh PRs to update the mapping
+                            const { fetchPullRequests } = usePRStore.getState();
+                            await fetchPullRequests(selectedRepo!.owner, selectedRepo!.name, true);
+                            handleRefresh();
+                          } else if (branchesToPromote.length > 0) {
+                            alert('All selected branches already have pull requests.');
+                          }
+                        }
+                      }
+                    }}
                     className={cn(
-                      "ml-2 text-xs",
-                      theme === "dark" ? "text-gray-500" : "text-gray-600",
+                      "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                      theme === "dark"
+                        ? "text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                        : "text-blue-600 hover:text-blue-700 hover:bg-blue-50",
                     )}
                   >
-                    ({filteredAndSortedBranches.length})
-                  </span>
-                </>
+                    Create PR{selectedBranches.size > 1 ? 's' : ''}
+                  </button>
+
+                  <button
+                    onClick={handleDeleteSelected}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                      theme === "dark"
+                        ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                        : "text-red-600 hover:text-red-700 hover:bg-red-50",
+                    )}
+                  >
+                    Delete
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedBranches(new Set())}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                      theme === "dark"
+                        ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                        : "text-gray-600 hover:text-gray-700 hover:bg-gray-100",
+                    )}
+                  >
+                    Clear
+                  </button>
+                </div>
               )}
-            </h1>
-
-            {/* Bulk actions */}
-            {selectedBranches.size > 0 && (
-              <div className="ml-4 flex items-center space-x-2">
-                <span
-                  className={cn(
-                    "text-xs",
-                    theme === "dark" ? "text-gray-300" : "text-gray-600",
-                  )}
-                >
-                  {selectedBranches.size} selected
-                </span>
-
-                <button
-                  onClick={handleDeleteSelected}
-                  className={cn(
-                    "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
-                    theme === "dark"
-                      ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                      : "text-red-600 hover:text-red-700 hover:bg-red-50",
-                  )}
-                >
-                  Delete
-                </button>
-
-                <button
-                  onClick={() => setSelectedBranches(new Set())}
-                  className={cn(
-                    "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
-                    theme === "dark"
-                      ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
-                      : "text-gray-600 hover:text-gray-700 hover:bg-gray-100",
-                  )}
-                >
-                  Clear
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {selectedRepo ? (
-              <>
-                {/* Sort and Group dropdowns */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className={cn(
-                    "text-xs px-2 py-1 rounded-lg transition-colors border",
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 text-white"
-                      : "bg-white border-gray-200 text-gray-900",
-                  )}
-                >
-                  <option value="updated">Recently updated</option>
-                  <option value="name">Name</option>
-                  <option value="ahead-behind">Ahead/Behind</option>
-                </select>
-
-                <select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value as any)}
-                  className={cn(
-                    "text-xs px-2 py-1 rounded-lg transition-colors border",
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 text-white"
-                      : "bg-white border-gray-200 text-gray-900",
-                  )}
-                >
-                  <option value="none">No grouping</option>
-                  <option value="author">By author</option>
-                  <option value="status">By status</option>
-                  <option value="prefix">By prefix</option>
-                  <option value="protected">By protection</option>
-                </select>
-
-                <div className="h-6 w-px bg-gray-600" />
-
-                <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="btn btn-ghost p-2"
-                  title="Refresh branches"
-                >
-                  <RefreshCw
-                    className={cn("w-4 h-4", loading && "animate-spin")}
-                  />
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        {selectedRepo && (
-          <>
-            {/* Search */}
-            <div className="flex items-center space-x-3 mt-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="Search branches by name, author, or commit message..."
-                  className={cn(
-                    "pl-8 pr-3 py-1.5 w-full rounded-lg border transition-colors text-xs",
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                      : "bg-white border-gray-200 text-gray-900 placeholder-gray-500",
-                  )}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
             </div>
-          </>
-        )}
-      </div>
 
-      {/* Branch list */}
-      {!selectedRepo ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <GitBranch className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-            <p className="text-gray-400 mb-4">No repository selected</p>
-            <p className="text-sm text-gray-500">
-              Select a repository from the dropdown above to view branches
-            </p>
+            <div className="flex items-center space-x-2">
+              {selectedRepo ? (
+                <>
+                  {/* Sort and Group dropdowns */}
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className={cn(
+                      "text-xs px-2 py-1 rounded-lg transition-colors border",
+                      theme === "dark"
+                        ? "bg-gray-700 border-gray-600 text-white"
+                        : "bg-white border-gray-200 text-gray-900",
+                    )}
+                  >
+                    <option value="updated">Recently updated</option>
+                    <option value="name">Name</option>
+                    <option value="ahead-behind">Ahead/Behind</option>
+                  </select>
+
+                  <select
+                    value={groupBy}
+                    onChange={(e) => setGroupBy(e.target.value as any)}
+                    className={cn(
+                      "text-xs px-2 py-1 rounded-lg transition-colors border",
+                      theme === "dark"
+                        ? "bg-gray-700 border-gray-600 text-white"
+                        : "bg-white border-gray-200 text-gray-900",
+                    )}
+                  >
+                    <option value="none">No grouping</option>
+                    <option value="author">By author</option>
+                    <option value="status">By status</option>
+                    <option value="prefix">By prefix</option>
+                    <option value="protected">By protection</option>
+                  </select>
+
+                  <div className="h-6 w-px bg-gray-600" />
+
+                  <button
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className="btn btn-ghost p-2"
+                    title="Refresh branches"
+                  >
+                    <RefreshCw
+                      className={cn("w-4 h-4", loading && "animate-spin")}
+                    />
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
+
+          {selectedRepo && (
+            <>
+              {/* Search */}
+              <div className="flex items-center space-x-3 mt-3">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search branches by name, author, or commit message..."
+                    className={cn(
+                      "pl-8 pr-3 py-1.5 w-full rounded-lg border transition-colors text-xs",
+                      theme === "dark"
+                        ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                        : "bg-white border-gray-200 text-gray-900 placeholder-gray-500",
+                    )}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
+
+        {/* Branch list */}
+        {!selectedRepo ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <GitBranch className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+              <p className="text-gray-400 mb-4">No repository selected</p>
+              <p className="text-sm text-gray-500">
+                Select a repository from the dropdown above to view branches
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div
+                  className={cn(
+                    theme === "dark" ? "text-gray-400" : "text-gray-600",
+                  )}
+                >
+                  Loading branches...
+                </div>
+              </div>
+            ) : filteredAndSortedBranches.length === 0 ? (
               <div
                 className={cn(
+                  "flex flex-col items-center justify-center h-64",
                   theme === "dark" ? "text-gray-400" : "text-gray-600",
                 )}
               >
-                Loading branches...
+                <GitBranch className="w-12 h-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium">No branches found</p>
+                <p className="text-sm mt-2">
+                  Try adjusting your filters or search query
+                </p>
               </div>
-            </div>
-          ) : filteredAndSortedBranches.length === 0 ? (
-            <div
-              className={cn(
-                "flex flex-col items-center justify-center h-64",
-                theme === "dark" ? "text-gray-400" : "text-gray-600",
-              )}
-            >
-              <GitBranch className="w-12 h-12 mb-4 opacity-50" />
-              <p className="text-lg font-medium">No branches found</p>
-              <p className="text-sm mt-2">
-                Try adjusting your filters or search query
-              </p>
-            </div>
-          ) : groupBy === "none" ||
-            Object.keys(groupedBranches).includes("ungrouped") ? (
-            // No grouping - flat list
-            <div
-              className={cn(
-                "divide-y",
-                theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-              )}
-            >
-              {((groupedBranches as any).ungrouped || []).map(
-                (branch: Branch) => (
-                  <BranchItem key={branch.name} branch={branch} />
-                ),
-              )}
-            </div>
-          ) : groupBy === "author" ? (
-            // Author -> Feature nested grouping (matching PR page style)
-            <div
-              className={cn(
-                "divide-y",
-                theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-              )}
-            >
-              {Object.entries(
-                groupedBranches as Record<string, Record<string, Branch[]>>,
-              ).map(([authorName, features]) => {
-                const authorKey = `author-${authorName}`;
-                const isAuthorCollapsed = collapsedGroups.has(authorKey);
-                const totalBranches = Object.values(features).reduce(
-                  (sum: number, branches: Branch[]) => sum + branches.length,
-                  0,
-                );
+            ) : groupBy === "none" ||
+              Object.keys(groupedBranches).includes("ungrouped") ? (
+              // No grouping - flat list
+              <div
+                className={cn(
+                  "divide-y",
+                  theme === "dark" ? "divide-gray-700" : "divide-gray-200",
+                )}
+              >
+                {((groupedBranches as any).ungrouped || []).map(
+                  (branch: Branch) => (
+                    <BranchItem key={branch.name} branch={branch} />
+                  ),
+                )}
+              </div>
+            ) : groupBy === "author" ? (
+              // Author -> Feature nested grouping (matching PR page style)
+              <div
+                className={cn(
+                  "divide-y",
+                  theme === "dark" ? "divide-gray-700" : "divide-gray-200",
+                )}
+              >
+                {Object.entries(
+                  groupedBranches as Record<string, Record<string, Branch[]>>,
+                ).map(([authorName, features]) => {
+                  const authorKey = `author-${authorName}`;
+                  const isAuthorCollapsed = collapsedGroups.has(authorKey);
+                  const totalBranches = Object.values(features).reduce(
+                    (sum: number, branches: Branch[]) => sum + branches.length,
+                    0,
+                  );
 
-                // Check if this author creates AI-generated branches
-                const authorBranches: Branch[] = [];
-                Object.values(features).forEach((branchList) => {
-                  authorBranches.push(...branchList);
-                });
-                const hasAIBranches = authorBranches.some((branch) =>
-                  isAIGenerated(branch),
-                );
-
-                // Get all branch names in this author group
-                const allAuthorBranchNames: string[] = [];
-                Object.values(features).forEach((branches: Branch[]) => {
-                  branches.forEach((branch: Branch) => {
-                    allAuthorBranchNames.push(branch.name);
+                  // Check if this author creates AI-generated branches
+                  const authorBranches: Branch[] = [];
+                  Object.values(features).forEach((branchList) => {
+                    authorBranches.push(...branchList);
                   });
-                });
-                const allAuthorSelected = allAuthorBranchNames.every((name) =>
-                  selectedBranches.has(name),
-                );
-                const someAuthorSelected = allAuthorBranchNames.some((name) =>
-                  selectedBranches.has(name),
-                );
-
-                return (
-                  <div key={authorName}>
-                    {/* Author Group Header */}
-                    <div
-                      className={cn(
-                        "px-3 py-1.5 flex items-center justify-between",
-                        theme === "dark"
-                          ? "bg-gray-750 hover:bg-gray-700"
-                          : "bg-gray-100 hover:bg-gray-200",
-                      )}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <button
-                          className="p-0.5 hover:bg-gray-600 rounded"
-                          onClick={() => toggleGroup(authorKey)}
-                        >
-                          {isAuthorCollapsed ? (
-                            <ChevronRight className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
-                        <input
-                          type="checkbox"
-                          checked={allAuthorSelected}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            allAuthorBranchNames.forEach((name) => {
-                              handleBranchSelect(name, e.target.checked);
-                            });
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className={cn(
-                            "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
-                            theme === "dark"
-                              ? "border-gray-600 bg-gray-700 text-blue-500"
-                              : "border-gray-300 bg-white text-blue-600",
-                          )}
-                          ref={(el) => {
-                            if (el) {
-                              el.indeterminate =
-                                someAuthorSelected && !allAuthorSelected;
-                            }
-                          }}
-                        />
-                        {hasAIBranches ? (
-                          <Bot className="w-4 h-4 text-purple-400" />
-                        ) : (
-                          <User className="w-4 h-4 text-blue-400" />
-                        )}
-                        <span
-                          className="font-medium text-xs cursor-pointer"
-                          onClick={() => toggleGroup(authorKey)}
-                        >
-                          {authorName}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[10px]",
-                            theme === "dark"
-                              ? "text-gray-400"
-                              : "text-gray-600",
-                          )}
-                        >
-                          ({totalBranches})
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Author Group Content - Feature Sub-groups */}
-                    {!isAuthorCollapsed && (
-                      <div>
-                        {Object.entries(features).map(
-                          ([featureName, featureBranches]) => {
-                            const featureKey = `${authorKey}-${featureName}`;
-                            const isFeatureCollapsed =
-                              collapsedGroups.has(featureKey);
-                            const hasMultipleBranches =
-                              featureBranches.length > 1;
-
-                            if (!hasMultipleBranches) {
-                              // Single branch - no sub-grouping needed
-                              return featureBranches.map((branch) => (
-                                <BranchItem
-                                  key={branch.name}
-                                  branch={branch}
-                                  isNested={true}
-                                />
-                              ));
-                            }
-
-                            // Check if all branches in this feature are selected
-                            const featureBranchNames = featureBranches.map(
-                              (b) => b.name,
-                            );
-                            const allFeatureSelected = featureBranchNames.every(
-                              (name) => selectedBranches.has(name),
-                            );
-                            const someFeatureSelected = featureBranchNames.some(
-                              (name) => selectedBranches.has(name),
-                            );
-
-                            return (
-                              <div key={featureName}>
-                                {/* Feature Sub-group Header */}
-                                <div
-                                  className={cn(
-                                    "pl-6 pr-3 py-1.5 flex items-center justify-between border-l-2",
-                                    theme === "dark"
-                                      ? "bg-gray-800 hover:bg-gray-750 border-gray-600"
-                                      : "bg-gray-50 hover:bg-gray-100 border-gray-300",
-                                  )}
-                                >
-                                  <div className="flex items-center space-x-2">
-                                    <button
-                                      className="p-0.5 hover:bg-gray-600 rounded"
-                                      onClick={() => toggleGroup(featureKey)}
-                                    >
-                                      {isFeatureCollapsed ? (
-                                        <ChevronRight className="w-3 h-3" />
-                                      ) : (
-                                        <ChevronDown className="w-3 h-3" />
-                                      )}
-                                    </button>
-                                    <input
-                                      type="checkbox"
-                                      checked={allFeatureSelected}
-                                      onChange={(e) => {
-                                        e.stopPropagation();
-                                        featureBranchNames.forEach((name) => {
-                                          handleBranchSelect(
-                                            name,
-                                            e.target.checked,
-                                          );
-                                        });
-                                      }}
-                                      className={cn(
-                                        "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500",
-                                        theme === "dark"
-                                          ? "border-gray-600 bg-gray-700 text-blue-500"
-                                          : "border-gray-300 bg-white text-blue-600",
-                                      )}
-                                      ref={(el) => {
-                                        if (el) {
-                                          el.indeterminate =
-                                            someFeatureSelected &&
-                                            !allFeatureSelected;
-                                        }
-                                      }}
-                                    />
-                                    <span
-                                      className={cn(
-                                        "text-xs cursor-pointer",
-                                        theme === "dark"
-                                          ? "text-gray-300"
-                                          : "text-gray-700",
-                                      )}
-                                      onClick={() => toggleGroup(featureKey)}
-                                    >
-                                      {featureName}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "text-[10px]",
-                                        theme === "dark"
-                                          ? "text-gray-500"
-                                          : "text-gray-600",
-                                      )}
-                                    >
-                                      ({featureBranches.length})
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Feature Sub-group Branches */}
-                                {!isFeatureCollapsed && (
-                                  <div>
-                                    {featureBranches.map((branch) => (
-                                      <BranchItem
-                                        key={branch.name}
-                                        branch={branch}
-                                        isNested={true}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          },
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            // Simple grouped display for other grouping types
-            <div
-              className={cn(
-                "divide-y",
-                theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-              )}
-            >
-              {Object.entries(groupedBranches as Record<string, Branch[]>).map(
-                ([groupName, branches]) => {
-                  const groupKey = `group-${groupName}`;
-                  const isCollapsed = collapsedGroups.has(groupKey);
-                  const allSelected = branches.every((b) =>
-                    selectedBranches.has(b.name),
-                  );
-                  const someSelected = branches.some((b) =>
-                    selectedBranches.has(b.name),
+                  const hasAIBranches = authorBranches.some((branch) =>
+                    isAIGenerated(branch),
                   );
 
-                  // Get group styling based on type
-                  const getGroupIcon = () => {
-                    if (groupBy === "status") {
-                      switch (groupName) {
-                        case "current":
-                          return <Check className="w-4 h-4 text-blue-400" />;
-                        case "protected":
-                          return <Shield className="w-4 h-4 text-yellow-400" />;
-                        case "ahead":
-                          return <ArrowUp className="w-4 h-4 text-green-400" />;
-                        case "behind":
-                          return (
-                            <ArrowDown className="w-4 h-4 text-yellow-400" />
-                          );
-                        case "diverged":
-                          return (
-                            <GitMerge className="w-4 h-4 text-orange-400" />
-                          );
-                        default:
-                          return (
-                            <GitBranch className="w-4 h-4 text-gray-400" />
-                          );
-                      }
-                    }
-                    if (groupBy === "protected") {
-                      return groupName === "protected" ? (
-                        <Shield className="w-4 h-4 text-yellow-400" />
-                      ) : (
-                        <GitBranch className="w-4 h-4 text-gray-400" />
-                      );
-                    }
-                    return <GitBranch className="w-4 h-4 text-gray-400" />;
-                  };
-
-                  const getGroupLabel = () => {
-                    if (groupBy === "status") {
-                      return (
-                        groupName.charAt(0).toUpperCase() +
-                        groupName.slice(1).replace("-", " ")
-                      );
-                    }
-                    return groupName;
-                  };
+                  // Get all branch names in this author group
+                  const allAuthorBranchNames: string[] = [];
+                  Object.values(features).forEach((branches: Branch[]) => {
+                    branches.forEach((branch: Branch) => {
+                      allAuthorBranchNames.push(branch.name);
+                    });
+                  });
+                  const allAuthorSelected = allAuthorBranchNames.every((name) =>
+                    selectedBranches.has(name),
+                  );
+                  const someAuthorSelected = allAuthorBranchNames.some((name) =>
+                    selectedBranches.has(name),
+                  );
 
                   return (
-                    <div key={groupName}>
-                      {/* Group Header */}
+                    <div key={authorName}>
+                      {/* Author Group Header */}
                       <div
                         className={cn(
-                          "px-3 py-1.5 flex items-center justify-between sticky top-0",
+                          "px-3 py-1.5 flex items-center justify-between",
                           theme === "dark"
                             ? "bg-gray-750 hover:bg-gray-700"
                             : "bg-gray-100 hover:bg-gray-200",
@@ -1023,9 +964,9 @@ export default function BranchesView() {
                         <div className="flex items-center space-x-2">
                           <button
                             className="p-0.5 hover:bg-gray-600 rounded"
-                            onClick={() => toggleGroup(groupKey)}
+                            onClick={() => toggleGroup(authorKey)}
                           >
-                            {isCollapsed ? (
+                            {isAuthorCollapsed ? (
                               <ChevronRight className="w-4 h-4" />
                             ) : (
                               <ChevronDown className="w-4 h-4" />
@@ -1033,34 +974,37 @@ export default function BranchesView() {
                           </button>
                           <input
                             type="checkbox"
-                            checked={allSelected}
+                            checked={allAuthorSelected}
                             onChange={(e) => {
                               e.stopPropagation();
-                              branches.forEach((branch) => {
-                                handleBranchSelect(
-                                  branch.name,
-                                  e.target.checked,
-                                );
+                              allAuthorBranchNames.forEach((name) => {
+                                handleBranchSelect(name, e.target.checked);
                               });
                             }}
+                            onClick={(e) => e.stopPropagation()}
                             className={cn(
-                              "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500",
+                              "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
                               theme === "dark"
                                 ? "border-gray-600 bg-gray-700 text-blue-500"
                                 : "border-gray-300 bg-white text-blue-600",
                             )}
                             ref={(el) => {
                               if (el) {
-                                el.indeterminate = someSelected && !allSelected;
+                                el.indeterminate =
+                                  someAuthorSelected && !allAuthorSelected;
                               }
                             }}
                           />
-                          {getGroupIcon()}
+                          {hasAIBranches ? (
+                            <Bot className="w-4 h-4 text-purple-400" />
+                          ) : (
+                            <User className="w-4 h-4 text-blue-400" />
+                          )}
                           <span
                             className="font-medium text-xs cursor-pointer"
-                            onClick={() => toggleGroup(groupKey)}
+                            onClick={() => toggleGroup(authorKey)}
                           >
-                            {getGroupLabel()}
+                            {authorName}
                           </span>
                           <span
                             className={cn(
@@ -1070,31 +1014,440 @@ export default function BranchesView() {
                                 : "text-gray-600",
                             )}
                           >
-                            ({branches.length})
+                            ({totalBranches})
                           </span>
                         </div>
                       </div>
 
-                      {/* Group Content */}
-                      {!isCollapsed && (
+                      {/* Author Group Content - Feature Sub-groups */}
+                      {!isAuthorCollapsed && (
                         <div>
-                          {branches.map((branch) => (
-                            <BranchItem
-                              key={branch.name}
-                              branch={branch}
-                              isNested={true}
-                            />
-                          ))}
+                          {Object.entries(features).map(
+                            ([featureName, featureBranches]) => {
+                              const featureKey = `${authorKey}-${featureName}`;
+                              const isFeatureCollapsed =
+                                collapsedGroups.has(featureKey);
+                              const hasMultipleBranches =
+                                featureBranches.length > 1;
+
+                              if (!hasMultipleBranches) {
+                                // Single branch - no sub-grouping needed
+                                return featureBranches.map((branch) => (
+                                  <BranchItem
+                                    key={branch.name}
+                                    branch={branch}
+                                    isNested={true}
+                                  />
+                                ));
+                              }
+
+                              // Check if all branches in this feature are selected
+                              const featureBranchNames = featureBranches.map(
+                                (b) => b.name,
+                              );
+                              const allFeatureSelected = featureBranchNames.every(
+                                (name) => selectedBranches.has(name),
+                              );
+                              const someFeatureSelected = featureBranchNames.some(
+                                (name) => selectedBranches.has(name),
+                              );
+
+                              return (
+                                <div key={featureName}>
+                                  {/* Feature Sub-group Header */}
+                                  <div
+                                    className={cn(
+                                      "pl-6 pr-3 py-1.5 flex items-center justify-between border-l-2",
+                                      theme === "dark"
+                                        ? "bg-gray-800 hover:bg-gray-750 border-gray-600"
+                                        : "bg-gray-50 hover:bg-gray-100 border-gray-300",
+                                    )}
+                                  >
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        className="p-0.5 hover:bg-gray-600 rounded"
+                                        onClick={() => toggleGroup(featureKey)}
+                                      >
+                                        {isFeatureCollapsed ? (
+                                          <ChevronRight className="w-3 h-3" />
+                                        ) : (
+                                          <ChevronDown className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                      <input
+                                        type="checkbox"
+                                        checked={allFeatureSelected}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          featureBranchNames.forEach((name) => {
+                                            handleBranchSelect(
+                                              name,
+                                              e.target.checked,
+                                            );
+                                          });
+                                        }}
+                                        className={cn(
+                                          "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500",
+                                          theme === "dark"
+                                            ? "border-gray-600 bg-gray-700 text-blue-500"
+                                            : "border-gray-300 bg-white text-blue-600",
+                                        )}
+                                        ref={(el) => {
+                                          if (el) {
+                                            el.indeterminate =
+                                              someFeatureSelected &&
+                                              !allFeatureSelected;
+                                          }
+                                        }}
+                                      />
+                                      <span
+                                        className={cn(
+                                          "text-xs cursor-pointer",
+                                          theme === "dark"
+                                            ? "text-gray-300"
+                                            : "text-gray-700",
+                                        )}
+                                        onClick={() => toggleGroup(featureKey)}
+                                      >
+                                        {featureName}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-[10px]",
+                                          theme === "dark"
+                                            ? "text-gray-500"
+                                            : "text-gray-600",
+                                        )}
+                                      >
+                                        ({featureBranches.length})
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Feature Sub-group Branches */}
+                                  {!isFeatureCollapsed && (
+                                    <div>
+                                      {featureBranches.map((branch) => (
+                                        <BranchItem
+                                          key={branch.name}
+                                          branch={branch}
+                                          isNested={true}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            },
+                          )}
                         </div>
                       )}
                     </div>
                   );
-                },
+                })}
+              </div>
+            ) : (
+              // Simple grouped display for other grouping types
+              <div
+                className={cn(
+                  "divide-y",
+                  theme === "dark" ? "divide-gray-700" : "divide-gray-200",
+                )}
+              >
+                {Object.entries(groupedBranches as Record<string, Branch[]>).map(
+                  ([groupName, branches]) => {
+                    const groupKey = `group-${groupName}`;
+                    const isCollapsed = collapsedGroups.has(groupKey);
+                    const allSelected = branches.every((b) =>
+                      selectedBranches.has(b.name),
+                    );
+                    const someSelected = branches.some((b) =>
+                      selectedBranches.has(b.name),
+                    );
+
+                    // Get group styling based on type
+                    const getGroupIcon = () => {
+                      if (groupBy === "status") {
+                        switch (groupName) {
+                          case "current":
+                            return <GitBranch className="w-4 h-4 text-blue-400" />;
+                          case "protected":
+                            return <Shield className="w-4 h-4 text-yellow-400" />;
+                          case "ahead":
+                            return <ArrowUp className="w-4 h-4 text-green-400" />;
+                          case "behind":
+                            return (
+                              <ArrowDown className="w-4 h-4 text-yellow-400" />
+                            );
+                          case "diverged":
+                            return (
+                              <GitMerge className="w-4 h-4 text-orange-400" />
+                            );
+                          default:
+                            return (
+                              <GitBranch className="w-4 h-4 text-gray-400" />
+                            );
+                        }
+                      }
+                      if (groupBy === "protected") {
+                        return groupName === "protected" ? (
+                          <Shield className="w-4 h-4 text-yellow-400" />
+                        ) : (
+                          <GitBranch className="w-4 h-4 text-gray-400" />
+                        );
+                      }
+                      return <GitBranch className="w-4 h-4 text-gray-400" />;
+                    };
+
+                    const getGroupLabel = () => {
+                      if (groupBy === "status") {
+                        return (
+                          groupName.charAt(0).toUpperCase() +
+                          groupName.slice(1).replace("-", " ")
+                        );
+                      }
+                      return groupName;
+                    };
+
+                    return (
+                      <div key={groupName}>
+                        {/* Group Header */}
+                        <div
+                          className={cn(
+                            "px-3 py-1.5 flex items-center justify-between sticky top-0",
+                            theme === "dark"
+                              ? "bg-gray-750 hover:bg-gray-700"
+                              : "bg-gray-100 hover:bg-gray-200",
+                          )}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <button
+                              className="p-0.5 hover:bg-gray-600 rounded"
+                              onClick={() => toggleGroup(groupKey)}
+                            >
+                              {isCollapsed ? (
+                                <ChevronRight className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </button>
+                            <input
+                              type="checkbox"
+                              checked={allSelected}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                branches.forEach((branch) => {
+                                  handleBranchSelect(
+                                    branch.name,
+                                    e.target.checked,
+                                  );
+                                });
+                              }}
+                              className={cn(
+                                "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500",
+                                theme === "dark"
+                                  ? "border-gray-600 bg-gray-700 text-blue-500"
+                                  : "border-gray-300 bg-white text-blue-600",
+                              )}
+                              ref={(el) => {
+                                if (el) {
+                                  el.indeterminate = someSelected && !allSelected;
+                                }
+                              }}
+                            />
+                            {getGroupIcon()}
+                            <span
+                              className="font-medium text-xs cursor-pointer"
+                              onClick={() => toggleGroup(groupKey)}
+                            >
+                              {getGroupLabel()}
+                            </span>
+                            <span
+                              className={cn(
+                                "text-[10px]",
+                                theme === "dark"
+                                  ? "text-gray-400"
+                                  : "text-gray-600",
+                              )}
+                            >
+                              ({branches.length})
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Group Content */}
+                        {!isCollapsed && (
+                          <div>
+                            {branches.map((branch) => (
+                              <BranchItem
+                                key={branch.name}
+                                branch={branch}
+                                isNested={true}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Create PR Modal */}
+      {showCreatePRModal && selectedBranchForPR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black bg-opacity-50"
+            onClick={() => !isCreatingPR && setShowCreatePRModal(false)}
+          />
+
+          {/* Modal */}
+          <div className={cn(
+            "relative w-full max-w-2xl max-h-[90vh] overflow-auto rounded-lg shadow-xl",
+            theme === "dark" ? "bg-gray-800" : "bg-white"
+          )}>
+            {/* Header */}
+            <div className={cn(
+              "px-6 py-4 border-b flex items-center justify-between",
+              theme === "dark" ? "border-gray-700" : "border-gray-200"
+            )}>
+              <h2 className="text-lg font-semibold flex items-center">
+                <GitPullRequest className="w-5 h-5 mr-2" />
+                Create Pull Request
+              </h2>
+              <button
+                onClick={() => !isCreatingPR && setShowCreatePRModal(false)}
+                disabled={isCreatingPR}
+                className="p-1 hover:bg-gray-700 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Branch info */}
+              <div className={cn(
+                "p-3 rounded-lg text-sm",
+                theme === "dark" ? "bg-gray-900" : "bg-gray-50"
+              )}>
+                <div className="flex items-center space-x-2">
+                  <GitBranch className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-500">From branch:</span>
+                  <span className="font-mono font-medium">{selectedBranchForPR.name}</span>
+                </div>
+                <div className="flex items-center space-x-2 mt-1">
+                  <GitMerge className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-500">Into branch:</span>
+                  <span className="font-mono font-medium">{selectedRepo?.default_branch || 'main'}</span>
+                </div>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={prTitle}
+                  onChange={(e) => setPRTitle(e.target.value)}
+                  placeholder="Enter pull request title"
+                  className={cn(
+                    "w-full px-3 py-2 rounded-lg border transition-colors",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                      : "bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+                  )}
+                  disabled={isCreatingPR}
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={prBody}
+                  onChange={(e) => setPRBody(e.target.value)}
+                  placeholder="Describe your changes (optional)"
+                  rows={6}
+                  className={cn(
+                    "w-full px-3 py-2 rounded-lg border transition-colors resize-none",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                      : "bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+                  )}
+                  disabled={isCreatingPR}
+                />
+              </div>
+
+              {/* Draft checkbox */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="draft-pr"
+                  checked={isDraft}
+                  onChange={(e) => setIsDraft(e.target.checked)}
+                  disabled={isCreatingPR}
+                  className={cn(
+                    "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500",
+                    theme === "dark"
+                      ? "border-gray-600 bg-gray-700 text-blue-500"
+                      : "border-gray-300 bg-white text-blue-600"
+                  )}
+                />
+                <label htmlFor="draft-pr" className="text-sm cursor-pointer">
+                  Create as draft pull request
+                </label>
+              </div>
+
+              {/* Error message */}
+              {createPRError && (
+                <div className="p-3 rounded-lg bg-red-900/20 border border-red-800 text-red-400 text-sm">
+                  {createPRError}
+                </div>
               )}
             </div>
-          )}
+
+            {/* Footer */}
+            <div className={cn(
+              "px-6 py-4 border-t flex items-center justify-end space-x-3",
+              theme === "dark" ? "border-gray-700" : "border-gray-200"
+            )}>
+              <button
+                onClick={() => setShowCreatePRModal(false)}
+                disabled={isCreatingPR}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  theme === "dark"
+                    ? "text-gray-300 hover:bg-gray-700"
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePR}
+                disabled={isCreatingPR || !prTitle.trim()}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  "bg-blue-600 text-white hover:bg-blue-700",
+                  (isCreatingPR || !prTitle.trim()) && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                {isCreatingPR ? "Creating..." : isDraft ? "Create Draft PR" : "Create PR"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

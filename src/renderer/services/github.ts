@@ -139,11 +139,11 @@ export interface Review {
   };
   body: string;
   state:
-    | "PENDING"
-    | "COMMENTED"
-    | "APPROVED"
-    | "CHANGES_REQUESTED"
-    | "DISMISSED";
+  | "PENDING"
+  | "COMMENTED"
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "DISMISSED";
   submitted_at: string | null;
   commit_id: string;
 }
@@ -151,13 +151,13 @@ export interface Review {
 export interface File {
   filename: string;
   status:
-    | "added"
-    | "removed"
-    | "modified"
-    | "renamed"
-    | "copied"
-    | "changed"
-    | "unchanged";
+  | "added"
+  | "removed"
+  | "modified"
+  | "renamed"
+  | "copied"
+  | "changed"
+  | "unchanged";
   additions: number;
   deletions: number;
   changes: number;
@@ -267,7 +267,7 @@ export class GitHubAPI {
               if (
                 !existing ||
                 new Date(review.submitted_at!) >
-                  new Date(existing.submitted_at!)
+                new Date(existing.submitted_at!)
               ) {
                 latestReviews.set(review.user.login, review);
               }
@@ -868,5 +868,33 @@ export class GitHubAPI {
   async getCurrentUser() {
     const { data } = await this.octokit.users.getAuthenticated();
     return data;
+  }
+
+  async createPullRequest(
+    owner: string,
+    repo: string,
+    title: string,
+    body: string,
+    head: string,
+    base: string,
+    draft: boolean = false,
+  ): Promise<PullRequest> {
+    const { data } = await this.octokit.pulls.create({
+      owner,
+      repo,
+      title,
+      body,
+      head,
+      base,
+      draft,
+    });
+
+    return {
+      ...data,
+      comments: 0,
+      approvalStatus: "none",
+      approvedBy: [],
+      changesRequestedBy: [],
+    } as PullRequest;
   }
 }
