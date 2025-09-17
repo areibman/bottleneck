@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   GitBranch,
   GitMerge,
-  RefreshCw,
   ChevronDown,
   ChevronRight,
   User,
@@ -810,19 +809,6 @@ export default function BranchesView() {
                     <option value="prefix">By prefix</option>
                     <option value="protected">By protection</option>
                   </select>
-
-                  <div className="h-6 w-px bg-gray-600" />
-
-                  <button
-                    onClick={handleRefresh}
-                    disabled={loading}
-                    className="btn btn-ghost p-2"
-                    title="Refresh branches"
-                  >
-                    <RefreshCw
-                      className={cn("w-4 h-4", loading && "animate-spin")}
-                    />
-                  </button>
                 </>
               ) : null}
             </div>
