@@ -88,6 +88,29 @@ bottleneck/
 - `npm run dist` - Package the app for distribution
 - `npm run electron` - Run the built app
 
+### React DevTools Profiler
+
+If the React DevTools Profiler tab is missing inside Electron DevTools, walk through the following steps:
+
+1. **Update the installer call** – In `src/main/index.ts` make sure the React DevTools installation includes `allowFileAccess` (and optionally `forceDownload` to refresh stale caches):
+
+   ```ts
+   await installExtension(REACT_DEVELOPER_TOOLS, {
+     loadExtensionOptions: { allowFileAccess: true },
+     forceDownload: true,
+   });
+   ```
+
+2. **Clear the cached extension** – Remove the `fmkadmapgofadopljbjfkapdkoienihi` folder so Electron downloads the updated bundle on the next run.
+
+   - macOS: `~/Library/Application Support/Electron/extensions/`
+   - Windows: `%APPDATA%\Electron\extensions\`
+   - Linux: `~/.config/Electron/extensions/`
+
+   Delete only the React DevTools folder (keep other extensions if you rely on them).
+
+3. **Restart the dev environment** – Run `npm run dev`, open the window, and press `Cmd/Ctrl + Option + I` to open DevTools. You should now see both **⚛️ Components** and **⚛️ Profiler** tabs.
+
 ## Keyboard Shortcuts
 
 ### Global
