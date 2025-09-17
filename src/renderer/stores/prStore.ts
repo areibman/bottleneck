@@ -13,13 +13,18 @@ interface PRGroup {
   closedCount: number;
 }
 
+export interface PRFilters {
+  author: string;
+  agent: string;
+}
+
 interface PRState {
   pullRequests: Map<string, PullRequest>;
   repositories: Repository[];
   selectedRepo: Repository | null;
   recentlyViewedRepos: Repository[];
   loadedRepos: Set<string>;
-  filters: string[];
+  filters: PRFilters;
   groups: PRGroup[];
   loading: boolean;
   error: string | null;
@@ -39,6 +44,7 @@ interface PRState {
   addToRecentlyViewed: (repo: Repository) => void;
   removeFromRecentlyViewed: (repoId: number) => void;
   setFilter: (filter: string) => void;
+  setFilters: (filters: Partial<PRFilters>) => void;
   removeFilter: (filter: string) => void;
   clearFilters: () => void;
   groupPRsByPrefix: () => void;
@@ -139,7 +145,10 @@ export const usePRStore = create<PRState>((set, get) => {
     selectedRepo: null,
     recentlyViewedRepos: [],
     loadedRepos: new Set(),
-    filters: ["open"],
+    filters: {
+      author: "all",
+      agent: "all",
+    },
     groups: [],
     loading: false,
     error: null,
@@ -457,6 +466,15 @@ export const usePRStore = create<PRState>((set, get) => {
       }));
     },
 
+    setFilters: (newFilters) => {
+      set((state) => ({
+        filters: {
+          ...state.filters,
+          ...newFilters,
+        },
+      }));
+    },
+
     removeFilter: (filter) => {
       set((state) => ({
         filters: state.filters.filter((f) => f !== filter),
@@ -464,7 +482,12 @@ export const usePRStore = create<PRState>((set, get) => {
     },
 
     clearFilters: () => {
-      set({ filters: [] });
+      set({
+        filters: {
+          author: "all",
+          agent: "all",
+        },
+      });
     },
 
     groupPRsByPrefix: () => {

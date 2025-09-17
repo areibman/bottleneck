@@ -6,6 +6,7 @@ export interface IssueFilters {
   status: "all" | "open" | "closed";
   labels: string[];
   assignee: "all" | "assigned" | "unassigned" | string;
+  author: string;
 }
 
 interface IssueState {
@@ -31,6 +32,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     status: "all",
     labels: [],
     assignee: "all",
+    author: "all",
   },
 
   fetchIssues: async (owner: string, repo: string, force = false) => {
@@ -119,6 +121,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         status: "all",
         labels: [],
         assignee: "all",
+        author: "all",
       },
     });
   },

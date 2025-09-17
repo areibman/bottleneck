@@ -6,6 +6,7 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
+import Dropdown, { DropdownOption } from "../components/Dropdown";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 
@@ -116,9 +117,17 @@ const IssueItem = React.memo(
   },
 );
 
+type SortByType = "updated" | "created" | "comments";
+
+const sortOptions: DropdownOption<SortByType>[] = [
+  { value: "updated", label: "Recently updated" },
+  { value: "created", label: "Recently created" },
+  { value: "comments", label: "Most commented" },
+];
+
 export default function IssuesView() {
   const navigate = useNavigate();
-  const { issues, loading, fetchIssues, filters } = useIssueStore();
+  const { issues, loading, fetchIssues, filters, setFilter } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
@@ -130,6 +139,38 @@ export default function IssuesView() {
       fetchIssues(selectedRepo.owner, selectedRepo.name);
     }
   }, [selectedRepo, fetchIssues]);
+
+  const authors = useMemo(() => {
+    const authorSet = new Set<string>();
+    issues.forEach((issue) => {
+      authorSet.add(issue.user.login);
+    });
+    const authorOptions: DropdownOption<string>[] = [
+      { value: "all", label: "All Authors" },
+      ...Array.from(authorSet).map((author) => ({
+        value: author,
+        label: author,
+      })),
+    ];
+    return authorOptions;
+  }, [issues]);
+
+  const agents = useMemo(() => {
+    const agentSet = new Set<string>();
+    issues.forEach((issue) => {
+      issue.assignees.forEach((assignee) => {
+        agentSet.add(assignee.login);
+      });
+    });
+
+    const agentOptions: DropdownOption<string>[] = [
+      { value: "all", label: "All Agents" },
+      { value: "unassigned", label: "Unassigned" },
+      ...Array.from(agentSet).map((agent) => ({ value: agent, label: agent })),
+    ];
+
+    return agentOptions;
+  }, [issues]);
 
   // Cache date parsing in a separate map to avoid modifying objects
   const parsedDates = useMemo(() => {
@@ -162,6 +203,14 @@ export default function IssuesView() {
         if (!hasAllLabels) {
           return false;
         }
+      }
+
+      // Author filter
+      if (
+        filters.author !== "all" &&
+        issue.user.login !== filters.author
+      ) {
+        return false;
       }
 
       // Assignee filter
@@ -260,20 +309,24 @@ export default function IssuesView() {
           </h1>
 
           <div className="flex items-center space-x-2">
-            <select
+            <Dropdown<SortByType>
+              options={sortOptions}
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className={cn(
-                "text-sm px-3 py-2 rounded-md transition-colors",
-                theme === "dark"
-                  ? "bg-gray-700 border-gray-600 text-white"
-                  : "bg-white border-gray-300 text-gray-900 border",
-              )}
-            >
-              <option value="updated">Recently updated</option>
-              <option value="created">Recently created</option>
-              <option value="comments">Most commented</option>
-            </select>
+              onChange={setSortBy}
+              labelPrefix="Sort by: "
+            />
+            <Dropdown
+              options={authors}
+              value={filters.author}
+              onChange={(value) => setFilter("author", value)}
+              labelPrefix="Author: "
+            />
+            <Dropdown
+              options={agents}
+              value={filters.assignee}
+              onChange={(value) => setFilter("assignee", value)}
+              labelPrefix="Agent: "
+            />
           </div>
         </div>
       </div>

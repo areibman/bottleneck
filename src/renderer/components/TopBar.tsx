@@ -231,9 +231,9 @@ export default function TopBar() {
                                 ? "hover:bg-gray-700"
                                 : "hover:bg-gray-100",
                               selectedRepo?.id === repo.id &&
-                                (theme === "dark"
-                                  ? "bg-gray-700"
-                                  : "bg-gray-100"),
+                              (theme === "dark"
+                                ? "bg-gray-700"
+                                : "bg-gray-100"),
                             )}
                           >
                             <div className="flex-1 min-w-0 pr-6">
@@ -369,9 +369,9 @@ export default function TopBar() {
                                         ? "hover:bg-gray-700"
                                         : "hover:bg-gray-100",
                                       selectedRepo?.id === repo.id &&
-                                        (theme === "dark"
-                                          ? "bg-gray-700"
-                                          : "bg-gray-100"),
+                                      (theme === "dark"
+                                        ? "bg-gray-700"
+                                        : "bg-gray-100"),
                                     )}
                                   >
                                     <div className="flex-1 min-w-0">
@@ -424,11 +424,11 @@ export default function TopBar() {
                                         </span>
                                         {repo.stargazers_count !==
                                           undefined && (
-                                          <span className="flex items-center gap-1">
-                                            <Star className="w-3 h-3" />
-                                            {repo.stargazers_count}
-                                          </span>
-                                        )}
+                                            <span className="flex items-center gap-1">
+                                              <Star className="w-3 h-3" />
+                                              {repo.stargazers_count}
+                                            </span>
+                                          )}
                                         {repo.open_issues_count !== undefined &&
                                           repo.open_issues_count > 0 && (
                                             <span className="flex items-center gap-1">
@@ -617,34 +617,34 @@ export default function TopBar() {
                   </div>
                 </div>
                 <div className="p-1">
-                  <button
+                  <div
                     onClick={() => {
                       setUserMenuOpen(false);
                       window.location.href = "/settings";
                     }}
                     className={cn(
-                      "w-full text-left px-3 py-2 text-sm rounded",
+                      "w-full text-left px-3 py-2 text-sm rounded cursor-pointer",
                       theme === "dark"
                         ? "hover:bg-gray-700"
                         : "hover:bg-gray-100",
                     )}
                   >
                     Settings
-                  </button>
-                  <button
+                  </div>
+                  <div
                     onClick={() => {
                       setUserMenuOpen(false);
                       logout();
                     }}
                     className={cn(
-                      "w-full text-left px-3 py-2 text-sm rounded text-red-400",
+                      "w-full text-left px-3 py-2 text-sm rounded text-red-400 cursor-pointer",
                       theme === "dark"
                         ? "hover:bg-gray-700"
                         : "hover:bg-gray-100",
                     )}
                   >
                     Sign Out
-                  </button>
+                  </div>
                 </div>
               </div>
             </>

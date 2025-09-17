@@ -22,6 +22,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useBranchStore } from "../stores/branchStore";
 import { formatDistanceToNow } from "date-fns";
 import { GitHubAPI } from "../services/github";
+import Dropdown, { DropdownOption } from "../components/Dropdown";
 
 // Re-export Branch type from store for use in component
 interface Branch {
@@ -39,6 +40,14 @@ interface Branch {
   current?: boolean;
 }
 
+type SortByType = "updated" | "name" | "ahead-behind";
+
+const sortOptions: DropdownOption<SortByType>[] = [
+  { value: "updated", label: "Recently updated" },
+  { value: "name", label: "Name" },
+  { value: "ahead-behind", label: "Ahead/Behind" },
+];
+
 export default function BranchesView() {
   const navigate = useNavigate();
   const { theme } = useUIStore();
@@ -49,9 +58,7 @@ export default function BranchesView() {
     new Set(),
   );
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "updated" | "ahead-behind">(
-    "updated",
-  );
+  const [sortBy, setSortBy] = useState<SortByType>("updated");
   const [groupBy, setGroupBy] = useState<
     "none" | "author" | "status" | "prefix" | "protected"
   >("author");
@@ -778,20 +785,13 @@ export default function BranchesView() {
               {selectedRepo ? (
                 <>
                   {/* Sort and Group dropdowns */}
-                  <select
+                  <Dropdown<SortByType>
+                    options={sortOptions}
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className={cn(
-                      "text-xs px-2 py-1 rounded-lg transition-colors border",
-                      theme === "dark"
-                        ? "bg-gray-700 border-gray-600 text-white"
-                        : "bg-white border-gray-200 text-gray-900",
-                    )}
-                  >
-                    <option value="updated">Recently updated</option>
-                    <option value="name">Name</option>
-                    <option value="ahead-behind">Ahead/Behind</option>
-                  </select>
+                    onChange={setSortBy}
+                    buttonClassName="text-xs px-2 py-1"
+                    labelPrefix="Sort by: "
+                  />
 
                   <select
                     value={groupBy}

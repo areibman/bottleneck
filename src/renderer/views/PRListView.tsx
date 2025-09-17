@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
+import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
@@ -366,11 +367,29 @@ const PRItem = React.memo(
   },
 );
 
+type SortByType = "updated" | "created" | "title";
+
+const sortOptions: DropdownOption<SortByType>[] = [
+  { value: "updated", label: "Recently updated" },
+  { value: "created", label: "Recently created" },
+  { value: "title", label: "Title" },
+];
+
+type GroupByType = "none" | "agent" | "author" | "label";
+
+const groupOptions: DropdownOption<GroupByType>[] = [
+  { value: "none", label: "No grouping" },
+  { value: "agent", label: "By agent" },
+  { value: "author", label: "By author" },
+  { value: "label", label: "By label" },
+];
+
 export default function PRListView() {
   const navigate = useNavigate();
   const {
     pullRequests,
     filters,
+    setFilters,
     loading,
     fetchPullRequests,
     selectedRepo,
@@ -381,9 +400,7 @@ export default function PRListView() {
   const [sortBy, setSortBy] = useState<"updated" | "created" | "title">(
     "updated",
   );
-  const [groupBy, setGroupBy] = useState<"none" | "agent" | "author" | "label">(
-    "agent",
-  );
+  const [groupBy, setGroupBy] = useState<GroupByType>("agent");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
@@ -454,6 +471,38 @@ export default function PRListView() {
     return "manual";
   }, []);
 
+  const authors = useMemo(() => {
+    const authorSet = new Set<string>();
+    pullRequests.forEach((pr) => {
+      authorSet.add(pr.user.login);
+    });
+    const authorOptions: DropdownOption<string>[] = [
+      { value: "all", label: "All Authors" },
+      ...Array.from(authorSet).map((author) => ({
+        value: author,
+        label: author,
+      })),
+    ];
+    return authorOptions;
+  }, [pullRequests]);
+
+  const agents = useMemo(() => {
+    const agentSet = new Set<string>();
+    pullRequests.forEach((pr) => {
+      agentSet.add(getAgentFromPR(pr));
+    });
+
+    const agentOptions: DropdownOption<string>[] = [
+      { value: "all", label: "All Agents" },
+      ...Array.from(agentSet).map((agent) => ({
+        value: agent,
+        label: agent,
+      })),
+    ];
+
+    return agentOptions;
+  }, [pullRequests, getAgentFromPR]);
+
   // Extract common prefix from PR title for sub-grouping
   const getTitlePrefix = useCallback((title: string): string => {
     // Remove PR number if present (e.g., "#1234 Title" -> "Title")
@@ -487,28 +536,15 @@ export default function PRListView() {
     let prs = Array.from(pullRequests.values());
 
     // Apply filters
-    if (filters.length > 0) {
-      prs = prs.filter((pr) => {
-        return filters.some((filter) => {
-          switch (filter) {
-            case "open":
-              return pr.state === "open" && !pr.draft;
-            case "draft":
-              return !!pr.draft;
-            case "review-requested":
-              return (
-                pr.requested_reviewers && pr.requested_reviewers.length > 0
-              );
-            case "merged":
-              return !!pr.merged;
-            case "closed":
-              return pr.state === "closed" && !pr.merged;
-            default:
-              return false;
-          }
-        });
-      });
-    }
+    prs = prs.filter((pr) => {
+      if (filters.author !== "all" && pr.user.login !== filters.author) {
+        return false;
+      }
+      if (filters.agent !== "all" && getAgentFromPR(pr) !== filters.agent) {
+        return false;
+      }
+      return true;
+    });
 
     // Sort using cached dates from the map
     prs.sort((a, b) => {
@@ -530,7 +566,7 @@ export default function PRListView() {
     });
 
     return prs;
-  }, [pullRequests, parsedDates, filters, sortBy]);
+  }, [pullRequests, parsedDates, filters, sortBy, getAgentFromPR]);
 
   // Pre-compute PR metadata for grouping
   const prsWithMetadata = useMemo(() => {
@@ -788,36 +824,30 @@ export default function PRListView() {
           </div>
 
           <div className="flex items-center space-x-2">
-            <select
+            <Dropdown<SortByType>
+              options={sortOptions}
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className={cn(
-                "text-sm px-4 py-1.5 rounded-lg transition-colors border",
-                theme === "dark"
-                  ? "bg-gray-700 border-gray-500/70 text-white"
-                  : "bg-white border-gray-200 text-gray-900",
-              )}
-            >
-              <option value="updated">Recently updated</option>
-              <option value="created">Recently created</option>
-              <option value="title">Title</option>
-            </select>
-
-            <select
+              onChange={setSortBy}
+              labelPrefix="Sort by: "
+            />
+            <Dropdown<GroupByType>
+              options={groupOptions}
               value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value as any)}
-              className={cn(
-                "text-sm px-4 py-1.5 rounded-lg transition-colors border",
-                theme === "dark"
-                  ? "bg-gray-700 border-gray-500/70 text-white"
-                  : "bg-white border-gray-200 text-gray-900",
-              )}
-            >
-              <option value="none">No grouping</option>
-              <option value="agent">By agent</option>
-              <option value="author">By author</option>
-              <option value="label">By label</option>
-            </select>
+              onChange={setGroupBy}
+              labelPrefix="Group by: "
+            />
+            <Dropdown
+              options={authors}
+              value={filters.author}
+              onChange={(value) => setFilters({ author: value })}
+              labelPrefix="Author: "
+            />
+            <Dropdown
+              options={agents}
+              value={filters.agent}
+              onChange={(value) => setFilters({ agent: value })}
+              labelPrefix="Agent: "
+            />
           </div>
         </div>
       </div>
