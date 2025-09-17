@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { PullRequest } from "../../services/github";
 import { usePRStore } from "../../stores/prStore";
 import { useUIStore } from "../../stores/uiStore";
+import { detectAgentName } from "../../utils/agentIcons";
 
 interface NavigationState {
   siblingPRs?: any[];
@@ -26,21 +27,28 @@ export function usePRNavigation(
 
   const getAgentFromPR = useCallback((pr: PullRequest): string => {
     const branchName = pr.head?.ref || "";
-    const agentMatch = branchName.match(/^([^/]+)\//);
-    if (agentMatch) {
-      return agentMatch[1];
+    const labelNames = (pr.labels ?? [])
+      .map((label: any) => label?.name)
+      .filter(Boolean) as string[];
+
+    const detected = detectAgentName(
+      branchName,
+      pr.title,
+      pr.body,
+      pr.user?.login,
+      pr.head?.label,
+      ...labelNames,
+    );
+
+    if (detected) {
+      return detected;
     }
 
-    const titleLower = pr.title.toLowerCase();
-    if (titleLower.includes("cursor") || branchName.includes("cursor")) {
-      return "cursor";
-    }
-
-    const hasAILabel = pr.labels?.some((label: any) =>
-      label.name.toLowerCase().includes("cursor"),
+    const hasAILabel = labelNames.some((labelName) =>
+      labelName.toLowerCase().includes("ai"),
     );
     if (hasAILabel) {
-      return "cursor";
+      return "ai";
     }
 
     return "manual";

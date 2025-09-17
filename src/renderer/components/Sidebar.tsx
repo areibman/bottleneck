@@ -8,8 +8,6 @@ import {
   Filter,
   Plus,
   FolderOpen,
-  Bot,
-  User,
   AlertCircle,
   X,
   GitPullRequestDraft,
@@ -30,6 +28,8 @@ import { usePRStore, PRFilterType } from "../stores/prStore";
 import { useIssueStore } from "../stores/issueStore";
 import { useUIStore } from "../stores/uiStore";
 import Dropdown, { DropdownOption } from "./Dropdown";
+import { AgentIcon } from "./AgentIcon";
+import { detectAgentName } from "../utils/agentIcons";
 
 interface SidebarProps {
   className?: string;
@@ -66,23 +66,28 @@ export default function Sidebar({
   // Extract agent from PR (e.g., "cursor" from branch name or title)
   const getAgentFromPR = useCallback((pr: any): string => {
     const branchName = pr.head?.ref || "";
-    const agentMatch = branchName.match(/^([^/]+)\//);
-    if (agentMatch) {
-      return agentMatch[1];
+    const labelNames = (pr.labels ?? [])
+      .map((label: any) => label?.name)
+      .filter(Boolean) as string[];
+
+    const detected = detectAgentName(
+      branchName,
+      pr.title,
+      pr.body,
+      pr.user?.login,
+      pr.head?.label,
+      ...labelNames,
+    );
+
+    if (detected) {
+      return detected;
     }
 
-    const titleLower = pr.title.toLowerCase();
-    if (titleLower.includes("cursor") || branchName.includes("cursor")) {
-      return "cursor";
-    }
-
-    const hasAILabel = pr.labels?.some(
-      (label: any) =>
-        label.name.toLowerCase().includes("ai") ||
-        label.name.toLowerCase().includes("cursor"),
+    const hasAILabel = labelNames.some((labelName) =>
+      labelName.toLowerCase().includes("ai"),
     );
     if (hasAILabel) {
-      return "cursor";
+      return "ai";
     }
 
     return "manual";
@@ -884,86 +889,96 @@ export default function Sidebar({
                       handlePRClick(item.data.pr);
                     }
                   }}
-                  renderItemTitle={({ title, item, ...rest }) => (
-                    <div
-                      className={cn(
-                        "flex items-center w-full",
-                        item.data.type === "pr" && "text-xs",
-                        item.data.type === "task" && "text-xs",
-                      )}
-                    >
-                      {item.isFolder ? (
-                        (rest as any).arrow
-                      ) : (
-                        <span
-                          className={cn(
-                            "mr-2",
-                            item.data.pr?.state === "open"
-                              ? "text-green-400"
-                              : "text-gray-400",
-                          )}
-                        >
-                          ●
-                        </span>
-                      )}
-                      {item.data.type === "agent" &&
-                        (item.index.toString().includes("cursor") ? (
-                          <Bot className="w-4 h-4 mr-2 text-purple-400" />
+                  renderItemTitle={({ title, item, ...rest }) => {
+                    const agentName =
+                      item.data.type === "agent"
+                        ? (item.index as string).replace("agent-", "")
+                        : undefined;
+                    const fallbackVariant: "bot" | "user" =
+                      agentName === "manual" ? "user" : "bot";
+
+                    return (
+                      <div
+                        className={cn(
+                          "flex items-center w-full",
+                          item.data.type === "pr" && "text-xs",
+                          item.data.type === "task" && "text-xs",
+                        )}
+                      >
+                        {item.isFolder ? (
+                          (rest as any).arrow
                         ) : (
-                          <User className="w-4 h-4 mr-2 text-blue-400" />
-                        ))}
-                      {item.data.type === "task" && (
-                        <FolderOpen className="w-3 h-3 mr-1 text-gray-500" />
-                      )}
-                      {item.data.type === "pr" && item.data.pr && (
-                        <img
-                          src={item.data.pr.user.avatar_url}
-                          alt={item.data.pr.user.login}
-                          className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
-                        />
-                      )}
-                      <span className="flex-1 truncate">{title}</span>
-                      {item.data.type === "pr" && item.data.pr && (
-                        <div className="flex items-center space-x-2 ml-2">
-                          {item.data.pr.changed_files !== undefined && (
-                            <span
-                              className={cn(
-                                "text-xs",
-                                theme === "dark"
-                                  ? "text-gray-500"
-                                  : "text-gray-600",
-                              )}
-                            >
-                              {item.data.pr.changed_files} file
-                              {item.data.pr.changed_files !== 1 ? "s" : ""}
-                            </span>
-                          )}
-                          {item.data.pr.additions !== undefined && (
-                            <span className="text-xs text-green-500">
-                              +{item.data.pr.additions}
-                            </span>
-                          )}
-                          {item.data.pr.deletions !== undefined && (
-                            <span className="text-xs text-red-500">
-                              -{item.data.pr.deletions}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {item.data.count && (
-                        <span
-                          className={cn(
-                            "text-xs",
-                            theme === "dark"
-                              ? "text-gray-500"
-                              : "text-gray-600",
-                          )}
-                        >
-                          ({item.data.count})
-                        </span>
-                      )}
-                    </div>
-                  )}
+                          <span
+                            className={cn(
+                              "mr-2",
+                              item.data.pr?.state === "open"
+                                ? "text-green-400"
+                                : "text-gray-400",
+                            )}
+                          >
+                            ●
+                          </span>
+                        )}
+                        {agentName && (
+                          <AgentIcon
+                            agentName={agentName}
+                            className="mr-2"
+                            fallback={fallbackVariant}
+                          />
+                        )}
+                        {item.data.type === "task" && (
+                          <FolderOpen className="w-3 h-3 mr-1 text-gray-500" />
+                        )}
+                        {item.data.type === "pr" && item.data.pr && (
+                          <img
+                            src={item.data.pr.user.avatar_url}
+                            alt={item.data.pr.user.login}
+                            className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
+                          />
+                        )}
+                        <span className="flex-1 truncate">{title}</span>
+                        {item.data.type === "pr" && item.data.pr && (
+                          <div className="flex items-center space-x-2 ml-2">
+                            {item.data.pr.changed_files !== undefined && (
+                              <span
+                                className={cn(
+                                  "text-xs",
+                                  theme === "dark"
+                                    ? "text-gray-500"
+                                    : "text-gray-600",
+                                )}
+                              >
+                                {item.data.pr.changed_files} file
+                                {item.data.pr.changed_files !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                            {item.data.pr.additions !== undefined && (
+                              <span className="text-xs text-green-500">
+                                +{item.data.pr.additions}
+                              </span>
+                            )}
+                            {item.data.pr.deletions !== undefined && (
+                              <span className="text-xs text-red-500">
+                                -{item.data.pr.deletions}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {item.data.count && (
+                          <span
+                            className={cn(
+                              "text-xs",
+                              theme === "dark"
+                                ? "text-gray-500"
+                                : "text-gray-600",
+                            )}
+                          >
+                            ({item.data.count})
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }}
                 >
                   <Tree treeId="pr-groups" rootItem="root" />
                 </UncontrolledTreeEnvironment>

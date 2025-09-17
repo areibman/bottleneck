@@ -11,7 +11,6 @@ import {
   ArrowUp,
   ArrowDown,
   Shield,
-  Bot,
   GitPullRequest,
   X,
 } from "lucide-react";
@@ -23,6 +22,8 @@ import { useBranchStore } from "../stores/branchStore";
 import { formatDistanceToNow } from "date-fns";
 import { GitHubAPI } from "../services/github";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { AgentIcon } from "../components/AgentIcon";
+import { detectAgentName } from "../utils/agentIcons";
 
 // Re-export Branch type from store for use in component
 interface Branch {
@@ -159,22 +160,40 @@ export default function BranchesView() {
 
   // Determine if a branch is AI-generated based on patterns
   const isAIGenerated = useCallback((branch: Branch): boolean => {
-    const branchName = branch.name.toLowerCase();
-    const message = branch.commit.message.toLowerCase();
+    const message = branch.commit.message;
 
-    // Check for cursor patterns
-    if (branchName.includes("cursor") || message.includes("cursor")) {
+    if (
+      detectAgentName(
+        branch.name,
+        message,
+        branch.commit?.author,
+        branch.commit?.authorEmail,
+      )
+    ) {
       return true;
     }
 
-    // Check for AI-generated patterns
+    const messageLower = message.toLowerCase();
+
+    // Check for other AI-generated patterns
     const aiPatterns = ["ai:", "auto:", "bot:", "automated:", "[ai]", "[bot]"];
-    if (aiPatterns.some((pattern) => message.includes(pattern))) {
+    if (aiPatterns.some((pattern) => messageLower.includes(pattern))) {
       return true;
     }
 
     return false;
   }, []);
+
+  const getAgentNameForBranch = useCallback(
+    (branch: Branch): string | undefined =>
+      detectAgentName(
+        branch.name,
+        branch.commit?.message,
+        branch.commit?.author,
+        branch.commit?.authorEmail,
+      ),
+    [],
+  );
 
   // Extract feature/task name from branch for sub-grouping
   const getFeatureFromBranch = useCallback(
@@ -915,6 +934,17 @@ export default function BranchesView() {
                     isAIGenerated(branch),
                   );
 
+                  const agentNameForGroup = authorBranches
+                    .map((branch) => getAgentNameForBranch(branch))
+                    .find((name): name is string => Boolean(name));
+
+                  const fallbackVariant: "bot" | "user" = hasAIBranches
+                    ? "bot"
+                    : "user";
+                  const displayAgentName =
+                    agentNameForGroup ??
+                    (fallbackVariant === "user" ? "manual" : undefined);
+
                   // Get all branch names in this author group
                   const allAuthorBranchNames: string[] = [];
                   Object.values(features).forEach((branches: Branch[]) => {
@@ -974,11 +1004,10 @@ export default function BranchesView() {
                               }
                             }}
                           />
-                          {hasAIBranches ? (
-                            <Bot className="w-4 h-4 text-purple-400" />
-                          ) : (
-                            <User className="w-4 h-4 text-blue-400" />
-                          )}
+                          <AgentIcon
+                            agentName={displayAgentName}
+                            fallback={fallbackVariant}
+                          />
                           <span
                             className="font-medium text-xs cursor-pointer"
                             onClick={() => toggleGroup(authorKey)}

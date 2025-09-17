@@ -9,8 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   MoreHorizontal,
-  Bot,
-  User,
   FileText,
   ExternalLink,
   CheckCircle2,
@@ -20,6 +18,8 @@ import {
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { AgentIcon } from "../components/AgentIcon";
+import { detectAgentName } from "../utils/agentIcons";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
@@ -445,27 +445,29 @@ export default function PRListView() {
 
   // Extract agent from PR (e.g., "cursor" from branch name or title)
   const getAgentFromPR = useCallback((pr: PullRequest): string => {
-    // Check if branch name starts with an agent prefix (e.g., "cursor/")
     const branchName = pr.head?.ref || "";
-    const agentMatch = branchName.match(/^([^/]+)\//);
-    if (agentMatch) {
-      return agentMatch[1];
+    const labelNames = (pr.labels ?? [])
+      .map((label: any) => label?.name)
+      .filter(Boolean) as string[];
+
+    const detected = detectAgentName(
+      branchName,
+      pr.title,
+      pr.body,
+      pr.user?.login,
+      pr.head?.label,
+      ...labelNames,
+    );
+
+    if (detected) {
+      return detected;
     }
 
-    // Check if title contains agent marker
-    const titleLower = pr.title.toLowerCase();
-    if (titleLower.includes("cursor") || branchName.includes("cursor")) {
-      return "cursor";
-    }
-
-    // Check for AI-generated label
-    const hasAILabel = pr.labels?.some(
-      (label: any) =>
-        label.name.toLowerCase().includes("ai") ||
-        label.name.toLowerCase().includes("cursor"),
+    const hasAILabel = labelNames.some((labelName) =>
+      labelName.toLowerCase().includes("ai"),
     );
     if (hasAILabel) {
-      return "cursor";
+      return "ai";
     }
 
     return "manual";
@@ -504,6 +506,7 @@ export default function PRListView() {
       ...Array.from(agentSet).map((agent) => ({
         value: agent,
         label: agent,
+        icon: <AgentIcon agentName={agent} />,
       })),
     ];
 
@@ -993,11 +996,7 @@ export default function PRListView() {
                           }
                         }}
                       />
-                      {agentName === "cursor" ? (
-                        <Bot className="w-4 h-4 text-purple-400" />
-                      ) : (
-                        <User className="w-4 h-4 text-blue-400" />
-                      )}
+                      <AgentIcon agentName={agentName} />
                       <span
                         className="font-medium text-sm cursor-pointer"
                         onClick={() => toggleGroup(agentKey)}
