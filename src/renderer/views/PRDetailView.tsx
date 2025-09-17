@@ -64,7 +64,7 @@ export default function PRDetailView() {
   const [loading, setLoading] = useState(true);
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set());
   const [fileContent, setFileContent] = useState<{ original: string; modified: string } | null>(null);
-  const [fileListWidth, setFileListWidth] = useState(320);
+  const [fileListWidth, setFileListWidth] = useState();
   const [isResizing, setIsResizing] = useState(false);
   const fileListRef = useRef<HTMLDivElement>(null);
   const [showCheckoutDropdown, setShowCheckoutDropdown] = useState(false);
