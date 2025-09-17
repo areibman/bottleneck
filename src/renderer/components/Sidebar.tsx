@@ -27,7 +27,7 @@ import {
 } from "react-complex-tree";
 import "react-complex-tree/lib/style-modern.css";
 import { cn } from "../utils/cn";
-import { usePRStore } from "../stores/prStore";
+import { usePRStore, PRFilterType } from "../stores/prStore";
 import { useIssueStore } from "../stores/issueStore";
 import { useUIStore } from "../stores/uiStore";
 
@@ -50,7 +50,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { filters, setFilter, pullRequests } = usePRStore();
+  const { statusFilters, setFilter, pullRequests } = usePRStore();
   const {
     issues,
     filters: issueFilters,
@@ -106,9 +106,9 @@ export default function Sidebar({
     let prs = Array.from(pullRequests.values());
 
     // Apply filters
-    if (filters.length > 0) {
+    if (statusFilters.length > 0) {
       prs = prs.filter((pr) => {
-        return filters.some((filter) => {
+        return statusFilters.some((filter) => {
           switch (filter) {
             case "open":
               return pr.state === "open" && !pr.draft;
@@ -214,7 +214,7 @@ export default function Sidebar({
     }
 
     return items;
-  }, [pullRequests, filters, getAgentFromPR, getTitlePrefix]);
+  }, [pullRequests, statusFilters, getAgentFromPR, getTitlePrefix]);
 
   const treeDataProvider: StaticTreeDataProvider<TreeData> = useMemo(() => {
     return new StaticTreeDataProvider<TreeData>(treeItems);
@@ -278,7 +278,7 @@ export default function Sidebar({
 
   // Calculate real counts from actual PR data
   const prArray = Array.from(pullRequests.values());
-  const prFilters = [
+  const prFilters: { id: PRFilterType; label: string; count: number }[] = [
     {
       id: "open",
       label: "Open",
@@ -437,18 +437,18 @@ export default function Sidebar({
                 {(issueFilters.status !== "all" ||
                   issueFilters.labels.length > 0 ||
                   issueFilters.assignee !== "all") && (
-                  <button
-                    onClick={resetIssueFilters}
-                    className={cn(
-                      "text-xs px-2 py-1 rounded",
-                      theme === "dark"
-                        ? "text-gray-400 hover:text-white hover:bg-gray-800"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                    )}
-                  >
-                    Reset
-                  </button>
-                )}
+                    <button
+                      onClick={resetIssueFilters}
+                      className={cn(
+                        "text-xs px-2 py-1 rounded",
+                        theme === "dark"
+                          ? "text-gray-400 hover:text-white hover:bg-gray-800"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                      )}
+                    >
+                      Reset
+                    </button>
+                  )}
               </div>
 
               <div className="space-y-3">
@@ -671,7 +671,7 @@ export default function Sidebar({
                               ? "hover:bg-gray-600"
                               : "hover:bg-gray-50",
                             issueFilters.assignee === "assigned" &&
-                              "font-semibold",
+                            "font-semibold",
                           )}
                         >
                           Assigned
@@ -687,7 +687,7 @@ export default function Sidebar({
                               ? "hover:bg-gray-600"
                               : "hover:bg-gray-50",
                             issueFilters.assignee === "unassigned" &&
-                              "font-semibold",
+                            "font-semibold",
                           )}
                         >
                           Unassigned
@@ -715,7 +715,7 @@ export default function Sidebar({
                                     ? "hover:bg-gray-600"
                                     : "hover:bg-gray-50",
                                   issueFilters.assignee === assignee.login &&
-                                    "font-semibold",
+                                  "font-semibold",
                                 )}
                               >
                                 <img
@@ -839,13 +839,11 @@ export default function Sidebar({
                           {siblingPR.approvalStatus === "approved" && (
                             <CheckCircle2
                               className="w-3 h-3 text-green-500 ml-auto"
-                              title="Approved"
                             />
                           )}
                           {siblingPR.approvalStatus === "changes_requested" && (
                             <XCircle
                               className="w-3 h-3 text-red-500 ml-auto"
-                              title="Changes requested"
                             />
                           )}
                         </div>
@@ -927,7 +925,7 @@ export default function Sidebar({
                     key={filter.id}
                     onClick={() => setFilter(filter.id)}
                     className={cn("sidebar-item w-full text-left", {
-                      active: filters.includes(filter.id),
+                      active: statusFilters.includes(filter.id),
                     })}
                   >
                     <span className="flex-1">{filter.label}</span>

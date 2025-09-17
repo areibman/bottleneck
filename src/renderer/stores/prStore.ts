@@ -18,6 +18,8 @@ export interface PRFilters {
   agent: string;
 }
 
+export type PRFilterType = 'open' | 'draft' | 'review-requested' | 'merged' | 'closed';
+
 interface PRState {
   pullRequests: Map<string, PullRequest>;
   repositories: Repository[];
@@ -25,6 +27,7 @@ interface PRState {
   recentlyViewedRepos: Repository[];
   loadedRepos: Set<string>;
   filters: PRFilters;
+  statusFilters: PRFilterType[];
   groups: PRGroup[];
   loading: boolean;
   error: string | null;
@@ -43,9 +46,11 @@ interface PRState {
   setSelectedRepo: (repo: Repository | null) => void;
   addToRecentlyViewed: (repo: Repository) => void;
   removeFromRecentlyViewed: (repoId: number) => void;
-  setFilter: (filter: string) => void;
+  setFilter: (filter: PRFilterType) => void;
   setFilters: (filters: Partial<PRFilters>) => void;
-  removeFilter: (filter: string) => void;
+  setStatusFilter: (filter: PRFilterType) => void;
+  setStatusFilters: (filters: PRFilterType[]) => void;
+  removeStatusFilter: (filter: PRFilterType) => void;
   clearFilters: () => void;
   groupPRsByPrefix: () => void;
   updatePR: (pr: PullRequest) => void;
@@ -149,6 +154,7 @@ export const usePRStore = create<PRState>((set, get) => {
       author: "all",
       agent: "all",
     },
+    statusFilters: [],
     groups: [],
     loading: false,
     error: null,
@@ -460,9 +466,9 @@ export const usePRStore = create<PRState>((set, get) => {
 
     setFilter: (filter) => {
       set((state) => ({
-        filters: state.filters.includes(filter)
-          ? state.filters.filter((f) => f !== filter)
-          : [...state.filters, filter],
+        statusFilters: state.statusFilters.includes(filter)
+          ? state.statusFilters.filter((f) => f !== filter)
+          : [...state.statusFilters, filter],
       }));
     },
 
@@ -475,9 +481,23 @@ export const usePRStore = create<PRState>((set, get) => {
       }));
     },
 
-    removeFilter: (filter) => {
+    setStatusFilter: (filter) => {
       set((state) => ({
-        filters: state.filters.filter((f) => f !== filter),
+        statusFilters: state.statusFilters.includes(filter)
+          ? state.statusFilters.filter((f) => f !== filter)
+          : [...state.statusFilters, filter],
+      }));
+    },
+
+    setStatusFilters: (newFilters) => {
+      set({
+        statusFilters: newFilters,
+      });
+    },
+
+    removeStatusFilter: (filter) => {
+      set((state) => ({
+        statusFilters: state.statusFilters.filter((f) => f !== filter),
       }));
     },
 
@@ -487,6 +507,7 @@ export const usePRStore = create<PRState>((set, get) => {
           author: "all",
           agent: "all",
         },
+        statusFilters: [],
       });
     },
 
