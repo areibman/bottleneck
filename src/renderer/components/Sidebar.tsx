@@ -562,6 +562,7 @@ export default function Sidebar({
                         ? `${issueFilters.labels.length} selected`
                         : "Select labels"
                     }
+                    useLabelPrefixAsDisplay={true}
                   />
 
                   {issueFilters.labels.length > 0 && (

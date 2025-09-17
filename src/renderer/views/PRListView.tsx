@@ -472,15 +472,22 @@ export default function PRListView() {
   }, []);
 
   const authors = useMemo(() => {
-    const authorSet = new Set<string>();
+    const authorMap = new Map<string, { login: string; avatar_url: string }>();
     pullRequests.forEach((pr) => {
-      authorSet.add(pr.user.login);
+      authorMap.set(pr.user.login, pr.user);
     });
     const authorOptions: DropdownOption<string>[] = [
       { value: "all", label: "All Authors" },
-      ...Array.from(authorSet).map((author) => ({
-        value: author,
-        label: author,
+      ...Array.from(authorMap.values()).map((author) => ({
+        value: author.login,
+        label: author.login,
+        icon: (
+          <img
+            src={author.avatar_url}
+            alt={author.login}
+            className="w-4 h-4 rounded-full"
+          />
+        ),
       })),
     ];
     return authorOptions;

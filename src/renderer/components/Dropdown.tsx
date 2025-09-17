@@ -17,6 +17,7 @@ interface DropdownProps<T extends string> {
     menuClassName?: string;
     labelPrefix?: string;
     width?: string;
+    useLabelPrefixAsDisplay?: boolean;
 }
 
 export default function Dropdown<T extends string>({
@@ -27,6 +28,7 @@ export default function Dropdown<T extends string>({
     menuClassName,
     labelPrefix,
     width,
+    useLabelPrefixAsDisplay,
 }: DropdownProps<T>) {
     const { theme } = useUIStore();
     const [isOpen, setIsOpen] = React.useState(false);
@@ -55,21 +57,25 @@ export default function Dropdown<T extends string>({
     }, []);
 
     return (
-        <div className={cn("relative", width || "w-full max-w-sm")} ref={dropdownRef}>
+        <div className={cn("relative", width || "w-full min-w-[160px] max-w-md")} ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
-                    "flex items-center justify-between text-sm px-3 py-1.5 rounded-md transition-colors border w-full",
+                    "flex items-center justify-between text-xs px-3 py-1.5 rounded-md transition-colors border w-full",
                     theme === "dark"
                         ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
                         : "bg-white border-gray-300 text-gray-900 hover:bg-gray-100",
                     buttonClassName,
                 )}
             >
-                <span className="truncate flex items-center">
-                    {selectedOption?.icon && <span className="mr-2">{selectedOption.icon}</span>}
-                    {labelPrefix}
-                    {selectedOption ? selectedOption.label : ""}
+                <span className="flex items-center min-w-0">
+                    {selectedOption?.icon && <span className="mr-2 flex-shrink-0">{selectedOption.icon}</span>}
+                    <span className="truncate">
+                        {useLabelPrefixAsDisplay
+                            ? (labelPrefix || "")
+                            : (selectedOption ? selectedOption.label : (labelPrefix || ""))
+                        }
+                    </span>
                 </span>
                 <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2" />
             </button>
@@ -90,7 +96,7 @@ export default function Dropdown<T extends string>({
                                 key={option.value}
                                 onClick={() => handleSelect(option.value)}
                                 className={cn(
-                                    "w-full text-left px-3 py-1.5 my-1 text-sm rounded flex items-center cursor-pointer",
+                                    "w-full text-left px-3 py-1.5 my-1 text-xs rounded flex items-center cursor-pointer min-w-0",
                                     theme === "dark"
                                         ? "hover:bg-gray-700"
                                         : "hover:bg-gray-100",
@@ -98,8 +104,8 @@ export default function Dropdown<T extends string>({
                                     (theme === "dark" ? "bg-gray-700" : "bg-gray-100"),
                                 )}
                             >
-                                {option.icon && <span className="mr-2">{option.icon}</span>}
-                                {option.label}
+                                {option.icon && <span className="mr-2 flex-shrink-0">{option.icon}</span>}
+                                <span className="truncate">{option.label}</span>
                             </div>
                         ))}
                     </div>
