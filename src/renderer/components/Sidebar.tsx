@@ -5,7 +5,6 @@ import {
   GitBranch,
   Settings,
   // Terminal, // TODO: Re-enable terminal tab when ready
-  ChevronDown,
   Filter,
   Plus,
   FolderOpen,
@@ -30,6 +29,7 @@ import { cn } from "../utils/cn";
 import { usePRStore, PRFilterType } from "../stores/prStore";
 import { useIssueStore } from "../stores/issueStore";
 import { useUIStore } from "../stores/uiStore";
+import Dropdown, { DropdownOption } from "./Dropdown";
 
 interface SidebarProps {
   className?: string;
@@ -58,8 +58,6 @@ export default function Sidebar({
     resetFilters: resetIssueFilters,
   } = useIssueStore();
   const { theme, setSidebarWidth, prNavigationState } = useUIStore();
-  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
-  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const startXRef = useRef(0);
@@ -266,6 +264,59 @@ export default function Sidebar({
         : [...issueFilters.labels, labelName],
     );
   };
+
+  // Create dropdown options for labels
+  const labelDropdownOptions = useMemo((): DropdownOption[] => {
+    if (availableLabels.length === 0) {
+      return [{ value: "none", label: "No labels available" }];
+    }
+    return [
+      { value: "manage", label: "Manage labels..." },
+      ...availableLabels.map((label) => ({
+        value: label.name,
+        label: label.name,
+        icon: (
+          <span
+            className="w-3 h-3 rounded inline-block"
+            style={{ backgroundColor: `#${label.color}` }}
+          />
+        ),
+      })),
+    ];
+  }, [availableLabels]);
+
+  const handleLabelDropdownChange = (value: string) => {
+    if (value === "manage" || value === "none") {
+      return; // Do nothing for these special values
+    }
+    toggleLabel(value);
+  };
+
+  // Create dropdown options for assignees
+  const assigneeDropdownOptions = useMemo((): DropdownOption[] => {
+    const baseOptions: DropdownOption[] = [
+      { value: "all", label: "All Issues" },
+      { value: "assigned", label: "Assigned" },
+      { value: "unassigned", label: "Unassigned" },
+    ];
+
+    if (availableAssignees.length > 0) {
+      const assigneeOptions = availableAssignees.map((assignee) => ({
+        value: assignee.login,
+        label: assignee.login,
+        icon: (
+          <img
+            src={assignee.avatar_url}
+            alt={assignee.login}
+            className="w-4 h-4 rounded-full"
+          />
+        ),
+      }));
+      return [...baseOptions, ...assigneeOptions];
+    }
+
+    return baseOptions;
+  }, [availableAssignees]);
 
   const navItems = [
     { path: "/pulls", icon: GitPullRequest, label: "Pull Requests" },
@@ -500,78 +551,18 @@ export default function Sidebar({
                   >
                     Labels
                   </label>
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowLabelDropdown(!showLabelDropdown)}
-                      className={cn(
-                        "w-full px-2 py-1 text-left rounded-md border flex items-center justify-between text-sm",
-                        theme === "dark"
-                          ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                          : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50",
-                      )}
-                    >
-                      <span className="text-xs">
-                        {issueFilters.labels.length > 0
-                          ? `${issueFilters.labels.length} selected`
-                          : "Select labels"}
-                      </span>
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-
-                    {showLabelDropdown && (
-                      <div
-                        className={cn(
-                          "absolute top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border shadow-lg z-10",
-                          theme === "dark"
-                            ? "bg-gray-700 border-gray-600"
-                            : "bg-white border-gray-300",
-                        )}
-                      >
-                        {availableLabels.length === 0 ? (
-                          <div
-                            className={cn(
-                              "px-3 py-2 text-xs",
-                              theme === "dark"
-                                ? "text-gray-400"
-                                : "text-gray-500",
-                            )}
-                          >
-                            No labels available
-                          </div>
-                        ) : (
-                          availableLabels.map((label) => (
-                            <label
-                              key={label.name}
-                              className={cn(
-                                "flex items-center px-2 py-1 cursor-pointer",
-                                theme === "dark"
-                                  ? "hover:bg-gray-600"
-                                  : "hover:bg-gray-50",
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={issueFilters.labels.includes(
-                                  label.name,
-                                )}
-                                onChange={() => toggleLabel(label.name)}
-                                className="mr-2"
-                              />
-                              <span
-                                className="px-1 py-0.5 text-xs rounded"
-                                style={{
-                                  backgroundColor: `#${label.color}30`,
-                                  color: `#${label.color}`,
-                                }}
-                              >
-                                {label.name}
-                              </span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <Dropdown
+                    options={labelDropdownOptions}
+                    value={issueFilters.labels.length > 0 ? "manage" : "manage"}
+                    onChange={handleLabelDropdownChange}
+                    buttonClassName="text-xs"
+                    menuClassName="max-h-48 overflow-y-auto"
+                    labelPrefix={
+                      issueFilters.labels.length > 0
+                        ? `${issueFilters.labels.length} selected`
+                        : "Select labels"
+                    }
+                  />
 
                   {issueFilters.labels.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -612,125 +603,13 @@ export default function Sidebar({
                   >
                     Assignee
                   </label>
-                  <div className="relative">
-                    <button
-                      onClick={() =>
-                        setShowAssigneeDropdown(!showAssigneeDropdown)
-                      }
-                      className={cn(
-                        "w-full px-2 py-1 text-left rounded-md border flex items-center justify-between text-sm",
-                        theme === "dark"
-                          ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                          : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50",
-                      )}
-                    >
-                      <span className="text-xs">
-                        {issueFilters.assignee === "all"
-                          ? "All"
-                          : issueFilters.assignee === "assigned"
-                            ? "Assigned"
-                            : issueFilters.assignee === "unassigned"
-                              ? "Unassigned"
-                              : issueFilters.assignee}
-                      </span>
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-
-                    {showAssigneeDropdown && (
-                      <div
-                        className={cn(
-                          "absolute top-full mt-1 w-full max-h-48 overflow-y-auto rounded-md border shadow-lg z-10",
-                          theme === "dark"
-                            ? "bg-gray-700 border-gray-600"
-                            : "bg-white border-gray-300",
-                        )}
-                      >
-                        <button
-                          onClick={() => {
-                            setIssueFilter("assignee", "all");
-                            setShowAssigneeDropdown(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-2 py-1 text-xs",
-                            theme === "dark"
-                              ? "hover:bg-gray-600"
-                              : "hover:bg-gray-50",
-                            issueFilters.assignee === "all" && "font-semibold",
-                          )}
-                        >
-                          All Issues
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIssueFilter("assignee", "assigned");
-                            setShowAssigneeDropdown(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-2 py-1 text-xs",
-                            theme === "dark"
-                              ? "hover:bg-gray-600"
-                              : "hover:bg-gray-50",
-                            issueFilters.assignee === "assigned" &&
-                            "font-semibold",
-                          )}
-                        >
-                          Assigned
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIssueFilter("assignee", "unassigned");
-                            setShowAssigneeDropdown(false);
-                          }}
-                          className={cn(
-                            "w-full text-left px-2 py-1 text-xs",
-                            theme === "dark"
-                              ? "hover:bg-gray-600"
-                              : "hover:bg-gray-50",
-                            issueFilters.assignee === "unassigned" &&
-                            "font-semibold",
-                          )}
-                        >
-                          Unassigned
-                        </button>
-                        {availableAssignees.length > 0 && (
-                          <>
-                            <div
-                              className={cn(
-                                "border-t my-1",
-                                theme === "dark"
-                                  ? "border-gray-600"
-                                  : "border-gray-200",
-                              )}
-                            />
-                            {availableAssignees.map((assignee) => (
-                              <button
-                                key={assignee.login}
-                                onClick={() => {
-                                  setIssueFilter("assignee", assignee.login);
-                                  setShowAssigneeDropdown(false);
-                                }}
-                                className={cn(
-                                  "w-full text-left px-2 py-1 text-xs flex items-center",
-                                  theme === "dark"
-                                    ? "hover:bg-gray-600"
-                                    : "hover:bg-gray-50",
-                                  issueFilters.assignee === assignee.login &&
-                                  "font-semibold",
-                                )}
-                              >
-                                <img
-                                  src={assignee.avatar_url}
-                                  alt={assignee.login}
-                                  className="w-4 h-4 rounded-full mr-1"
-                                />
-                                {assignee.login}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <Dropdown
+                    options={assigneeDropdownOptions}
+                    value={issueFilters.assignee}
+                    onChange={(value) => setIssueFilter("assignee", value)}
+                    buttonClassName="text-xs"
+                    menuClassName="max-h-48 overflow-y-auto"
+                  />
                 </div>
               </div>
             </div>

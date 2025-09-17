@@ -16,6 +16,7 @@ interface DropdownProps<T extends string> {
     buttonClassName?: string;
     menuClassName?: string;
     labelPrefix?: string;
+    width?: string;
 }
 
 export default function Dropdown<T extends string>({
@@ -25,6 +26,7 @@ export default function Dropdown<T extends string>({
     buttonClassName,
     menuClassName,
     labelPrefix,
+    width,
 }: DropdownProps<T>) {
     const { theme } = useUIStore();
     const [isOpen, setIsOpen] = React.useState(false);
@@ -53,7 +55,7 @@ export default function Dropdown<T extends string>({
     }, []);
 
     return (
-        <div className="relative w-48" ref={dropdownRef}>
+        <div className={cn("relative", width || "w-full max-w-sm")} ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
@@ -82,7 +84,7 @@ export default function Dropdown<T extends string>({
                         menuClassName,
                     )}
                 >
-                    <div className="p-1">
+                    <div className="px-1 py-0">
                         {options.map((option) => (
                             <div
                                 key={option.value}
