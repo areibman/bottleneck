@@ -23,6 +23,7 @@ import { formatDistanceToNow } from "date-fns";
 import { GitHubAPI } from "../services/github";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { AgentIcon } from "../components/AgentIcon";
+import { PRTag } from "../components/PRTag";
 import { detectAgentName } from "../utils/agentIcons";
 
 // Re-export Branch type from store for use in component
@@ -559,30 +560,29 @@ export default function BranchesView() {
                 </span>
               )}
               {existingPR && existingPR.merged && (
-                <span className="text-[10px] px-1.5 py-0.5 bg-purple-900 text-purple-300 rounded flex-shrink-0">
-                  Merged
-                </span>
-              )}
-              {existingPR && !existingPR.merged && (
-                <button
+                <PRTag
+                  prNumber={existingPR.number}
+                  state="merged"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (selectedRepo) {
                       navigate(`/pulls/${selectedRepo.owner}/${selectedRepo.name}/${existingPR.number}`);
                     }
                   }}
-                  className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 transition-colors cursor-pointer",
-                    existingPR.state === 'open'
-                      ? existingPR.draft
-                        ? "bg-gray-900 text-gray-300 hover:bg-gray-800"
-                        : "bg-green-900 text-green-300 hover:bg-green-800"
-                      : "bg-red-900 text-red-300 hover:bg-red-800"
-                  )}
-                  title={`View PR #${existingPR.number}`}
-                >
-                  PR #{existingPR.number}
-                </button>
+                />
+              )}
+              {existingPR && !existingPR.merged && (
+                <PRTag
+                  prNumber={existingPR.number}
+                  state={existingPR.state}
+                  isDraft={existingPR.draft}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedRepo) {
+                      navigate(`/pulls/${selectedRepo.owner}/${selectedRepo.name}/${existingPR.number}`);
+                    }
+                  }}
+                />
               )}
             </div>
 
