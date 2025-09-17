@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 interface Settings {
   // General
@@ -8,7 +8,7 @@ interface Settings {
   cloneLocation: string;
 
   // Appearance
-  theme: 'dark' | 'light' | 'auto';
+  theme: "dark" | "light" | "auto";
   fontSize: number;
   fontFamily: string;
   terminalFontSize: number;
@@ -42,15 +42,15 @@ const defaultSettings: Settings = {
   // General
   autoSync: true,
   syncInterval: 5,
-  defaultBranch: 'main',
-  cloneLocation: '~/repos',
+  defaultBranch: "main",
+  cloneLocation: "~/repos",
 
   // Appearance
-  theme: 'dark',
+  theme: "dark",
   fontSize: 13,
-  fontFamily: 'SF Mono',
+  fontFamily: "SF Mono",
   terminalFontSize: 13,
-  terminalFontFamily: 'SF Mono',
+  terminalFontFamily: "SF Mono",
   showWhitespace: false,
   wordWrap: false,
 
@@ -73,7 +73,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   updateSettings: (newSettings: Partial<Settings>) => {
     set((state) => ({
-      settings: { ...state.settings, ...newSettings }
+      settings: { ...state.settings, ...newSettings },
     }));
   },
 
@@ -87,7 +87,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.error("Failed to load settings:", error);
     }
   },
 
@@ -102,7 +102,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      console.error("Failed to save settings:", error);
     }
   },
 

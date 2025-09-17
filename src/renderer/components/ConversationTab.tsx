@@ -1,13 +1,13 @@
-import { PullRequest, Comment, Review } from '../services/github';
-import { useAuthStore } from '../stores/authStore';
-import { useUIStore } from '../stores/uiStore';
-import { PRDescription } from './conversation/PRDescription';
-import { BranchInfo } from './conversation/BranchInfo';
-import { PRLabels } from './conversation/PRLabels';
-import { TimelineItem } from './conversation/TimelineItem';
-import { CommentForm } from './conversation/CommentForm';
-import { ParticipantsSidebar } from './conversation/ParticipantsSidebar';
-import { useParticipantStats } from './conversation/useParticipantStats';
+import { PullRequest, Comment, Review } from "../services/github";
+import { useAuthStore } from "../stores/authStore";
+import { useUIStore } from "../stores/uiStore";
+import { PRDescription } from "./conversation/PRDescription";
+import { BranchInfo } from "./conversation/BranchInfo";
+import { PRLabels } from "./conversation/PRLabels";
+import { TimelineItem } from "./conversation/TimelineItem";
+import { CommentForm } from "./conversation/CommentForm";
+import { ParticipantsSidebar } from "./conversation/ParticipantsSidebar";
+import { useParticipantStats } from "./conversation/useParticipantStats";
 
 interface ConversationTabProps {
   pr: PullRequest;
@@ -16,10 +16,15 @@ interface ConversationTabProps {
   onCommentSubmit: () => void;
 }
 
-export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: ConversationTabProps) {
+export function ConversationTab({
+  pr,
+  comments,
+  reviews,
+  onCommentSubmit,
+}: ConversationTabProps) {
   const { user, token } = useAuthStore();
   const { theme } = useUIStore();
-  
+
   // Calculate participant stats
   const participantStats = useParticipantStats(pr, comments, reviews);
 
@@ -27,19 +32,31 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
   // Filter out reviews that are PENDING or have no submitted_at timestamp
   const timeline = [
     ...comments
-      .filter(c => c.created_at && c.user) // Filter out invalid comments
-      .map(c => ({ ...c, type: 'comment' as const, timestamp: c.created_at })),
+      .filter((c) => c.created_at && c.user) // Filter out invalid comments
+      .map((c) => ({
+        ...c,
+        type: "comment" as const,
+        timestamp: c.created_at,
+      })),
     ...reviews
-      .filter(r => 
-        r.state !== 'PENDING' && 
-        r.state !== 'DISMISSED' && 
-        r.submitted_at && 
-        r.user
+      .filter(
+        (r) =>
+          r.state !== "PENDING" &&
+          r.state !== "DISMISSED" &&
+          r.submitted_at &&
+          r.user,
       ) // Only show submitted, non-dismissed reviews with valid data
-      .map(r => ({ ...r, type: 'review' as const, timestamp: r.submitted_at || '' })),
+      .map((r) => ({
+        ...r,
+        type: "review" as const,
+        timestamp: r.submitted_at || "",
+      })),
   ]
-    .filter(item => item.timestamp && new Date(item.timestamp).getTime() > 0) // Filter out items with invalid timestamps
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    .filter((item) => item.timestamp && new Date(item.timestamp).getTime() > 0) // Filter out items with invalid timestamps
+    .sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
 
   return (
     <div className="flex h-full">
@@ -76,7 +93,7 @@ export function ConversationTab({ pr, comments, reviews, onCommentSubmit }: Conv
           />
         </div>
       </div>
-      
+
       {/* Participants Sidebar */}
       <ParticipantsSidebar participants={participantStats} theme={theme} />
     </div>

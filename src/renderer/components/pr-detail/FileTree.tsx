@@ -1,12 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo } from "react";
 import {
   UncontrolledTreeEnvironment,
   Tree,
   StaticTreeDataProvider,
   TreeItem,
   TreeItemIndex,
-} from 'react-complex-tree';
-import 'react-complex-tree/lib/style-modern.css';
+} from "react-complex-tree";
+import "react-complex-tree/lib/style-modern.css";
 import {
   Folder,
   FileDiff,
@@ -14,9 +14,9 @@ import {
   FilePlus,
   FileMinus,
   FileEdit,
-} from 'lucide-react';
-import { File } from '../../services/github';
-import { cn } from '../../utils/cn';
+} from "lucide-react";
+import { File } from "../../services/github";
+import { cn } from "../../utils/cn";
 
 type TreeData = {
   isFolder: boolean;
@@ -28,10 +28,15 @@ interface FileTreeProps {
   selectedFile?: File | null;
   viewedFiles: Set<string>;
   onFileSelect: (file: File) => void;
-  theme: 'dark' | 'light';
+  theme: "dark" | "light";
 }
 
-export function FileTree({ files, viewedFiles, onFileSelect, theme }: FileTreeProps) {
+export function FileTree({
+  files,
+  viewedFiles,
+  onFileSelect,
+  theme,
+}: FileTreeProps) {
   const treeItems = useMemo(() => {
     if (!files || files.length === 0) {
       return {};
@@ -39,7 +44,7 @@ export function FileTree({ files, viewedFiles, onFileSelect, theme }: FileTreePr
 
     const items: Record<TreeItemIndex, TreeItem<TreeData>> = {
       root: {
-        index: 'root',
+        index: "root",
         isFolder: true,
         children: [],
         data: { isFolder: true },
@@ -47,9 +52,9 @@ export function FileTree({ files, viewedFiles, onFileSelect, theme }: FileTreePr
     };
 
     for (const file of files) {
-      const pathParts = file.filename.split('/');
-      let currentPath = '';
-      let parentIndex: TreeItemIndex = 'root';
+      const pathParts = file.filename.split("/");
+      let currentPath = "";
+      let parentIndex: TreeItemIndex = "root";
 
       for (let i = 0; i < pathParts.length; i++) {
         const part = pathParts[i];
@@ -98,16 +103,16 @@ export function FileTree({ files, viewedFiles, onFileSelect, theme }: FileTreePr
   return (
     <UncontrolledTreeEnvironment
       dataProvider={treeDataProvider}
-      getItemTitle={(item) => item.index.toString().split('/').pop() || ''}
+      getItemTitle={(item) => item.index.toString().split("/").pop() || ""}
       viewState={{
-        'pr-files': {
+        "pr-files": {
           expandedItems: Array.from(
             (Object.values(treeItems) as TreeItem<TreeData>[])
               .filter(
                 (item: TreeItem<TreeData>) =>
-                  item.isFolder && (item.children?.length ?? 0) > 0
+                  item.isFolder && (item.children?.length ?? 0) > 0,
               )
-              .map((item: TreeItem<TreeData>) => item.index)
+              .map((item: TreeItem<TreeData>) => item.index),
           ),
         },
       }}
@@ -121,15 +126,19 @@ export function FileTree({ files, viewedFiles, onFileSelect, theme }: FileTreePr
           <div className="flex items-center space-x-1.5 flex-1 min-w-0">
             <span className="text-xs truncate font-mono flex items-center">
               {item.isFolder ? (
-                <Folder className={cn(
-                  "w-3 h-3 flex-shrink-0 mx-1",
-                  theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                )} />
+                <Folder
+                  className={cn(
+                    "w-3 h-3 flex-shrink-0 mx-1",
+                    theme === "dark" ? "text-gray-500" : "text-gray-600",
+                  )}
+                />
               ) : (
-                <FileDiff className={cn(
-                  "w-3 h-3 flex-shrink-0 mx-1",
-                  theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                )} />
+                <FileDiff
+                  className={cn(
+                    "w-3 h-3 flex-shrink-0 mx-1",
+                    theme === "dark" ? "text-gray-500" : "text-gray-600",
+                  )}
+                />
               )}
 
               {title}
@@ -139,32 +148,46 @@ export function FileTree({ files, viewedFiles, onFileSelect, theme }: FileTreePr
           {item.data.file && (
             <div className="flex items-center space-x-1 ml-2">
               {viewedFiles.has(item.data.file.filename) && (
-                <Eye className={cn(
-                  "w-3 h-3",
-                  theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                )} />
+                <Eye
+                  className={cn(
+                    "w-3 h-3",
+                    theme === "dark" ? "text-gray-500" : "text-gray-600",
+                  )}
+                />
               )}
               <div className="flex items-center space-x-1 text-[10px]">
-                {item.data.file.status === 'added' ? (
+                {item.data.file.status === "added" ? (
                   <>
                     <FilePlus className="w-3 h-3 text-green-500" />
-                    <span className="text-green-500">+{item.data.file.additions}</span>
+                    <span className="text-green-500">
+                      +{item.data.file.additions}
+                    </span>
                   </>
-                ) : item.data.file.status === 'removed' ? (
+                ) : item.data.file.status === "removed" ? (
                   <>
                     <FileMinus className="w-3 h-3 text-red-500" />
-                    <span className="text-red-500">-{item.data.file.deletions}</span>
+                    <span className="text-red-500">
+                      -{item.data.file.deletions}
+                    </span>
                   </>
-                ) : item.data.file.status === 'modified' ? (
+                ) : item.data.file.status === "modified" ? (
                   <>
                     <FileEdit className="w-3 h-3 text-yellow-500" />
-                    <span className="text-green-400">+{item.data.file.additions}</span>
-                    <span className="text-red-400">-{item.data.file.deletions}</span>
+                    <span className="text-green-400">
+                      +{item.data.file.additions}
+                    </span>
+                    <span className="text-red-400">
+                      -{item.data.file.deletions}
+                    </span>
                   </>
                 ) : (
                   <>
-                    <span className="text-green-400">+{item.data.file.additions}</span>
-                    <span className="text-red-400">-{item.data.file.deletions}</span>
+                    <span className="text-green-400">
+                      +{item.data.file.additions}
+                    </span>
+                    <span className="text-red-400">
+                      -{item.data.file.deletions}
+                    </span>
                   </>
                 )}
               </div>

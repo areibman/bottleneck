@@ -1,6 +1,6 @@
 export interface VercelDeployment {
   project: string;
-  status: 'Ready' | 'Ignored' | 'Building' | 'Error' | 'Canceled';
+  status: "Ready" | "Ignored" | "Building" | "Error" | "Canceled";
   preview?: string;
   comments?: string;
   updated: string;
@@ -22,7 +22,7 @@ export interface ParticipantStat {
 
 export interface TimelineItem {
   id: string | number;
-  type: 'comment' | 'review';
+  type: "comment" | "review";
   timestamp: string;
   user: { login: string; avatar_url: string };
   body?: string;

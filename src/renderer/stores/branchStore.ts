@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { GitHubAPI } from '../services/github';
+import { create } from "zustand";
+import { GitHubAPI } from "../services/github";
 
 interface Branch {
   name: string;
@@ -22,8 +22,14 @@ interface BranchState {
   loading: boolean;
   error: string | null;
   lastFetch: Map<string, number>; // Track last fetch time per repo
-  
-  fetchBranches: (owner: string, repo: string, token: string, defaultBranch?: string, force?: boolean) => Promise<void>;
+
+  fetchBranches: (
+    owner: string,
+    repo: string,
+    token: string,
+    defaultBranch?: string,
+    force?: boolean,
+  ) => Promise<void>;
   clearBranches: (owner: string, repo: string) => void;
   clearAllBranches: () => void;
   isCacheStale: (owner: string, repo: string) => boolean;
@@ -39,15 +45,21 @@ export const useBranchStore = create<BranchState>((set, get) => ({
   error: null,
   lastFetch: new Map(),
 
-  fetchBranches: async (owner: string, repo: string, token: string, defaultBranch = 'main', force = false) => {
+  fetchBranches: async (
+    owner: string,
+    repo: string,
+    token: string,
+    defaultBranch = "main",
+    force = false,
+  ) => {
     const repoKey = `${owner}/${repo}`;
     const state = get();
-    
+
     // Check cache validity
     const lastFetchTime = state.lastFetch.get(repoKey);
     const now = Date.now();
-    const isCacheValid = lastFetchTime && (now - lastFetchTime) < CACHE_DURATION;
-    
+    const isCacheValid = lastFetchTime && now - lastFetchTime < CACHE_DURATION;
+
     // Return cached data if valid and not forced
     if (!force && isCacheValid && state.branches.has(repoKey)) {
       console.log(`Using cached branches for ${repoKey}`);
@@ -66,38 +78,41 @@ export const useBranchStore = create<BranchState>((set, get) => ({
       console.log(`Fetching branches for ${repoKey}...`);
       const api = new GitHubAPI(token);
       const branchData = await api.getBranches(owner, repo);
-      
+
       // Mark the default branch as current
-      const branchesWithCurrent = branchData.map(branch => ({
+      const branchesWithCurrent = branchData.map((branch) => ({
         ...branch,
-        current: branch.name === defaultBranch
+        current: branch.name === defaultBranch,
       }));
 
       // Update state with new branches
       set((state) => {
         const newBranches = new Map(state.branches);
         newBranches.set(repoKey, branchesWithCurrent);
-        
+
         const newLoadedRepos = new Set(state.loadedRepos);
         newLoadedRepos.add(repoKey);
-        
+
         const newLastFetch = new Map(state.lastFetch);
         newLastFetch.set(repoKey, now);
-        
+
         return {
           branches: newBranches,
           loadedRepos: newLoadedRepos,
           loading: false,
-          lastFetch: newLastFetch
+          lastFetch: newLastFetch,
         };
       });
 
-      console.log(`Successfully fetched ${branchesWithCurrent.length} branches for ${repoKey}`);
+      console.log(
+        `Successfully fetched ${branchesWithCurrent.length} branches for ${repoKey}`,
+      );
     } catch (error) {
       console.error(`Failed to fetch branches for ${repoKey}:`, error);
-      set({ 
-        loading: false, 
-        error: error instanceof Error ? error.message : 'Failed to fetch branches' 
+      set({
+        loading: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch branches",
       });
     }
   },
@@ -107,17 +122,17 @@ export const useBranchStore = create<BranchState>((set, get) => ({
     set((state) => {
       const newBranches = new Map(state.branches);
       newBranches.delete(repoKey);
-      
+
       const newLoadedRepos = new Set(state.loadedRepos);
       newLoadedRepos.delete(repoKey);
-      
+
       const newLastFetch = new Map(state.lastFetch);
       newLastFetch.delete(repoKey);
-      
+
       return {
         branches: newBranches,
         loadedRepos: newLoadedRepos,
-        lastFetch: newLastFetch
+        lastFetch: newLastFetch,
       };
     });
   },
@@ -127,7 +142,7 @@ export const useBranchStore = create<BranchState>((set, get) => ({
       branches: new Map(),
       loadedRepos: new Set(),
       lastFetch: new Map(),
-      error: null
+      error: null,
     });
   },
 
@@ -135,15 +150,15 @@ export const useBranchStore = create<BranchState>((set, get) => ({
     const repoKey = `${owner}/${repo}`;
     const state = get();
     const lastFetchTime = state.lastFetch.get(repoKey);
-    
+
     if (!lastFetchTime) return true;
-    
+
     const now = Date.now();
-    return (now - lastFetchTime) >= CACHE_DURATION;
+    return now - lastFetchTime >= CACHE_DURATION;
   },
 
   getLastFetchTime: (owner: string, repo: string) => {
     const repoKey = `${owner}/${repo}`;
     return get().lastFetch.get(repoKey);
-  }
+  },
 }));

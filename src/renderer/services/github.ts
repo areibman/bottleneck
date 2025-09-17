@@ -1,4 +1,4 @@
-import { Octokit } from '@octokit/rest';
+import { Octokit } from "@octokit/rest";
 
 //
 export interface PullRequest {
@@ -6,7 +6,7 @@ export interface PullRequest {
   number: number;
   title: string;
   body: string | null;
-  state: 'open' | 'closed';
+  state: "open" | "closed";
   draft: boolean;
   merged: boolean;
   mergeable: boolean | null;
@@ -57,7 +57,7 @@ export interface PullRequest {
   additions?: number;
   deletions?: number;
   // Review status
-  approvalStatus?: 'approved' | 'changes_requested' | 'pending' | 'none';
+  approvalStatus?: "approved" | "changes_requested" | "pending" | "none";
   approvedBy?: Array<{
     login: string;
     avatar_url: string;
@@ -88,7 +88,7 @@ export interface Issue {
   number: number;
   title: string;
   body: string | null;
-  state: 'open' | 'closed';
+  state: "open" | "closed";
   user: {
     login: string;
     avatar_url: string;
@@ -125,9 +125,9 @@ export interface Comment {
   html_url: string;
   path?: string;
   line?: number;
-  side?: 'LEFT' | 'RIGHT';
+  side?: "LEFT" | "RIGHT";
   start_line?: number;
-  start_side?: 'LEFT' | 'RIGHT';
+  start_side?: "LEFT" | "RIGHT";
   in_reply_to_id?: number;
 }
 
@@ -138,14 +138,26 @@ export interface Review {
     avatar_url: string;
   };
   body: string;
-  state: 'PENDING' | 'COMMENTED' | 'APPROVED' | 'CHANGES_REQUESTED' | 'DISMISSED';
+  state:
+    | "PENDING"
+    | "COMMENTED"
+    | "APPROVED"
+    | "CHANGES_REQUESTED"
+    | "DISMISSED";
   submitted_at: string | null;
   commit_id: string;
 }
 
 export interface File {
   filename: string;
-  status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+  status:
+    | "added"
+    | "removed"
+    | "modified"
+    | "renamed"
+    | "copied"
+    | "changed"
+    | "unchanged";
   additions: number;
   deletions: number;
   changes: number;
@@ -167,16 +179,16 @@ export class GitHubAPI {
     const { data } = await this.octokit.repos.listForAuthenticatedUser({
       page,
       per_page: perPage,
-      sort: 'updated',
+      sort: "updated",
     });
-    
-    return data.map(repo => ({
+
+    return data.map((repo) => ({
       id: repo.id,
       owner: repo.owner.login,
       name: repo.name,
       full_name: repo.full_name,
       description: repo.description,
-      default_branch: repo.default_branch || 'main',
+      default_branch: repo.default_branch || "main",
       private: repo.private,
       clone_url: repo.clone_url,
       updated_at: repo.updated_at,
@@ -186,31 +198,35 @@ export class GitHubAPI {
     }));
   }
 
-  async getPullRequests(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
+  async getPullRequests(
+    owner: string,
+    repo: string,
+    state: "open" | "closed" | "all" = "open",
+  ) {
     const { data } = await this.octokit.pulls.list({
       owner,
       repo,
       state,
       per_page: 100,
     });
-    
+
     // The pulls.list endpoint doesn't include comment counts, but we can get them from the issues API
     // Since every PR is also an issue, we can fetch the issues to get comment counts
     const issuesData = await this.octokit.issues.listForRepo({
       owner,
       repo,
-      state: state === 'all' ? 'all' : state as 'open' | 'closed',
+      state: state === "all" ? "all" : (state as "open" | "closed"),
       per_page: 100,
     });
-    
+
     // Create a map of issue number to comment count
     const commentCounts = new Map<number, number>();
-    issuesData.data.forEach(issue => {
+    issuesData.data.forEach((issue) => {
       if (issue.pull_request) {
         commentCounts.set(issue.number, issue.comments);
       }
     });
-    
+
     // Fetch detailed PR data and reviews for each PR
     const detailedPRs = await Promise.all(
       data.map(async (pr) => {
@@ -226,54 +242,72 @@ export class GitHubAPI {
               repo,
               pull_number: pr.number,
               per_page: 100,
-            })
+            }),
           ]);
-          
+
           const detailedPR = detailedPRResponse.data;
           const reviews = reviewsResponse.data;
-          
+
           // Process reviews to determine approval status
           const approvedBy: Array<{ login: string; avatar_url: string }> = [];
-          const changesRequestedBy: Array<{ login: string; avatar_url: string }> = [];
-          
+          const changesRequestedBy: Array<{
+            login: string;
+            avatar_url: string;
+          }> = [];
+
           // Get the latest review from each reviewer
-          const latestReviews = new Map<string, typeof reviews[0]>();
-          reviews.forEach(review => {
-            if (review.user && review.state !== 'PENDING' && review.state !== 'COMMENTED') {
+          const latestReviews = new Map<string, (typeof reviews)[0]>();
+          reviews.forEach((review) => {
+            if (
+              review.user &&
+              review.state !== "PENDING" &&
+              review.state !== "COMMENTED"
+            ) {
               const existing = latestReviews.get(review.user.login);
-              if (!existing || new Date(review.submitted_at!) > new Date(existing.submitted_at!)) {
+              if (
+                !existing ||
+                new Date(review.submitted_at!) >
+                  new Date(existing.submitted_at!)
+              ) {
                 latestReviews.set(review.user.login, review);
               }
             }
           });
-          
+
           // Categorize reviews
-          latestReviews.forEach(review => {
+          latestReviews.forEach((review) => {
             if (review.user) {
-              if (review.state === 'APPROVED') {
+              if (review.state === "APPROVED") {
                 approvedBy.push({
                   login: review.user.login,
-                  avatar_url: review.user.avatar_url
+                  avatar_url: review.user.avatar_url,
                 });
-              } else if (review.state === 'CHANGES_REQUESTED') {
+              } else if (review.state === "CHANGES_REQUESTED") {
                 changesRequestedBy.push({
                   login: review.user.login,
-                  avatar_url: review.user.avatar_url
+                  avatar_url: review.user.avatar_url,
                 });
               }
             }
           });
-          
+
           // Determine overall approval status
-          let approvalStatus: 'approved' | 'changes_requested' | 'pending' | 'none' = 'none';
+          let approvalStatus:
+            | "approved"
+            | "changes_requested"
+            | "pending"
+            | "none" = "none";
           if (changesRequestedBy.length > 0) {
-            approvalStatus = 'changes_requested';
+            approvalStatus = "changes_requested";
           } else if (approvedBy.length > 0) {
-            approvalStatus = 'approved';
-          } else if (pr.requested_reviewers && pr.requested_reviewers.length > 0) {
-            approvalStatus = 'pending';
+            approvalStatus = "approved";
+          } else if (
+            pr.requested_reviewers &&
+            pr.requested_reviewers.length > 0
+          ) {
+            approvalStatus = "pending";
           }
-          
+
           return {
             ...pr,
             comments: commentCounts.get(pr.number) || 0,
@@ -284,7 +318,7 @@ export class GitHubAPI {
             merged_at: detailedPR.merged_at,
             approvalStatus,
             approvedBy,
-            changesRequestedBy
+            changesRequestedBy,
           };
         } catch (error) {
           console.error(`Failed to fetch details for PR #${pr.number}:`, error);
@@ -295,14 +329,14 @@ export class GitHubAPI {
             changed_files: undefined,
             additions: undefined,
             deletions: undefined,
-            approvalStatus: 'none' as const,
+            approvalStatus: "none" as const,
             approvedBy: [],
-            changesRequestedBy: []
+            changesRequestedBy: [],
           };
         }
-      })
+      }),
     );
-    
+
     return detailedPRs as unknown as PullRequest[];
   }
 
@@ -323,54 +357,65 @@ export class GitHubAPI {
         repo,
         pull_number: pullNumber,
         per_page: 100,
-      })
+      }),
     ]);
-    
+
     const data = prResponse.data;
     const reviews = reviewsResponse.data;
-    
+
     // Process reviews to determine approval status
     const approvedBy: Array<{ login: string; avatar_url: string }> = [];
     const changesRequestedBy: Array<{ login: string; avatar_url: string }> = [];
-    
+
     // Get the latest review from each reviewer
-    const latestReviews = new Map<string, typeof reviews[0]>();
-    reviews.forEach(review => {
-      if (review.user && review.state !== 'PENDING' && review.state !== 'COMMENTED') {
+    const latestReviews = new Map<string, (typeof reviews)[0]>();
+    reviews.forEach((review) => {
+      if (
+        review.user &&
+        review.state !== "PENDING" &&
+        review.state !== "COMMENTED"
+      ) {
         const existing = latestReviews.get(review.user.login);
-        if (!existing || new Date(review.submitted_at!) > new Date(existing.submitted_at!)) {
+        if (
+          !existing ||
+          new Date(review.submitted_at!) > new Date(existing.submitted_at!)
+        ) {
           latestReviews.set(review.user.login, review);
         }
       }
     });
-    
+
     // Categorize reviews
-    latestReviews.forEach(review => {
+    latestReviews.forEach((review) => {
       if (review.user) {
-        if (review.state === 'APPROVED') {
+        if (review.state === "APPROVED") {
           approvedBy.push({
             login: review.user.login,
-            avatar_url: review.user.avatar_url
+            avatar_url: review.user.avatar_url,
           });
-        } else if (review.state === 'CHANGES_REQUESTED') {
+        } else if (review.state === "CHANGES_REQUESTED") {
           changesRequestedBy.push({
             login: review.user.login,
-            avatar_url: review.user.avatar_url
+            avatar_url: review.user.avatar_url,
           });
         }
       }
     });
-    
+
     // Determine overall approval status
-    let approvalStatus: 'approved' | 'changes_requested' | 'pending' | 'none' = 'none';
+    let approvalStatus: "approved" | "changes_requested" | "pending" | "none" =
+      "none";
     if (changesRequestedBy.length > 0) {
-      approvalStatus = 'changes_requested';
+      approvalStatus = "changes_requested";
     } else if (approvedBy.length > 0) {
-      approvalStatus = 'approved';
-    } else if (data.requested_reviewers && data.requested_reviewers.length > 0) {
-      approvalStatus = 'pending';
+      approvalStatus = "approved";
+    } else if (
+      data.requested_reviewers &&
+      data.requested_reviewers.length > 0
+    ) {
+      approvalStatus = "pending";
     }
-    
+
     return {
       ...data,
       comments: issueResponse.data.comments,
@@ -379,7 +424,7 @@ export class GitHubAPI {
       deletions: (data as any).deletions,
       approvalStatus,
       approvedBy,
-      changesRequestedBy
+      changesRequestedBy,
     } as PullRequest;
   }
 
@@ -389,7 +434,7 @@ export class GitHubAPI {
       repo,
       issue_number: issueNumber,
     });
-    
+
     return data as Issue;
   }
 
@@ -399,7 +444,7 @@ export class GitHubAPI {
       repo,
       per_page: 100,
     });
-    
+
     // Get additional details for each branch
     const branchesWithDetails = await Promise.all(
       data.map(async (branch) => {
@@ -410,28 +455,29 @@ export class GitHubAPI {
             repo,
             ref: branch.commit.sha,
           });
-          
+
           // Get comparison with default branch to check ahead/behind
           let ahead = 0;
           let behind = 0;
           try {
-            const { data: comparison } = await this.octokit.repos.compareCommitsWithBasehead({
-              owner,
-              repo,
-              basehead: `main...${branch.name}`,
-            });
+            const { data: comparison } =
+              await this.octokit.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `main...${branch.name}`,
+              });
             ahead = comparison.ahead_by;
             behind = comparison.behind_by;
           } catch (error) {
             // Comparison might fail for some branches
           }
-          
+
           return {
             name: branch.name,
             commit: {
               sha: branch.commit.sha,
-              author: commit.commit.author?.name || 'Unknown',
-              authorEmail: commit.commit.author?.email || '',
+              author: commit.commit.author?.name || "Unknown",
+              authorEmail: commit.commit.author?.email || "",
               message: commit.commit.message,
               date: commit.commit.author?.date || new Date().toISOString(),
             },
@@ -445,9 +491,9 @@ export class GitHubAPI {
             name: branch.name,
             commit: {
               sha: branch.commit.sha,
-              author: 'Unknown',
-              authorEmail: '',
-              message: '',
+              author: "Unknown",
+              authorEmail: "",
+              message: "",
               date: new Date().toISOString(),
             },
             protected: branch.protected,
@@ -455,24 +501,28 @@ export class GitHubAPI {
             behind: 0,
           };
         }
-      })
+      }),
     );
-    
+
     return branchesWithDetails;
   }
 
-  async getIssues(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
+  async getIssues(
+    owner: string,
+    repo: string,
+    state: "open" | "closed" | "all" = "open",
+  ) {
     const { data } = await this.octokit.issues.listForRepo({
       owner,
       repo,
       state,
       per_page: 100,
     });
-    
+
     // Filter out pull requests - GitHub API returns both issues and PRs from this endpoint
     // Pull requests have a pull_request property
-    const issues = data.filter(item => !('pull_request' in item));
-    
+    const issues = data.filter((item) => !("pull_request" in item));
+
     return issues as Issue[];
   }
 
@@ -483,11 +533,15 @@ export class GitHubAPI {
       pull_number: pullNumber,
       per_page: 100,
     });
-    
+
     return data as File[];
   }
 
-  async getPullRequestComments(owner: string, repo: string, pullNumber: number) {
+  async getPullRequestComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ) {
     const [issueComments, reviewComments] = await Promise.all([
       this.octokit.issues.listComments({
         owner,
@@ -502,14 +556,18 @@ export class GitHubAPI {
         per_page: 100,
       }),
     ]);
-    
+
     // Return both types but we'll filter them appropriately in the UI
     // Issue comments are for the conversation tab
     // Review comments are for inline diff comments
     return [...issueComments.data, ...reviewComments.data] as Comment[];
   }
-  
-  async getPullRequestConversationComments(owner: string, repo: string, pullNumber: number) {
+
+  async getPullRequestConversationComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ) {
     // Only get issue comments for the conversation tab
     const { data } = await this.octokit.issues.listComments({
       owner,
@@ -517,7 +575,7 @@ export class GitHubAPI {
       issue_number: pullNumber,
       per_page: 100,
     });
-    
+
     return data as Comment[];
   }
 
@@ -528,7 +586,7 @@ export class GitHubAPI {
       pull_number: pullNumber,
       per_page: 100,
     });
-    
+
     return data as Review[];
   }
 
@@ -537,23 +595,27 @@ export class GitHubAPI {
     repo: string,
     pullNumber: number,
     body: string,
-    event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES',
+    event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES",
     comments?: Array<{
       path: string;
       line: number;
-      side?: 'LEFT' | 'RIGHT';
+      side?: "LEFT" | "RIGHT";
       body: string;
-    }>
+    }>,
   ) {
     // GitHub API requires body for REQUEST_CHANGES but it's optional for APPROVE
     // Empty string is fine for APPROVE but we need actual content for REQUEST_CHANGES
-    if (event === 'REQUEST_CHANGES' && (!body || body.trim() === '')) {
-      throw new Error('Body is required when requesting changes');
+    if (event === "REQUEST_CHANGES" && (!body || body.trim() === "")) {
+      throw new Error("Body is required when requesting changes");
     }
-    
+
     // Get the latest commit SHA for the PR (often required by GitHub API)
-    const latestCommitSha = await this.getLatestCommitSha(owner, repo, pullNumber);
-    
+    const latestCommitSha = await this.getLatestCommitSha(
+      owner,
+      repo,
+      pullNumber,
+    );
+
     // Build the parameters object
     const params: any = {
       owner,
@@ -562,21 +624,21 @@ export class GitHubAPI {
       event,
       commit_id: latestCommitSha, // This is often required to prevent stale reviews
     };
-    
+
     // Only include body if it's not empty
     // For APPROVE, body is optional and can be omitted
     // For REQUEST_CHANGES, body is required (checked above)
     if (body && body.trim()) {
       params.body = body;
     }
-    
+
     // Only include comments if provided
     if (comments && comments.length > 0) {
       params.comments = comments;
     }
-    
+
     const { data } = await this.octokit.pulls.createReview(params);
-    
+
     return data;
   }
 
@@ -587,7 +649,7 @@ export class GitHubAPI {
     body: string,
     path?: string,
     line?: number,
-    side?: 'LEFT' | 'RIGHT'
+    side?: "LEFT" | "RIGHT",
   ) {
     if (path && line) {
       const { data } = await this.octokit.pulls.createReviewComment({
@@ -616,9 +678,9 @@ export class GitHubAPI {
     owner: string,
     repo: string,
     pullNumber: number,
-    mergeMethod: 'merge' | 'squash' | 'rebase' = 'merge',
+    mergeMethod: "merge" | "squash" | "rebase" = "merge",
     commitTitle?: string,
-    commitMessage?: string
+    commitMessage?: string,
   ) {
     const { data } = await this.octokit.pulls.merge({
       owner,
@@ -628,7 +690,7 @@ export class GitHubAPI {
       commit_title: commitTitle,
       commit_message: commitMessage,
     });
-    
+
     return data;
   }
 
@@ -637,9 +699,9 @@ export class GitHubAPI {
       owner,
       repo,
       pull_number: pullNumber,
-      state: 'closed',
+      state: "closed",
     });
-    
+
     return data;
   }
 
@@ -647,7 +709,7 @@ export class GitHubAPI {
     owner: string,
     repo: string,
     pullNumber: number,
-    reviewers: string[]
+    reviewers: string[],
   ) {
     const { data } = await this.octokit.pulls.requestReviewers({
       owner,
@@ -655,7 +717,7 @@ export class GitHubAPI {
       pull_number: pullNumber,
       reviewers,
     });
-    
+
     return data;
   }
 
@@ -663,7 +725,7 @@ export class GitHubAPI {
     owner: string,
     repo: string,
     pullNumber: number,
-    labels: string[]
+    labels: string[],
   ) {
     const { data } = await this.octokit.issues.addLabels({
       owner,
@@ -671,7 +733,7 @@ export class GitHubAPI {
       issue_number: pullNumber,
       labels,
     });
-    
+
     return data;
   }
 
@@ -679,7 +741,7 @@ export class GitHubAPI {
     owner: string,
     repo: string,
     pullNumber: number,
-    label: string
+    label: string,
   ) {
     await this.octokit.issues.removeLabel({
       owner,
@@ -695,11 +757,16 @@ export class GitHubAPI {
       repo,
       pull_number: pullNumber,
     });
-    
+
     return data.head.sha;
   }
 
-  async getFileContent(owner: string, repo: string, path: string, ref: string): Promise<string> {
+  async getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref: string,
+  ): Promise<string> {
     const { data } = await this.octokit.repos.getContent({
       owner,
       repo,
@@ -707,12 +774,12 @@ export class GitHubAPI {
       ref,
     });
 
-    if ('content' in data) {
+    if ("content" in data) {
       // Content is base64 encoded, decode in main process
       return window.electron.utils.fromBase64(data.content);
     }
 
-    throw new Error('Could not retrieve file content.');
+    throw new Error("Could not retrieve file content.");
   }
 
   async searchPullRequests(query: string) {
@@ -720,54 +787,77 @@ export class GitHubAPI {
       q: `${query} type:pr`,
       per_page: 100,
     });
-    
+
     return data.items;
   }
 
-  async getIssueComments(owner: string, repo: string, issueNumber: number): Promise<Comment[]> {
+  async getIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<Comment[]> {
     const { data } = await this.octokit.issues.listComments({
       owner,
       repo,
       issue_number: issueNumber,
     });
-    
+
     return data as Comment[];
   }
 
-  async createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<Comment> {
+  async createIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string,
+  ): Promise<Comment> {
     const { data } = await this.octokit.issues.createComment({
       owner,
       repo,
       issue_number: issueNumber,
       body,
     });
-    
+
     return data as Comment;
   }
 
-  async updateIssue(owner: string, repo: string, issueNumber: number, body: string): Promise<Issue> {
+  async updateIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string,
+  ): Promise<Issue> {
     const { data } = await this.octokit.issues.update({
       owner,
       repo,
       issue_number: issueNumber,
       body,
     });
-    
+
     return data as Issue;
   }
 
-  async updateIssueComment(owner: string, repo: string, commentId: number, body: string): Promise<Comment> {
+  async updateIssueComment(
+    owner: string,
+    repo: string,
+    commentId: number,
+    body: string,
+  ): Promise<Comment> {
     const { data } = await this.octokit.issues.updateComment({
       owner,
       repo,
       comment_id: commentId,
       body,
     });
-    
+
     return data as Comment;
   }
 
-  async deleteIssueComment(owner: string, repo: string, commentId: number): Promise<void> {
+  async deleteIssueComment(
+    owner: string,
+    repo: string,
+    commentId: number,
+  ): Promise<void> {
     await this.octokit.issues.deleteComment({
       owner,
       repo,

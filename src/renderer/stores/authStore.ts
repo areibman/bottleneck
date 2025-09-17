@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { GitHubAPI } from '../services/github';
+import { create } from "zustand";
+import { GitHubAPI } from "../services/github";
 
 interface User {
   login: string;
@@ -15,7 +15,7 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   error: string | null;
-  
+
   login: () => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -31,19 +31,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async () => {
     if (!window.electron) {
-      set({ error: 'Electron API not available' });
+      set({ error: "Electron API not available" });
       return;
     }
-    
+
     set({ loading: true, error: null });
-    
+
     try {
       const result = await window.electron.auth.login();
-      
+
       if (result.success) {
         const api = new GitHubAPI(result.token);
         const user = await api.getCurrentUser();
-        
+
         set({
           isAuthenticated: true,
           token: result.token,
@@ -52,7 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
       } else {
         set({
-          error: result.error || 'Authentication failed',
+          error: result.error || "Authentication failed",
           loading: false,
         });
       }
@@ -66,16 +66,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     if (!window.electron) {
-      set({ 
+      set({
         isAuthenticated: false,
         token: null,
         user: null,
       });
       return;
     }
-    
+
     set({ loading: true });
-    
+
     try {
       await window.electron.auth.logout();
       set({
@@ -94,7 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   checkAuth: async () => {
     if (!window.electron) {
-      console.warn('window.electron not available');
+      console.warn("window.electron not available");
       set({
         isAuthenticated: false,
         token: null,
@@ -102,14 +102,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       return;
     }
-    
+
     const token = await window.electron.auth.getToken();
-    
+
     if (token) {
       try {
         const api = new GitHubAPI(token);
         const user = await api.getCurrentUser();
-        
+
         set({
           isAuthenticated: true,
           token,
@@ -133,10 +133,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setUser: (user) => {
-    set({ 
+    set({
       user,
       isAuthenticated: true,
-      token: 'dev-token' // Mock token for development
+      token: "dev-token", // Mock token for development
     });
   },
 }));
