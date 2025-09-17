@@ -88,7 +88,7 @@ export default function Dropdown<T extends string>({
                                 key={option.value}
                                 onClick={() => handleSelect(option.value)}
                                 className={cn(
-                                    "w-full text-left px-3 py-1.5 text-sm rounded flex items-center cursor-pointer",
+                                    "w-full text-left px-3 py-1.5 my-1 text-sm rounded flex items-center cursor-pointer",
                                     theme === "dark"
                                         ? "hover:bg-gray-700"
                                         : "hover:bg-gray-100",
