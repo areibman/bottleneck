@@ -14,6 +14,7 @@ import { useAuthStore } from "../stores/authStore";
 import { GitHubAPI, Issue, Comment } from "../services/github";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
+import { getLabelColors } from "../utils/labelColors";
 import { mockIssues } from "../mockData";
 import { useUIStore } from "../stores/uiStore";
 import { Markdown } from "../components/Markdown";
@@ -706,18 +707,21 @@ export default function IssueDetailView() {
                   </h3>
                   {issue.labels.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {issue.labels.map((l) => (
-                        <span
-                          key={l.name}
-                          className="px-2 py-0.5 text-xs rounded"
-                          style={{
-                            backgroundColor: `#${l.color}30`,
-                            color: `#${l.color}`,
-                          }}
-                        >
-                          {l.name}
-                        </span>
-                      ))}
+                      {issue.labels.map((l) => {
+                        const labelColors = getLabelColors(l.color, theme);
+                        return (
+                          <span
+                            key={l.name}
+                            className="px-2 py-0.5 text-xs rounded font-medium"
+                            style={{
+                              backgroundColor: labelColors.backgroundColor,
+                              color: labelColors.color,
+                            }}
+                          >
+                            {l.name}
+                          </span>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p

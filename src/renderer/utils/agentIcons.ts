@@ -12,6 +12,7 @@ const BASE_ICON_MAP: Record<string, AgentIconInfo> = {
   cursor: { src: cursorIconUrl, alt: "Cursor" },
   claude: { src: claudeIconUrl, alt: "Claude" },
   openai: { src: openaiIconUrl, alt: "OpenAI" },
+  codex: { src: openaiIconUrl, alt: "Codex" }, // Using OpenAI icon temporarily for Codex
   devin: { src: devinIconUrl, alt: "Devin" },
 };
 
@@ -23,8 +24,7 @@ const ALIASES: Record<string, string> = {
   "claude-3": "claude",
   "claude-instant": "claude",
   anthropic: "claude",
-  "openai-codex": "openai",
-  codex: "openai",
+  "openai-codex": "codex",
   gpt: "openai",
   "gpt-4": "openai",
   "gpt4": "openai",

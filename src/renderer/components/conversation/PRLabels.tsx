@@ -1,5 +1,6 @@
 import { Tag } from "lucide-react";
 import { cn } from "../../utils/cn";
+import { getLabelColors } from "../../utils/labelColors";
 import { PullRequest } from "../../services/github";
 
 interface PRLabelsProps {
@@ -20,18 +21,21 @@ export function PRLabels({ labels, theme }: PRLabelsProps) {
           )}
         />
         <div className="flex flex-wrap gap-2">
-          {labels.map((label) => (
-            <span
-              key={label.name}
-              className="px-3 py-1 rounded text-sm font-medium"
-              style={{
-                backgroundColor: `#${label.color}30`,
-                color: `#${label.color}`,
-              }}
-            >
-              {label.name}
-            </span>
-          ))}
+          {labels.map((label) => {
+            const labelColors = getLabelColors(label.color, theme);
+            return (
+              <span
+                key={label.name}
+                className="px-3 py-1 rounded text-sm font-medium"
+                style={{
+                  backgroundColor: labelColors.backgroundColor,
+                  color: labelColors.color,
+                }}
+              >
+                {label.name}
+              </span>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
+import { getLabelColors } from "../utils/labelColors";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
@@ -70,18 +71,21 @@ const IssueItem = React.memo(
 
                 {issue.labels.length > 0 && (
                   <div className="flex items-center mt-2 space-x-1">
-                    {issue.labels.slice(0, 5).map((label) => (
-                      <span
-                        key={label.name}
-                        className="px-2 py-0-5 text-xs rounded"
-                        style={{
-                          backgroundColor: `#${label.color}30`,
-                          color: `#${label.color}`,
-                        }}
-                      >
-                        {label.name}
-                      </span>
-                    ))}
+                    {issue.labels.slice(0, 5).map((label) => {
+                      const labelColors = getLabelColors(label.color, theme);
+                      return (
+                        <span
+                          key={label.name}
+                          className="px-2 py-0.5 text-xs rounded font-medium"
+                          style={{
+                            backgroundColor: labelColors.backgroundColor,
+                            color: labelColors.color,
+                          }}
+                        >
+                          {label.name}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>

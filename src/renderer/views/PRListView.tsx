@@ -22,6 +22,7 @@ import { AgentIcon } from "../components/AgentIcon";
 import { detectAgentName } from "../utils/agentIcons";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
+import { getLabelColors } from "../utils/labelColors";
 import WelcomeView from "./WelcomeView";
 import { PullRequest } from "../services/github";
 
@@ -200,18 +201,21 @@ const PRItem = React.memo(
                 {/* Labels */}
                 {pr.labels.length > 0 && (
                   <div className="flex items-center mt-2 space-x-1">
-                    {pr.labels.slice(0, 3).map((label: any) => (
-                      <span
-                        key={label.name}
-                        className="px-2 py-0.5 text-xs rounded"
-                        style={{
-                          backgroundColor: `#${label.color}30`,
-                          color: `#${label.color}`,
-                        }}
-                      >
-                        {label.name}
-                      </span>
-                    ))}
+                    {pr.labels.slice(0, 3).map((label: any) => {
+                      const labelColors = getLabelColors(label.color, theme);
+                      return (
+                        <span
+                          key={label.name}
+                          className="px-2 py-0.5 text-xs rounded font-medium"
+                          style={{
+                            backgroundColor: labelColors.backgroundColor,
+                            color: labelColors.color,
+                          }}
+                        >
+                          {label.name}
+                        </span>
+                      );
+                    })}
                     {pr.labels.length > 3 && (
                       <span
                         className={cn(
@@ -455,7 +459,7 @@ export default function PRListView() {
       pr.title,
       pr.body,
       pr.user?.login,
-      pr.head?.label,
+      pr.head?.ref,
       ...labelNames,
     );
 
