@@ -758,6 +758,26 @@ export default function Sidebar({ className, width = 256, onWidthChange }: Sideb
                     )}>
                       {siblingPR.title}
                     </div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      {siblingPR.changed_files !== undefined && (
+                        <span className={cn(
+                          "text-xs",
+                          theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                        )}>
+                          {siblingPR.changed_files} file{siblingPR.changed_files !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {siblingPR.additions !== undefined && (
+                        <span className="text-xs text-green-500">
+                          +{siblingPR.additions}
+                        </span>
+                      )}
+                      {siblingPR.deletions !== undefined && (
+                        <span className="text-xs text-red-500">
+                          -{siblingPR.deletions}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -890,6 +910,28 @@ export default function Sidebar({ className, width = 256, onWidthChange }: Sideb
                       />
                     )}
                     <span className="flex-1 truncate">{title}</span>
+                    {item.data.type === 'pr' && item.data.pr && (
+                      <div className="flex items-center space-x-2 ml-2">
+                        {item.data.pr.changed_files !== undefined && (
+                          <span className={cn(
+                            "text-xs",
+                            theme === 'dark' ? "text-gray-500" : "text-gray-600"
+                          )}>
+                            {item.data.pr.changed_files} file{item.data.pr.changed_files !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {item.data.pr.additions !== undefined && (
+                          <span className="text-xs text-green-500">
+                            +{item.data.pr.additions}
+                          </span>
+                        )}
+                        {item.data.pr.deletions !== undefined && (
+                          <span className="text-xs text-red-500">
+                            -{item.data.pr.deletions}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {item.data.count && (
                       <span className={cn(
                         "text-xs",
