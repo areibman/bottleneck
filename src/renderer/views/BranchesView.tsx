@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   GitBranch,
-  Trash2,
   GitMerge,
   RefreshCw,
   ChevronDown,
@@ -41,6 +41,7 @@ interface Branch {
 }
 
 export default function BranchesView() {
+  const navigate = useNavigate();
   const { theme } = useUIStore();
   const { selectedRepo, pullRequests } = usePRStore();
   const { token } = useAuthStore();
@@ -269,11 +270,6 @@ export default function BranchesView() {
     [],
   );
 
-  const handleDeleteSelected = useCallback(async () => {
-    // TODO: Implement bulk delete via GitHub API
-    console.log("Deleting branches:", Array.from(selectedBranches));
-    setSelectedBranches(new Set());
-  }, [selectedBranches]);
 
   const handleOpenCreatePR = useCallback((branch: Branch) => {
     setSelectedBranchForPR(branch);
@@ -453,6 +449,16 @@ export default function BranchesView() {
     const status = getBranchStatus(branch);
     const existingPR = branchToPRMap.get(branch.name);
 
+    const handleBranchClick = () => {
+      // If branch has a PR, navigate to PR details
+      if (existingPR && selectedRepo) {
+        navigate(`/pulls/${selectedRepo.owner}/${selectedRepo.name}/${existingPR.number}`);
+      } else {
+        // Otherwise, toggle selection
+        handleBranchSelect(branch.name, !isSelected);
+      }
+    };
+
     return (
       <div
         className={cn(
@@ -462,13 +468,14 @@ export default function BranchesView() {
           branch.current && "border-l-2 border-blue-500",
           isNested && "pl-10",
         )}
-        onClick={() => handleBranchSelect(branch.name, !isSelected)}
+        onClick={handleBranchClick}
       >
         <div className="flex items-center space-x-2 flex-1 min-w-0">
           {/* Checkbox */}
           <input
             type="checkbox"
             checked={isSelected}
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
               e.stopPropagation();
               handleBranchSelect(branch.name, e.target.checked);
@@ -489,15 +496,17 @@ export default function BranchesView() {
               <GitBranch
                 className={cn(
                   "w-4 h-4",
-                  branch.current
-                    ? "text-blue-400"
-                    : status === "ahead"
-                      ? "text-green-400"
-                      : status === "behind"
-                        ? "text-yellow-400"
-                        : status === "diverged"
-                          ? "text-orange-400"
-                          : "text-gray-400",
+                  existingPR?.merged
+                    ? "text-purple-400"
+                    : branch.current
+                      ? "text-blue-400"
+                      : status === "ahead"
+                        ? "text-green-400"
+                        : status === "behind"
+                          ? "text-yellow-400"
+                          : status === "diverged"
+                            ? "text-orange-400"
+                            : "text-gray-400",
                 )}
               />
             )}
@@ -524,24 +533,31 @@ export default function BranchesView() {
                   Protected
                 </span>
               )}
-              {existingPR && (
-                <a
-                  href={`#/pr/${selectedRepo?.owner}/${selectedRepo?.name}/${existingPR.number}`}
-                  onClick={(e) => e.stopPropagation()}
+              {existingPR && existingPR.merged && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-purple-900 text-purple-300 rounded flex-shrink-0">
+                  Merged
+                </span>
+              )}
+              {existingPR && !existingPR.merged && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedRepo) {
+                      navigate(`/pulls/${selectedRepo.owner}/${selectedRepo.name}/${existingPR.number}`);
+                    }
+                  }}
                   className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 transition-colors",
+                    "text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 transition-colors cursor-pointer",
                     existingPR.state === 'open'
                       ? existingPR.draft
                         ? "bg-gray-900 text-gray-300 hover:bg-gray-800"
                         : "bg-green-900 text-green-300 hover:bg-green-800"
-                      : existingPR.merged
-                        ? "bg-purple-900 text-purple-300 hover:bg-purple-800"
-                        : "bg-red-900 text-red-300 hover:bg-red-800"
+                      : "bg-red-900 text-red-300 hover:bg-red-800"
                   )}
                   title={`View PR #${existingPR.number}`}
                 >
                   PR #{existingPR.number}
-                </a>
+                </button>
               )}
             </div>
 
@@ -617,18 +633,6 @@ export default function BranchesView() {
               <span className="text-[10px] font-medium">
                 {existingPR ? "Reopen PR" : "Create PR"}
               </span>
-            </button>
-          )}
-          {!branch.protected && !branch.current && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                // TODO: Implement delete via GitHub API
-              }}
-              className="btn btn-ghost p-1 text-xs text-red-400 hover:text-red-300"
-              title="Delete branch"
-            >
-              <Trash2 className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -755,17 +759,6 @@ export default function BranchesView() {
                     Create PR{selectedBranches.size > 1 ? 's' : ''}
                   </button>
 
-                  <button
-                    onClick={handleDeleteSelected}
-                    className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
-                      theme === "dark"
-                        ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                        : "text-red-600 hover:text-red-700 hover:bg-red-50",
-                    )}
-                  >
-                    Delete
-                  </button>
 
                   <button
                     onClick={() => setSelectedBranches(new Set())}
