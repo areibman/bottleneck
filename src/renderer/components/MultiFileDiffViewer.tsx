@@ -63,7 +63,7 @@ export function MultiFileDiffViewer({
 
   // Parse patch content for a file
   const parsePatch = (patch: string) => {
-    if (!patch) {
+    if (!patch || patch.trim() === "") {
       return { original: "", modified: "" };
     }
 
@@ -173,9 +173,13 @@ export function MultiFileDiffViewer({
       }
     }
 
+    // Ensure we always have at least one line to prevent Monaco Editor issues
+    const originalContent = originalLines.length > 0 ? originalLines.join("\n") : "";
+    const modifiedContent = modifiedLines.length > 0 ? modifiedLines.join("\n") : "";
+
     return {
-      original: originalLines.join("\n"),
-      modified: modifiedLines.join("\n"),
+      original: originalContent,
+      modified: modifiedContent,
     };
   };
 
@@ -213,19 +217,19 @@ export function MultiFileDiffViewer({
         fileWithContent.file.status === "added"
           ? Promise.resolve("")
           : api.getFileContent(
-              owner,
-              repo,
-              fileWithContent.file.filename,
-              prBaseSha,
-            ),
+            owner,
+            repo,
+            fileWithContent.file.filename,
+            prBaseSha,
+          ),
         fileWithContent.file.status === "removed"
           ? Promise.resolve("")
           : api.getFileContent(
-              owner,
-              repo,
-              fileWithContent.file.filename,
-              prHeadSha,
-            ),
+            owner,
+            repo,
+            fileWithContent.file.filename,
+            prHeadSha,
+          ),
       ]);
 
       setFilesWithContent((prev) =>
@@ -447,7 +451,7 @@ export function MultiFileDiffViewer({
                       className={cn(
                         "btn btn-ghost px-2 py-1 text-xs flex items-center gap-1",
                         isShowingFull &&
-                          (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
+                        (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
                       )}
                       title={
                         isShowingFull ? "Show diff only" : "Show full file"
@@ -515,8 +519,8 @@ export function MultiFileDiffViewer({
                   ) : (
                     <MonacoDiffEditor
                       height={editorHeight}
-                      original={originalToShow || ""}
-                      modified={modifiedToShow || ""}
+                      original={originalToShow || " "}
+                      modified={modifiedToShow || " "}
                       language={language}
                       theme={theme === "dark" ? "vs-dark" : "vs"}
                       options={{
@@ -548,6 +552,21 @@ export function MultiFileDiffViewer({
                           contextLineCount: 3,
                         },
                         diffAlgorithm: "advanced",
+                      }}
+                      onMount={(editor) => {
+                        try {
+                          const originalModel = editor.getOriginalEditor().getModel();
+                          const modifiedModel = editor.getModifiedEditor().getModel();
+
+                          if (originalModel && originalModel.getLineCount() === 0) {
+                            originalModel.setValue(" ");
+                          }
+                          if (modifiedModel && modifiedModel.getLineCount() === 0) {
+                            modifiedModel.setValue(" ");
+                          }
+                        } catch (error) {
+                          console.warn("Monaco Editor initialization warning:", error);
+                        }
                       }}
                     />
                   )}

@@ -758,16 +758,6 @@ export default function PRListView() {
             <h1 className="text-xl font-semibold flex items-center">
               <GitPullRequest className="w-5 h-5 mr-2" />
               Pull Requests
-              {selectedRepo && (
-                <span
-                  className={cn(
-                    "ml-2 text-sm",
-                    theme === "dark" ? "text-gray-400" : "text-gray-600",
-                  )}
-                >
-                  in {selectedRepo.name}
-                </span>
-              )}
               <span
                 className={cn(
                   "ml-2 text-sm",

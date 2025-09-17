@@ -66,7 +66,7 @@ export function DiffEditor({
   }, [file.patch]);
 
   const parsePatch = (patch: string) => {
-    if (!patch) {
+    if (!patch || patch.trim() === "") {
       return { original: "", modified: "" };
     }
 
@@ -186,9 +186,13 @@ export function DiffEditor({
       }
     }
 
+    // Ensure we always have at least one line to prevent Monaco Editor issues
+    const originalContent = originalLines.length > 0 ? originalLines.join("\n") : "";
+    const modifiedContent = modifiedLines.length > 0 ? modifiedLines.join("\n") : "";
+
     return {
-      original: originalLines.join("\n"),
-      modified: modifiedLines.join("\n"),
+      original: originalContent,
+      modified: modifiedContent,
     };
   };
 
@@ -324,7 +328,7 @@ export function DiffEditor({
             className={cn(
               "btn btn-ghost p-1 text-xs",
               showWhitespace &&
-                (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
+              (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
             )}
             title="Toggle whitespace"
           >
@@ -345,10 +349,10 @@ export function DiffEditor({
               className={cn(
                 "btn btn-ghost px-2 py-1 text-xs flex items-center gap-1",
                 showFullFile &&
-                  (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
+                (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
                 originalContent === undefined &&
-                  modifiedContent === undefined &&
-                  "opacity-50 cursor-not-allowed",
+                modifiedContent === undefined &&
+                "opacity-50 cursor-not-allowed",
               )}
               disabled={
                 originalContent === undefined && modifiedContent === undefined
@@ -434,13 +438,13 @@ export function DiffEditor({
           <MonacoDiffEditor
             original={
               showFullFile && originalContent !== undefined
-                ? originalContent
-                : patchOriginalContent
+                ? originalContent || ""
+                : patchOriginalContent || ""
             }
             modified={
               showFullFile && modifiedContent !== undefined
-                ? modifiedContent
-                : patchModifiedContent
+                ? modifiedContent || ""
+                : patchModifiedContent || ""
             }
             language={language}
             theme={theme === "dark" ? "vs-dark" : "vs"}
@@ -478,6 +482,21 @@ export function DiffEditor({
             }}
             onMount={(editor) => {
               editorRef.current = editor;
+
+              // Add error handling for Monaco Editor
+              try {
+                const originalModel = editor.getOriginalEditor().getModel();
+                const modifiedModel = editor.getModifiedEditor().getModel();
+
+                if (originalModel && originalModel.getLineCount() === 0) {
+                  originalModel.setValue(" ");
+                }
+                if (modifiedModel && modifiedModel.getLineCount() === 0) {
+                  modifiedModel.setValue(" ");
+                }
+              } catch (error) {
+                console.warn("Monaco Editor initialization warning:", error);
+              }
             }}
           />
         )}
