@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GitPullRequest,
@@ -395,9 +395,11 @@ export default function PRListView() {
     filters,
     setFilters,
     loading,
-    fetchPullRequests,
     selectedRepo,
     fetchPRDetails,
+    bulkUpdatePRs,
+    currentRepoKey,
+    pendingRepoKey,
   } = usePRStore();
   const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
     useUIStore();
@@ -409,43 +411,55 @@ export default function PRListView() {
     new Set(),
   );
 
+  const selectedRepoKey = useMemo(() => {
+    if (!selectedRepo) return null;
+    return `${selectedRepo.owner}/${selectedRepo.name}`;
+  }, [selectedRepo]);
+
+  const dataMatchesSelectedRepo = useMemo(() => {
+    if (!selectedRepoKey) return false;
+    return currentRepoKey === selectedRepoKey;
+  }, [currentRepoKey, selectedRepoKey]);
+
+  const showLoadingPlaceholder =
+    loading && !dataMatchesSelectedRepo && !!selectedRepoKey;
+
+  const showRefreshingIndicator =
+    loading && dataMatchesSelectedRepo && pendingRepoKey === selectedRepoKey;
+
   // Function to fetch detailed PR data in the background
   const fetchDetailedPRsInBackground = useCallback(
-    async (prs: PullRequest[]) => {
+    (prs: PullRequest[]) => {
       if (!selectedRepo) return;
 
-      // Fetch details for each PR in parallel
       const detailPromises = prs.map((pr) =>
-        fetchPRDetails(selectedRepo.owner, selectedRepo.name, pr.number).catch(
-          (error) => {
-            console.error(
-              `Failed to fetch details for PR #${pr.number}:`,
-              error,
-            );
-            return null;
-          },
-        ),
+        fetchPRDetails(selectedRepo.owner, selectedRepo.name, pr.number, {
+          updateStore: false,
+        }).catch((error) => {
+          console.error(
+            `Failed to fetch details for PR #${pr.number}:`,
+            error,
+          );
+          return null;
+        }),
       );
 
-      // Execute all fetches in parallel but don't wait for them
       Promise.all(detailPromises).then((results) => {
-        const successCount = results.filter((r) => r !== null).length;
+        const validPRs = results.filter(
+          (result): result is PullRequest => result !== null,
+        );
+
+        if (validPRs.length > 0) {
+          bulkUpdatePRs(validPRs);
+        }
+
         console.log(
-          `Successfully fetched details for ${successCount}/${prs.length} sibling PRs`,
+          `Successfully fetched details for ${validPRs.length}/${prs.length} sibling PRs`,
         );
       });
     },
-    [selectedRepo, fetchPRDetails],
+    [selectedRepo, fetchPRDetails, bulkUpdatePRs],
   );
-
-  useEffect(() => {
-    // Fetch PRs when the selected repo changes
-    // The TopBar also calls fetchPullRequests, but this ensures we always have the right data
-    if (selectedRepo) {
-      // The store will handle deduplication and clearing old data
-      fetchPullRequests(selectedRepo.owner, selectedRepo.name);
-    }
-  }, [selectedRepo?.id, fetchPullRequests]); // Depend on repo ID and fetchPullRequests
 
   // Extract agent from PR (e.g., "cursor" from branch name or title)
   const getAgentFromPR = useCallback((pr: PullRequest): string => {
@@ -536,18 +550,39 @@ export default function PRListView() {
 
   // Cache date parsing in a separate map to avoid modifying objects
   const parsedDates = useMemo(() => {
-    const dateMap = new Map();
+    const dateMap = new Map<string, { updated: number; created: number }>();
+
+    if (!selectedRepo) {
+      return dateMap;
+    }
+
     pullRequests.forEach((pr, key) => {
-      dateMap.set(key, {
-        updated: new Date(pr.updated_at).getTime(),
-        created: new Date(pr.created_at).getTime(),
-      });
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+
+      if (baseOwner === selectedRepo.owner && baseName === selectedRepo.name) {
+        dateMap.set(key, {
+          updated: new Date(pr.updated_at).getTime(),
+          created: new Date(pr.created_at).getTime(),
+        });
+      }
     });
+
     return dateMap;
-  }, [pullRequests]);
+  }, [pullRequests, selectedRepo]);
 
   const getFilteredPRs = useMemo(() => {
-    let prs = Array.from(pullRequests.values());
+    if (!selectedRepo) {
+      return [];
+    }
+
+    let prs = Array.from(pullRequests.values()).filter((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      return (
+        baseOwner === selectedRepo.owner && baseName === selectedRepo.name
+      );
+    });
 
     // Apply filters
     prs = prs.filter((pr) => {
@@ -580,7 +615,14 @@ export default function PRListView() {
     });
 
     return prs;
-  }, [pullRequests, parsedDates, filters, sortBy, getAgentFromPR]);
+  }, [
+    pullRequests,
+    parsedDates,
+    filters,
+    sortBy,
+    getAgentFromPR,
+    selectedRepo,
+  ]);
 
   // Pre-compute PR metadata for grouping
   const prsWithMetadata = useMemo(() => {
@@ -766,6 +808,16 @@ export default function PRListView() {
               >
                 ({getFilteredPRs.length})
               </span>
+              {showRefreshingIndicator && (
+                <span
+                  className={cn(
+                    "ml-2 text-xs",
+                    theme === "dark" ? "text-gray-400" : "text-gray-500",
+                  )}
+                >
+                  Refreshing…
+                </span>
+              )}
             </h1>
             {/* Selection help text or bulk actions */}
             {hasSelection ? (
@@ -858,7 +910,7 @@ export default function PRListView() {
 
       {/* PR List */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
+        {showLoadingPlaceholder ? (
           <div className="flex items-center justify-center h-64">
             <div
               className={cn(

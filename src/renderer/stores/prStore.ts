@@ -26,6 +26,8 @@ interface PRState {
   selectedRepo: Repository | null;
   recentlyViewedRepos: Repository[];
   loadedRepos: Set<string>;
+  currentRepoKey: string | null;
+  pendingRepoKey: string | null;
   filters: PRFilters;
   statusFilters: PRFilterType[];
   groups: PRGroup[];
@@ -36,11 +38,17 @@ interface PRState {
     owner: string,
     repo: string,
     force?: boolean,
+    options?: {
+      replaceStore?: boolean;
+    },
   ) => Promise<void>;
   fetchPRDetails: (
     owner: string,
     repo: string,
     pullNumber: number,
+    options?: {
+      updateStore?: boolean;
+    },
   ) => Promise<PullRequest | null>;
   fetchRepositories: () => Promise<void>;
   setSelectedRepo: (repo: Repository | null) => void;
@@ -150,6 +158,8 @@ export const usePRStore = create<PRState>((set, get) => {
     selectedRepo: null,
     recentlyViewedRepos: [],
     loadedRepos: new Set(),
+    currentRepoKey: null,
+    pendingRepoKey: null,
     filters: {
       author: "all",
       agent: "all",
@@ -159,38 +169,38 @@ export const usePRStore = create<PRState>((set, get) => {
     loading: false,
     error: null,
 
-    fetchPullRequests: async (owner: string, repo: string, force = false) => {
+    fetchPullRequests: async (
+      owner: string,
+      repo: string,
+      force = false,
+      options = {},
+    ) => {
       const repoFullName = `${owner}/${repo}`;
+      const { replaceStore = true } = options;
+      const { loading, pendingRepoKey, currentRepoKey } = get();
 
-      // Skip if already loading
-      if (get().loading) {
-        return;
+      if (replaceStore) {
+        if (loading) {
+          if (!force && pendingRepoKey === repoFullName) {
+            return;
+          }
+          if (!force && pendingRepoKey && pendingRepoKey !== repoFullName) {
+            return;
+          }
+        }
+
+        const needsFetch = force || currentRepoKey !== repoFullName;
+
+        if (!needsFetch) {
+          return;
+        }
+
+        set({
+          loading: true,
+          error: null,
+          pendingRepoKey: repoFullName,
+        });
       }
-
-      // Check if we need to fetch
-      // We need to fetch if:
-      // 1. Force is true
-      // 2. We have no PRs at all
-      // 3. The PRs we have are for a different repository
-      const currentPRs = Array.from(get().pullRequests.values());
-      const currentRepoFullName = currentPRs[0]
-        ? `${currentPRs[0].base?.repo?.owner?.login}/${currentPRs[0].base?.repo?.name}`
-        : null;
-      const needsFetch =
-        force ||
-        currentPRs.length === 0 ||
-        currentRepoFullName !== repoFullName;
-
-      if (!needsFetch) {
-        return; // We already have the right PRs
-      }
-
-      // Clear existing PRs and show loading state
-      set({
-        pullRequests: new Map(),
-        loading: true,
-        error: null,
-      });
 
       try {
         let token: string | null = null;
@@ -229,27 +239,45 @@ export const usePRStore = create<PRState>((set, get) => {
           console.log("First PR:", prs[0]);
         }
 
-        set({
-          pullRequests: prMap,
-          loading: false,
-        });
+        if (replaceStore) {
+          set({
+            pullRequests: prMap,
+            loading: false,
+            currentRepoKey: repoFullName,
+            pendingRepoKey: null,
+          });
 
-        // Auto-group PRs after fetching
-        get().groupPRsByPrefix();
+          // Auto-group PRs after fetching
+          get().groupPRsByPrefix();
+        }
 
         // Store in database (skip for dev mode)
         if (token !== "dev-token" && window.electron) {
           await get().storePRsInDB(prs, owner, repo);
         }
       } catch (error) {
-        set({
-          error: (error as Error).message,
-          loading: false,
-        });
+        if (replaceStore) {
+          set({
+            error: (error as Error).message,
+            loading: false,
+            pendingRepoKey: null,
+          });
+        } else {
+          console.error(
+            `Failed to fetch pull requests for ${repoFullName}:`,
+            error,
+          );
+        }
       }
     },
 
-    fetchPRDetails: async (owner: string, repo: string, pullNumber: number) => {
+    fetchPRDetails: async (
+      owner: string,
+      repo: string,
+      pullNumber: number,
+      options = {},
+    ) => {
+      const { updateStore = true } = options;
       try {
         let token: string | null = null;
 
@@ -287,14 +315,15 @@ export const usePRStore = create<PRState>((set, get) => {
             deletions: detailedPR.deletions,
           };
 
-          // Update the store
-          get().updatePR(updatedPR);
+          if (updateStore) {
+            get().updatePR(updatedPR);
 
-          console.log(`Updated PR #${pullNumber} with detailed data:`, {
-            changed_files: updatedPR.changed_files,
-            additions: updatedPR.additions,
-            deletions: updatedPR.deletions,
-          });
+            console.log(`Updated PR #${pullNumber} with detailed data:`, {
+              changed_files: updatedPR.changed_files,
+              additions: updatedPR.additions,
+              deletions: updatedPR.deletions,
+            });
+          }
 
           return updatedPR;
         }
@@ -427,7 +456,16 @@ export const usePRStore = create<PRState>((set, get) => {
     },
 
     setSelectedRepo: (repo) => {
-      set({ selectedRepo: repo });
+      set(() => ({
+        selectedRepo: repo,
+        ...(repo
+          ? {}
+          : {
+              pullRequests: new Map(),
+              currentRepoKey: null,
+              pendingRepoKey: null,
+            }),
+      }));
 
       // Save to electron store
       saveSelectedRepo(repo);
@@ -518,8 +556,8 @@ export const usePRStore = create<PRState>((set, get) => {
       // Group PRs by common prefixes
       pullRequests.forEach((pr) => {
         // Try to extract prefix from title or branch
-        const title = pr.title.toLowerCase();
-        const branch = pr.head.ref.toLowerCase();
+        const title = pr.title?.toLowerCase?.() ?? "";
+        const branch = pr.head?.ref?.toLowerCase?.() ?? "";
 
         let prefix = "";
 

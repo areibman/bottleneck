@@ -438,7 +438,7 @@ export class GitHubAPI {
     return data as Issue;
   }
 
-  async getBranches(owner: string, repo: string) {
+  async getBranches(owner: string, repo: string, defaultBranch = "main") {
     const { data } = await this.octokit.repos.listBranches({
       owner,
       repo,
@@ -464,7 +464,7 @@ export class GitHubAPI {
               await this.octokit.repos.compareCommitsWithBasehead({
                 owner,
                 repo,
-                basehead: `main...${branch.name}`,
+                basehead: `${defaultBranch}...${branch.name}`,
               });
             ahead = comparison.ahead_by;
             behind = comparison.behind_by;

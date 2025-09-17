@@ -98,6 +98,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         for (let i = 0; i < totalRepos; i++) {
           const repo = reposToSync[i];
           const progress = 20 + 80 * ((i + 1) / totalRepos);
+          const shouldReplaceStore = selectedRepo
+            ? repo.id === selectedRepo.id
+            : i === 0;
 
           set({
             syncProgress: progress,
@@ -105,7 +108,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
           });
 
           try {
-            await prStore.fetchPullRequests(repo.owner, repo.name, true); // Force refresh
+            await prStore.fetchPullRequests(repo.owner, repo.name, true, {
+              replaceStore: shouldReplaceStore,
+            }); // Force refresh
           } catch (error) {
             get().addSyncError(
               `Failed to sync ${repo.full_name}: ${(error as Error).message}`,

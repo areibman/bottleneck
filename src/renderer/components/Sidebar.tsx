@@ -50,7 +50,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { statusFilters, setFilter, pullRequests } = usePRStore();
+  const { statusFilters, setFilter, pullRequests, selectedRepo } = usePRStore();
   const {
     issues,
     filters: issueFilters,
@@ -105,8 +105,22 @@ export default function Sidebar({
     return prefixWords.join(" ");
   }, []);
 
+  const repoPRs = useMemo(() => {
+    if (!selectedRepo) {
+      return [];
+    }
+
+    return Array.from(pullRequests.values()).filter((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      return (
+        baseOwner === selectedRepo.owner && baseName === selectedRepo.name
+      );
+    });
+  }, [pullRequests, selectedRepo]);
+
   const treeItems = useMemo(() => {
-    let prs = Array.from(pullRequests.values());
+    let prs = [...repoPRs];
 
     // Apply filters
     if (statusFilters.length > 0) {
@@ -217,7 +231,12 @@ export default function Sidebar({
     }
 
     return items;
-  }, [pullRequests, statusFilters, getAgentFromPR, getTitlePrefix]);
+  }, [
+    repoPRs,
+    statusFilters,
+    getAgentFromPR,
+    getTitlePrefix,
+  ]);
 
   const treeDataProvider: StaticTreeDataProvider<TreeData> = useMemo(() => {
     return new StaticTreeDataProvider<TreeData>(treeItems);
@@ -333,7 +352,7 @@ export default function Sidebar({
   ];
 
   // Calculate real counts from actual PR data
-  const prArray = Array.from(pullRequests.values());
+  const prArray = repoPRs;
   const prFilters: { id: PRFilterType; label: string; count: number }[] = [
     {
       id: "open",

@@ -97,7 +97,9 @@ export function usePRNavigation(
 
         // Fetch detailed data for all siblings in parallel
         const detailPromises = siblingPRs.map((pr) =>
-          fetchPRDetails(owner, repo, pr.number).catch((error) => {
+          fetchPRDetails(owner, repo, pr.number, {
+            updateStore: false,
+          }).catch((error) => {
             console.error(
               `Failed to fetch details for PR #${pr.number}:`,
               error,
