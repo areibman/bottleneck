@@ -698,63 +698,57 @@ export default function PRListView() {
     });
   }, []);
 
-  const handlePRClick = useCallback(
-    (pr: PullRequest) => {
-      // Find if this PR belongs to a task subgroup and fetch all siblings
-      let navigationState = {};
+  function handlePRClick(pr: PullRequest) {
+    // Find if this PR belongs to a task subgroup and fetch all siblings
+    let navigationState = {};
 
-      if (groupBy === "agent") {
-        const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
-        if (prMetadata) {
-          const { agent, titlePrefix } = prMetadata;
+    if (groupBy === "agent") {
+      const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
+      if (prMetadata) {
+        const { agent, titlePrefix } = prMetadata;
 
-          // Find all sibling PRs in the same task group
-          const siblingPRs = prsWithMetadata
-            .filter(
-              (item) =>
-                item.agent === agent && item.titlePrefix === titlePrefix,
-            )
-            .map((item) => item.pr);
+        // Find all sibling PRs in the same task group
+        const siblingPRs = prsWithMetadata
+          .filter((item) => item.agent === agent && item.titlePrefix === titlePrefix)
+          .map((item) => item.pr);
 
-          if (siblingPRs.length > 1) {
-            console.log(
-              `Fetching detailed data for ${siblingPRs.length} sibling PRs in task: ${titlePrefix}`,
-            );
+        if (siblingPRs.length > 1) {
+          console.log(
+            `Fetching detailed data for ${siblingPRs.length} sibling PRs in task: ${titlePrefix}`,
+          );
 
-            // Fetch detailed data for all siblings in the background
-            fetchDetailedPRsInBackground(siblingPRs);
+          // Fetch detailed data for all siblings in the background
+          fetchDetailedPRsInBackground(siblingPRs);
 
-            // Pass sibling PRs to the detail view via navigation state
-            navigationState = {
-              siblingPRs: siblingPRs.map((p) => ({
-                id: p.id,
-                number: p.number,
-                title: p.title,
-                state: p.state,
-                draft: p.draft,
-                merged: p.merged,
-                user: p.user,
-                created_at: p.created_at,
-                updated_at: p.updated_at,
-                approvalStatus: p.approvalStatus,
-                additions: p.additions,
-                deletions: p.deletions,
-                changed_files: p.changed_files,
-              })),
-              currentTaskGroup: titlePrefix,
-              currentAgent: agent,
-            };
-          }
+          // Pass sibling PRs to the detail view via navigation state
+          navigationState = {
+            siblingPRs: siblingPRs.map((p) => ({
+              id: p.id,
+              number: p.number,
+              title: p.title,
+              state: p.state,
+              draft: p.draft,
+              merged: p.merged,
+              user: p.user,
+              created_at: p.created_at,
+              updated_at: p.updated_at,
+              approvalStatus: p.approvalStatus,
+              additions: p.additions,
+              deletions: p.deletions,
+              changed_files: p.changed_files,
+            })),
+            currentTaskGroup: titlePrefix,
+            currentAgent: agent,
+          };
         }
       }
+    }
 
-      navigate(
-        `/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`,
-        { state: navigationState },
-      );
-    },
-    [navigate, groupBy, prsWithMetadata, fetchDetailedPRsInBackground],
-  );
+    navigate(
+      `/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`,
+      { state: navigationState },
+    );
+  }
 
   const handleCheckboxChange = useCallback(
     (prId: string, checked: boolean) => {
