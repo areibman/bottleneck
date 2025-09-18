@@ -466,10 +466,10 @@ export default function PRListView() {
                 <button
                   onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
                   className={cn(
-                    "h-8 px-3 rounded border flex items-center space-x-2 text-sm min-w-[150px] max-w-[250px]",
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[150px] max-w-[250px]",
                     theme === "dark"
-                      ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
-                      : "bg-white border-gray-300 hover:bg-gray-50"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
                   )}
                 >
                   {selectedAuthors.size === 1 && !selectedAuthors.has("all") ? (
