@@ -251,19 +251,27 @@ export function PRTreeView({
             <div
               className={cn(
                 "flex items-center w-full py-1 px-2 rounded cursor-pointer",
-                theme === "dark" 
-                  ? "hover:bg-gray-800 text-gray-100" 
-                  : "hover:bg-gray-100 text-gray-900",
                 item.data.type === "pr" && "text-sm",
-                item.data.type === "task" && "text-sm",
-                isSelected && (theme === "dark" ? "bg-gray-700" : "bg-blue-50")
+                item.data.type === "task" && "text-sm"
               )}
               onClick={handleClick}
               style={{
-                // Override any inherited styles from react-complex-tree
+                // Force override any inherited styles from react-complex-tree
                 backgroundColor: isSelected 
                   ? (theme === "dark" ? "rgb(55 65 81)" : "rgb(239 246 255)")
-                  : "transparent"
+                  : "transparent",
+                color: theme === "dark" ? "rgb(243 244 246)" : "rgb(17 24 39)",
+                // Add hover effect via onMouseEnter/onMouseLeave if needed
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.backgroundColor = theme === "dark" ? "rgb(31 41 55)" : "rgb(243 244 246)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
             >
               {item.isFolder ? (

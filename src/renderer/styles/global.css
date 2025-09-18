@@ -344,6 +344,32 @@
     @apply bg-gray-700 !important;
   }
 
+  /* Override the button styles that are causing white backgrounds */
+  .dark .rct-tree-item-button {
+    @apply bg-transparent !important;
+    @apply text-gray-100 !important;
+  }
+
+  .dark .rct-tree-item-button:hover {
+    @apply bg-gray-800 !important;
+    @apply text-gray-100 !important;
+  }
+
+  .dark .rct-tree-item-button-selected {
+    @apply bg-gray-700 !important;
+    @apply text-gray-100 !important;
+  }
+
+  .dark .rct-tree-item-button-focused {
+    @apply bg-gray-700 !important;
+    @apply text-gray-100 !important;
+  }
+
+  .dark .rct-tree-item-button-selected.rct-tree-item-button-focused {
+    @apply bg-gray-700 !important;
+    @apply text-gray-100 !important;
+  }
+
   /* Override the default white background on hover */
   .dark .rct-tree-item-title-container {
     @apply bg-transparent !important;
@@ -365,6 +391,17 @@
 
   .dark .rct-tree-item-arrow:hover {
     @apply text-gray-200;
+  }
+
+  /* Force override any background color changes on all tree item states */
+  .dark [data-rct-item-focus="true"],
+  .dark [data-rct-item-interactive="true"] {
+    @apply bg-transparent !important;
+  }
+
+  .dark [data-rct-item-focus="true"]:hover,
+  .dark [data-rct-item-interactive="true"]:hover {
+    @apply bg-gray-800 !important;
   }
 
   /* Syntax highlighting token colors for light mode */
