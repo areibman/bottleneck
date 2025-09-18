@@ -244,6 +244,14 @@ export function PRTreeView({
           const prAgent = item.data.type === "pr" && item.data.pr
             ? prsWithMetadata.find(m => m.pr.id === item.data.pr!.id)?.agent
             : undefined;
+          const rootChildren = (treeItems.root.children ?? []) as TreeItemIndex[];
+          const topLevelIndex = rootChildren.indexOf(item.index);
+          const isTopLevel = topLevelIndex !== -1;
+          const isFirstTopLevel = topLevelIndex === 0;
+          const separatorColor =
+            theme === "dark"
+              ? "rgba(148, 163, 184, 0.25)"
+              : "rgba(148, 163, 184, 0.35)";
 
           const handleClick = (e: React.MouseEvent) => {
             if (item.data.type === "pr" && item.data.pr) {
@@ -282,9 +290,10 @@ export function PRTreeView({
           return (
             <div
               className={cn(
-                "flex items-center w-full py-1 px-2 rounded cursor-pointer",
+                "flex items-center w-full py-1 px-2 cursor-pointer",
                 item.data.type === "pr" && "text-sm",
-                item.data.type === "task" && "text-sm"
+                item.data.type === "task" && "text-sm",
+                isTopLevel ? "rounded-none" : "rounded"
               )}
               onClick={handleClick}
               style={{
@@ -293,6 +302,12 @@ export function PRTreeView({
                   ? (theme === "dark" ? "rgb(55 65 81)" : "rgb(239 246 255)")
                   : "transparent",
                 color: theme === "dark" ? "rgb(243 244 246)" : "rgb(17 24 39)",
+                borderTop: isTopLevel && isFirstTopLevel
+                  ? `1px solid ${separatorColor}`
+                  : undefined,
+                borderBottom: isTopLevel
+                  ? `1px solid ${separatorColor}`
+                  : undefined,
                 // Add hover effect via onMouseEnter/onMouseLeave if needed
               }}
               onMouseEnter={(e) => {
