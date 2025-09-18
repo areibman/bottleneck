@@ -17,6 +17,7 @@ import {
   XCircle,
   Clock,
   FolderOpen,
+  FileText,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { AgentIcon } from "./AgentIcon";
@@ -324,14 +325,20 @@ export function PRTreeView({
               {item.data.type === "pr" && item.data.pr && (
                 <div className="flex items-center space-x-2 ml-2">
                   {item.data.pr.changed_files !== undefined && (
-                    <span
-                      className={cn(
-                        "text-xs",
+                    <div className="flex items-center space-x-1">
+                      <FileText className={cn(
+                        "w-3 h-3",
                         theme === "dark" ? "text-gray-500" : "text-gray-600"
-                      )}
-                    >
-                      {item.data.pr.changed_files} file{item.data.pr.changed_files !== 1 ? "s" : ""}
-                    </span>
+                      )} />
+                      <span
+                        className={cn(
+                          "text-xs",
+                          theme === "dark" ? "text-gray-500" : "text-gray-600"
+                        )}
+                      >
+                        {item.data.pr.changed_files}
+                      </span>
+                    </div>
                   )}
                   {item.data.pr.additions !== undefined && (
                     <span className="text-xs text-green-500">
