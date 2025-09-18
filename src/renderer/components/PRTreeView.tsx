@@ -211,15 +211,52 @@ export function PRTreeView({
         }}
         renderItemTitle={({ title, item, ...rest }) => {
           const agentName = item.data.type === "agent" ? item.data.agent : undefined;
+          const isSelected = item.data.type === "pr" && item.data.pr ? selectedPRs.has(getPRId(item.data.pr)) : false;
+
+          const handleClick = (e: React.MouseEvent) => {
+            if (item.data.type === "pr" && item.data.pr) {
+              if (e.metaKey || e.ctrlKey) {
+                // Multi-select mode
+                e.preventDefault();
+                e.stopPropagation();
+                onTogglePRSelection(getPRId(item.data.pr), !isSelected);
+              }
+            } else if (item.data.type === "agent" || item.data.type === "task") {
+              // Group selection on CMD/CTRL click
+              if (e.metaKey || e.ctrlKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Get all PR IDs in this group
+                const prIds: string[] = [];
+                const collectPRIds = (nodeIndex: TreeItemIndex) => {
+                  const node = treeItems[nodeIndex];
+                  if (node?.data.type === "pr" && node.data.pr) {
+                    prIds.push(getPRId(node.data.pr));
+                  }
+                  if (node?.children) {
+                    node.children.forEach(collectPRIds);
+                  }
+                };
+                if (item.children) {
+                  item.children.forEach(collectPRIds);
+                }
+                // Toggle all PRs in group
+                const allSelected = prIds.every(id => selectedPRs.has(id));
+                onToggleGroupSelection(prIds, !allSelected);
+              }
+            }
+          };
 
           return (
             <div
               className={cn(
-                "flex items-center w-full py-1 px-2 rounded hover:bg-gray-100",
+                "flex items-center w-full py-1 px-2 rounded hover:bg-gray-100 cursor-pointer",
                 theme === "dark" && "hover:bg-gray-800",
                 item.data.type === "pr" && "text-sm",
-                item.data.type === "task" && "text-sm"
+                item.data.type === "task" && "text-sm",
+                isSelected && (theme === "dark" ? "bg-gray-700" : "bg-blue-50")
               )}
+              onClick={handleClick}
             >
               {item.isFolder ? (
                 (rest as any).arrow
@@ -246,37 +283,6 @@ export function PRTreeView({
                 </span>
               )}
 
-              {/* Selection checkbox for groups */}
-              {(item.data.type === "agent" || item.data.type === "task") && (
-                <input
-                  type="checkbox"
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    // Get all PR IDs in this group
-                    const prIds: string[] = [];
-                    const collectPRIds = (nodeIndex: TreeItemIndex) => {
-                      const node = treeItems[nodeIndex];
-                      if (node?.data.type === "pr" && node.data.pr) {
-                        prIds.push(getPRId(node.data.pr));
-                      }
-                      if (node?.children) {
-                        node.children.forEach(collectPRIds);
-                      }
-                    };
-                    if (item.children) {
-                      item.children.forEach(collectPRIds);
-                    }
-                    onToggleGroupSelection(prIds, e.target.checked);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className={cn(
-                    "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer mr-2",
-                    theme === "dark"
-                      ? "border-gray-600 bg-gray-700 text-blue-500"
-                      : "border-gray-300 bg-white text-blue-600"
-                  )}
-                />
-              )}
 
               {agentName && (
                 <AgentIcon
@@ -290,30 +296,11 @@ export function PRTreeView({
               )}
 
               {item.data.type === "pr" && item.data.pr && (
-                <>
-                  <img
-                    src={item.data.pr.user.avatar_url}
-                    alt={item.data.pr.user.login}
-                    className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
-                  />
-
-                  {/* Selection checkbox for PRs */}
-                  <input
-                    type="checkbox"
-                    checked={selectedPRs.has(getPRId(item.data.pr))}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      onTogglePRSelection(getPRId(item.data.pr), e.target.checked);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer mr-2",
-                      theme === "dark"
-                        ? "border-gray-600 bg-gray-700 text-blue-500"
-                        : "border-gray-300 bg-white text-blue-600"
-                    )}
-                  />
-                </>
+                <img
+                  src={item.data.pr.user.avatar_url}
+                  alt={item.data.pr.user.login}
+                  className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
+                />
               )}
 
               <span className="flex-1 truncate">{title}</span>

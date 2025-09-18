@@ -456,32 +456,34 @@ export default function PRListView() {
             )}
           </div>
 
-          <div className="flex items-center space-x-2">
-            <Dropdown<SortByType>
-              options={sortOptions}
-              value={sortBy}
-              onChange={setSortBy}
-              labelPrefix="Sort by: "
-            />
-            <Dropdown<GroupByType>
-              options={groupOptions}
-              value={groupBy}
-              onChange={setGroupBy}
-              labelPrefix="Group by: "
-            />
-            <Dropdown
-              options={authors}
-              value={filters.author}
-              onChange={(value) => setFilters({ author: value })}
-              labelPrefix="Author: "
-            />
-            <Dropdown
-              options={agents}
-              value={filters.agent}
-              onChange={(value) => setFilters({ agent: value })}
-              labelPrefix="Agent: "
-            />
-          </div>
+          {!hasSelection && (
+            <div className="flex items-center space-x-2">
+              <Dropdown<SortByType>
+                options={sortOptions}
+                value={sortBy}
+                onChange={setSortBy}
+                labelPrefix="Sort by: "
+              />
+              <Dropdown<GroupByType>
+                options={groupOptions}
+                value={groupBy}
+                onChange={setGroupBy}
+                labelPrefix="Group by: "
+              />
+              <Dropdown
+                options={authors}
+                value={filters.author}
+                onChange={(value) => setFilters({ author: value })}
+                labelPrefix="Author: "
+              />
+              <Dropdown
+                options={agents}
+                value={filters.agent}
+                onChange={(value) => setFilters({ agent: value })}
+                labelPrefix="Agent: "
+              />
+            </div>
+          )}
         </div>
       </div>
 
