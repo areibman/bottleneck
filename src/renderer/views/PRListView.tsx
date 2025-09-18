@@ -466,25 +466,97 @@ export default function PRListView() {
                 <button
                   onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
                   className={cn(
-                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-sm",
+                    "h-8 px-3 rounded border flex items-center space-x-2 text-sm min-w-[150px] max-w-[250px]",
                     theme === "dark"
                       ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
                       : "bg-white border-gray-300 hover:bg-gray-50"
                   )}
                 >
-                  <span>Authors:</span>
-                  <span className={cn(
-                    "font-medium",
-                    theme === "dark" ? "text-gray-300" : "text-gray-700"
-                  )}>
-                    {selectedAuthors.has("all")
-                      ? "All"
-                      : selectedAuthors.size === 0
-                        ? "None"
-                        : selectedAuthors.size === 1
-                          ? Array.from(selectedAuthors)[0]
-                          : `${selectedAuthors.size} selected`}
-                  </span>
+                  {selectedAuthors.size === 1 && !selectedAuthors.has("all") ? (
+                    <>
+                      {(() => {
+                        const authorLogin = Array.from(selectedAuthors)[0];
+                        const author = authors.find(a => a.login === authorLogin);
+                        return author ? (
+                          <>
+                            <img
+                              src={author.avatar_url}
+                              alt={author.login}
+                              className="w-5 h-5 rounded-full flex-shrink-0"
+                            />
+                            <span className={cn(
+                              "truncate",
+                              theme === "dark" ? "text-gray-300" : "text-gray-700"
+                            )}>
+                              {author.login}
+                            </span>
+                          </>
+                        ) : (
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {authorLogin}
+                          </span>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      {selectedAuthors.size > 1 && !selectedAuthors.has("all") ? (
+                        <>
+                          <div className="flex -space-x-2">
+                            {Array.from(selectedAuthors)
+                              .slice(0, 3)
+                              .map(authorLogin => {
+                                const author = authors.find(a => a.login === authorLogin);
+                                return author ? (
+                                  <img
+                                    key={author.login}
+                                    src={author.avatar_url}
+                                    alt={author.login}
+                                    className="w-5 h-5 rounded-full border-2 border-gray-800"
+                                    style={{
+                                      borderColor: theme === "dark" ? "#1f2937" : "#ffffff"
+                                    }}
+                                  />
+                                ) : null;
+                              })}
+                            {selectedAuthors.size > 3 && (
+                              <div className={cn(
+                                "w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium border-2",
+                                theme === "dark"
+                                  ? "bg-gray-700 text-gray-300 border-gray-800"
+                                  : "bg-gray-200 text-gray-700 border-white"
+                              )}>
+                                +{selectedAuthors.size - 3}
+                              </div>
+                            )}
+                          </div>
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {selectedAuthors.size} selected
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Authors:</span>
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {selectedAuthors.has("all")
+                              ? "All"
+                              : selectedAuthors.size === 0
+                                ? "None"
+                                : `${selectedAuthors.size} selected`}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
                 </button>
 
                 {showAuthorDropdown && (
