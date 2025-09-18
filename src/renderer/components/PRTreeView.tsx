@@ -230,8 +230,8 @@ export function PRTreeView({
                     item.data.pr?.state === "open"
                       ? "text-green-400"
                       : item.data.pr?.merged
-                      ? "text-purple-400"
-                      : "text-gray-400"
+                        ? "text-purple-400"
+                        : "text-gray-400"
                   )}
                 >
                   {item.data.pr?.draft ? (
@@ -245,7 +245,7 @@ export function PRTreeView({
                   )}
                 </span>
               )}
-              
+
               {/* Selection checkbox for groups */}
               {(item.data.type === "agent" || item.data.type === "task") && (
                 <input
@@ -284,11 +284,11 @@ export function PRTreeView({
                   className="mr-2"
                 />
               )}
-              
+
               {item.data.type === "task" && (
                 <FolderOpen className="w-3 h-3 mr-1 text-gray-500" />
               )}
-              
+
               {item.data.type === "pr" && item.data.pr && (
                 <>
                   <img
@@ -296,7 +296,7 @@ export function PRTreeView({
                     alt={item.data.pr.user.login}
                     className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
                   />
-                  
+
                   {/* Selection checkbox for PRs */}
                   <input
                     type="checkbox"
@@ -315,9 +315,9 @@ export function PRTreeView({
                   />
                 </>
               )}
-              
+
               <span className="flex-1 truncate">{title}</span>
-              
+
               {item.data.type === "pr" && item.data.pr && (
                 <div className="flex items-center space-x-2 ml-2">
                   {item.data.pr.changed_files !== undefined && (
@@ -340,7 +340,7 @@ export function PRTreeView({
                       -{item.data.pr.deletions}
                     </span>
                   )}
-                  
+
                   {/* Review status */}
                   {item.data.pr.state === "open" && !item.data.pr.merged && (
                     <div className="flex items-center">
@@ -363,7 +363,7 @@ export function PRTreeView({
                       )}
                     </div>
                   )}
-                  
+
                   {/* External link */}
                   <a
                     href={`https://github.com/${item.data.pr.base.repo.owner.login}/${item.data.pr.base.repo.name}/pull/${item.data.pr.number}`}
@@ -382,7 +382,7 @@ export function PRTreeView({
                   </a>
                 </div>
               )}
-              
+
               {item.data.count && (
                 <span
                   className={cn(
