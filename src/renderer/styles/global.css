@@ -404,6 +404,66 @@
     @apply bg-gray-800 !important;
   }
 
+  /* Override TreeItemElement button height to prevent overlapping */
+  .rct-tree-item-button,
+  button.rct-tree-item-button,
+  button[data-rct-item-interactive="true"] {
+    height: 52px !important;
+    min-height: 52px !important;
+    padding: 0 !important;
+    display: block !important;
+    width: 100% !important;
+  }
+
+  /* Override the li container height */
+  .rct-tree-item-li {
+    height: 52px !important;
+  }
+
+  /* Ensure inner divs fill the height and center content */
+  .rct-tree-item-button>div {
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  /* Center the blue selection indicator nub */
+  .rct-tree-item-button {
+    position: relative !important;
+    padding-left: 8px !important;
+    /* Add some padding for the indicator */
+  }
+
+  .rct-tree-item-button::before,
+  button.rct-tree-item-button::before,
+  button[data-rct-item-interactive="true"]::before {
+    position: absolute !important;
+    left: 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    height: 20px !important;
+    /* Make it smaller and centered */
+    width: 3px !important;
+    border-radius: 0 2px 2px 0 !important;
+  }
+
+  /* Keep the blue color but make it more subtle */
+  .rct-tree-item-button {
+    --rct-bar-color: #0366d6 !important;
+  }
+
+  /* Ensure the indicator only shows on selected/focused items */
+  .rct-tree-item-button::before {
+    opacity: 0 !important;
+  }
+
+  .rct-tree-item-button-selected::before,
+  .rct-tree-item-button-focused::before,
+  .rct-tree-item-button:focus::before,
+  button[data-rct-item-focus="true"]::before {
+    opacity: 1 !important;
+  }
+
   /* Syntax highlighting token colors for light mode */
   .light .markdown-content .token.comment,
   .light .markdown-content .token.prolog,

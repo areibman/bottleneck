@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  FolderOpen,
   FileText,
 } from "lucide-react";
 import { cn } from "../utils/cn";
@@ -308,6 +307,8 @@ export function PRTreeView({
                 borderBottom: isTopLevel
                   ? `1px solid ${separatorColor}`
                   : undefined,
+                height: "52px", // Fixed height to accommodate two-row layout
+                padding: "8px",
                 // Add hover effect via onMouseEnter/onMouseLeave if needed
               }}
               onMouseEnter={(e) => {
@@ -323,185 +324,207 @@ export function PRTreeView({
             >
               {item.isFolder ? (
                 <>
-                  {(rest as any).arrow}
-                  <FolderOpen className="w-4 h-4 mr-2 text-gray-500" />
-                  {item.data.taskAgent && (
-                    <div title={item.data.taskAgent === "manual" ? "Manual PRs" : item.data.taskAgent}>
-                      <AgentIcon
-                        agentName={item.data.taskAgent}
-                        className="mr-2 flex-shrink-0"
-                      />
+                  {/* Left side: Arrow and Icons */}
+                  <div className="flex items-center mr-2">
+                    {(rest as any).arrow}
+                    <div className="w-5 h-5 mr-2 text-gray-500" />
+                    {item.data.taskAgent && (
+                      <div title={item.data.taskAgent === "manual" ? "Manual PRs" : item.data.taskAgent}>
+                        <AgentIcon
+                          agentName={item.data.taskAgent}
+                          className="h-5 w-5 flex-shrink-0"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right side: Two-row column layout */}
+                  <div className="flex-1 flex flex-col justify-center min-w-0">
+                    {/* First row: Task/group title */}
+                    <div className="flex items-center">
+                      <span className="truncate text-sm font-medium">{title}</span>
+                      {item.data.count && (
+                        <span
+                          className={cn(
+                            "ml-2 text-xs",
+                            theme === "dark" ? "text-gray-500" : "text-gray-600"
+                          )}
+                        >
+                          ({item.data.count} PRs)
+                        </span>
+                      )}
                     </div>
-                  )}
+
+                    {/* Second row: Metadata */}
+                    {item.data.mostRecentDate && (
+                      <div className="flex items-center space-x-3 mt-0.5">
+                        <span
+                          className={cn(
+                            "text-xs",
+                            theme === "dark" ? "text-gray-400" : "text-gray-500"
+                          )}
+                          title={sortBy === "created"
+                            ? `Most recent created: ${new Date(item.data.mostRecentDate.created).toLocaleString()}`
+                            : `Most recent updated: ${new Date(item.data.mostRecentDate.updated).toLocaleString()}`
+                          }
+                        >
+                          {sortBy === "created"
+                            ? formatDateTime(item.data.mostRecentDate.created)
+                            : formatDateTime(item.data.mostRecentDate.updated)
+                          }
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <>
-                  <span
-                    className={cn(
-                      "mr-2",
-                      item.data.pr?.merged
-                        ? "text-purple-400"
-                        : item.data.pr?.state === "open"
-                          ? item.data.pr?.draft
-                            ? "text-gray-400"
-                            : "text-green-400"
-                          : "text-red-400"
-                    )}
-                  >
-                    {item.data.pr?.merged ? (
-                      <GitMerge className="w-4 h-4" />
-                    ) : item.data.pr?.state === "open" ? (
-                      item.data.pr?.draft ? (
-                        <GitPullRequestDraft className="w-4 h-4" />
-                      ) : (
-                        <GitPullRequestArrow className="w-4 h-4" />
-                      )
-                    ) : (
-                      <X className="w-4 h-4" />
-                    )}
-                  </span>
-
-                  {item.data.type === "pr" && item.data.pr && (
-                    <>
-                      <img
-                        src={item.data.pr.user.avatar_url}
-                        alt={item.data.pr.user.login}
-                        className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
-                        title={item.data.pr.user.login}
-                      />
-                      {prAgent && !item.data.isInTaskGroup && (
-                        <div title={prAgent === "manual" ? "Manual PR" : prAgent}>
-                          <AgentIcon
-                            agentName={prAgent}
-                            className="mr-2 flex-shrink-0"
-                          />
-                        </div>
+                  {/* Left side: Icons */}
+                  <div className="flex items-center mr-2">
+                    <span
+                      className={cn(
+                        "mr-2",
+                        item.data.pr?.merged
+                          ? "text-purple-400"
+                          : item.data.pr?.state === "open"
+                            ? item.data.pr?.draft
+                              ? "text-gray-400"
+                              : "text-green-400"
+                            : "text-red-400"
                       )}
-                    </>
+                    >
+                      {item.data.pr?.merged ? (
+                        <GitMerge className="w-5 h-5" />
+                      ) : item.data.pr?.state === "open" ? (
+                        item.data.pr?.draft ? (
+                          <GitPullRequestDraft className="w-5 h-5" />
+                        ) : (
+                          <GitPullRequestArrow className="w-5 h-5" />
+                        )
+                      ) : (
+                        <X className="w-5 h-5" />
+                      )}
+                    </span>
+
+                    {item.data.type === "pr" && item.data.pr && (
+                      <>
+                        <img
+                          src={item.data.pr.user.avatar_url}
+                          alt={item.data.pr.user.login}
+                          className="w-6 h-6 rounded-full mr-2 flex-shrink-0"
+                          title={item.data.pr.user.login}
+                        />
+                        {prAgent && !item.data.isInTaskGroup && (
+                          <div title={prAgent === "manual" ? "Manual PR" : prAgent}>
+                            <AgentIcon
+                              agentName={prAgent}
+                              className="h-5 w-5 flex-shrink-0"
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Right side: Two-row column layout */}
+                  <div className="flex-1 flex flex-col justify-center min-w-0">
+                    {/* First row: PR number and title */}
+                    <div className="flex items-center">
+                      <span className="truncate text-sm">{title}</span>
+                    </div>
+
+                    {/* Second row: Metadata */}
+                    {item.data.type === "pr" && item.data.pr && (
+                      <div className="flex items-center space-x-3 mt-0.5">
+                        {/* Date display based on sort */}
+                        <span
+                          className={cn(
+                            "text-xs",
+                            theme === "dark" ? "text-gray-400" : "text-gray-500"
+                          )}
+                          title={sortBy === "created"
+                            ? `Created: ${new Date(item.data.pr.created_at).toLocaleString()}`
+                            : `Updated: ${new Date(item.data.pr.updated_at).toLocaleString()}`
+                          }
+                        >
+                          {sortBy === "created"
+                            ? formatDateTime(item.data.pr.created_at)
+                            : formatDateTime(item.data.pr.updated_at)
+                          }
+                        </span>
+
+                        {item.data.pr.changed_files !== undefined && (
+                          <div className="flex items-center space-x-1">
+                            <FileText className={cn(
+                              "w-3 h-3",
+                              theme === "dark" ? "text-gray-500" : "text-gray-600"
+                            )} />
+                            <span
+                              className={cn(
+                                "text-xs",
+                                theme === "dark" ? "text-gray-500" : "text-gray-600"
+                              )}
+                            >
+                              {item.data.pr.changed_files}
+                            </span>
+                          </div>
+                        )}
+                        {item.data.pr.additions !== undefined && (
+                          <span className="text-xs text-green-500">
+                            +{item.data.pr.additions}
+                          </span>
+                        )}
+                        {item.data.pr.deletions !== undefined && (
+                          <span className="text-xs text-red-500">
+                            -{item.data.pr.deletions}
+                          </span>
+                        )}
+
+                        {/* Review status */}
+                        {item.data.pr.state === "open" && !item.data.pr.merged && (
+                          <div className="flex items-center">
+                            {item.data.pr.approvalStatus === "approved" ? (
+                              <div title="Approved">
+                                <CheckCircle2 className="w-3 h-3 text-green-500" />
+                              </div>
+                            ) : item.data.pr.approvalStatus === "changes_requested" ? (
+                              <div title="Changes requested">
+                                <XCircle className="w-3 h-3 text-red-500" />
+                              </div>
+                            ) : item.data.pr.approvalStatus === "pending" ? (
+                              <div title="Review pending">
+                                <Clock className="w-3 h-3 text-yellow-500" />
+                              </div>
+                            ) : (
+                              <div title="No review">
+                                <Clock className="w-3 h-3 text-gray-400" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* External link on far right */}
+                  {item.data.type === "pr" && item.data.pr && (
+                    <a
+                      href={`https://github.com/${item.data.pr.base.repo.owner.login}/${item.data.pr.base.repo.name}/pull/${item.data.pr.number}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className={cn(
+                        "p-1 rounded transition-colors ml-2",
+                        theme === "dark"
+                          ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
+                          : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+                      )}
+                      title="Open in GitHub"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   )}
                 </>
-              )}
-
-              <span className="flex-1 truncate">{title}</span>
-
-              {item.data.type === "task" && (
-                <div className="flex items-center space-x-2 ml-2">
-                  {item.data.mostRecentDate && (
-                    <span
-                      className={cn(
-                        "text-xs",
-                        theme === "dark" ? "text-gray-400" : "text-gray-500"
-                      )}
-                      title={sortBy === "created"
-                        ? `Most recent created: ${new Date(item.data.mostRecentDate.created).toLocaleString()}`
-                        : `Most recent updated: ${new Date(item.data.mostRecentDate.updated).toLocaleString()}`
-                      }
-                    >
-                      {sortBy === "created"
-                        ? formatDateTime(item.data.mostRecentDate.created)
-                        : formatDateTime(item.data.mostRecentDate.updated)
-                      }
-                    </span>
-                  )}
-                  {item.data.count && (
-                    <span
-                      className={cn(
-                        "text-xs",
-                        theme === "dark" ? "text-gray-500" : "text-gray-600"
-                      )}
-                    >
-                      ({item.data.count})
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {item.data.type === "pr" && item.data.pr && (
-                <div className="flex items-center space-x-2 ml-2">
-                  {/* Date display based on sort */}
-                  <span
-                    className={cn(
-                      "text-xs",
-                      theme === "dark" ? "text-gray-400" : "text-gray-500"
-                    )}
-                    title={sortBy === "created"
-                      ? `Created: ${new Date(item.data.pr.created_at).toLocaleString()}`
-                      : `Updated: ${new Date(item.data.pr.updated_at).toLocaleString()}`
-                    }
-                  >
-                    {sortBy === "created"
-                      ? formatDateTime(item.data.pr.created_at)
-                      : formatDateTime(item.data.pr.updated_at)
-                    }
-                  </span>
-
-                  {item.data.pr.changed_files !== undefined && (
-                    <div className="flex items-center space-x-1">
-                      <FileText className={cn(
-                        "w-3 h-3",
-                        theme === "dark" ? "text-gray-500" : "text-gray-600"
-                      )} />
-                      <span
-                        className={cn(
-                          "text-xs",
-                          theme === "dark" ? "text-gray-500" : "text-gray-600"
-                        )}
-                      >
-                        {item.data.pr.changed_files}
-                      </span>
-                    </div>
-                  )}
-                  {item.data.pr.additions !== undefined && (
-                    <span className="text-xs text-green-500">
-                      +{item.data.pr.additions}
-                    </span>
-                  )}
-                  {item.data.pr.deletions !== undefined && (
-                    <span className="text-xs text-red-500">
-                      -{item.data.pr.deletions}
-                    </span>
-                  )}
-
-                  {/* Review status */}
-                  {item.data.pr.state === "open" && !item.data.pr.merged && (
-                    <div className="flex items-center">
-                      {item.data.pr.approvalStatus === "approved" ? (
-                        <div title="Approved">
-                          <CheckCircle2 className="w-3 h-3 text-green-500" />
-                        </div>
-                      ) : item.data.pr.approvalStatus === "changes_requested" ? (
-                        <div title="Changes requested">
-                          <XCircle className="w-3 h-3 text-red-500" />
-                        </div>
-                      ) : item.data.pr.approvalStatus === "pending" ? (
-                        <div title="Review pending">
-                          <Clock className="w-3 h-3 text-yellow-500" />
-                        </div>
-                      ) : (
-                        <div title="No review">
-                          <Clock className="w-3 h-3 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* External link */}
-                  <a
-                    href={`https://github.com/${item.data.pr.base.repo.owner.login}/${item.data.pr.base.repo.name}/pull/${item.data.pr.number}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      "p-1 rounded transition-colors",
-                      theme === "dark"
-                        ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
-                        : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-                    )}
-                    title="Open in GitHub"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
               )}
             </div>
           );
