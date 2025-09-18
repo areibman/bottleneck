@@ -330,8 +330,8 @@ export function PRTreeView({
                     <div className="flex items-center mr-2">
                       {(rest as any).arrow}
                       <div className="w-5 h-5 mr-2 text-gray-500" />
-                      {item.data.taskAgent && (
-                        <div title={item.data.taskAgent === "manual" ? "Manual PRs" : item.data.taskAgent}>
+                      {item.data.taskAgent && item.data.taskAgent !== "unknown" && (
+                        <div title={item.data.taskAgent}>
                           <AgentIcon
                             agentName={item.data.taskAgent}
                             className="h-5 w-5 flex-shrink-0"
@@ -416,8 +416,8 @@ export function PRTreeView({
                             className="w-6 h-6 rounded-full mr-2 flex-shrink-0"
                             title={item.data.pr.user.login}
                           />
-                          {prAgent && !item.data.isInTaskGroup && (
-                            <div title={prAgent === "manual" ? "Manual PR" : prAgent}>
+                          {prAgent && prAgent !== "unknown" && !item.data.isInTaskGroup && (
+                            <div title={prAgent}>
                               <AgentIcon
                                 agentName={prAgent}
                                 className="h-5 w-5 flex-shrink-0"

@@ -36,7 +36,7 @@ export function usePRNavigation(
       pr.title,
       pr.body,
       pr.user?.login,
-      pr.head?.label,
+      pr.head?.ref,
       ...labelNames,
     );
 
@@ -51,7 +51,7 @@ export function usePRNavigation(
       return "ai";
     }
 
-    return "manual";
+    return "unknown";
   }, []);
 
   const getTitlePrefix = useCallback((title: string): string => {

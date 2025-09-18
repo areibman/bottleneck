@@ -128,7 +128,7 @@ export default function PRListView() {
       return "ai";
     }
 
-    return "manual";
+    return "unknown";
   }, []);
 
   const authors = useMemo(() => {

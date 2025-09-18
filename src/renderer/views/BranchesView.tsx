@@ -941,9 +941,7 @@ export default function BranchesView() {
                   const fallbackVariant: "bot" | "user" = hasAIBranches
                     ? "bot"
                     : "user";
-                  const displayAgentName =
-                    agentNameForGroup ??
-                    (fallbackVariant === "user" ? "manual" : undefined);
+                  const displayAgentName = agentNameForGroup;
 
                   // Get all branch names in this author group
                   const allAuthorBranchNames: string[] = [];
@@ -1004,10 +1002,12 @@ export default function BranchesView() {
                               }
                             }}
                           />
-                          <AgentIcon
-                            agentName={displayAgentName}
-                            fallback={fallbackVariant}
-                          />
+                          {displayAgentName && displayAgentName !== "unknown" && (
+                            <AgentIcon
+                              agentName={displayAgentName}
+                              fallback={fallbackVariant}
+                            />
+                          )}
                           <span
                             className="font-medium text-xs cursor-pointer"
                             onClick={() => toggleGroup(authorKey)}

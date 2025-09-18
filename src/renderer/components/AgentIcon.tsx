@@ -12,7 +12,7 @@ interface AgentIconProps {
 export function AgentIcon({ agentName, className, fallback }: AgentIconProps) {
   const { theme } = useUIStore();
   const iconInfo = agentName ? getAgentIcon(agentName) : undefined;
-  const resolvedFallback = fallback ?? (agentName === "manual" ? "user" : "bot");
+  const resolvedFallback = fallback ?? "bot";
 
   if (iconInfo) {
     const themeFilter = iconInfo.themeFilter?.[theme];
