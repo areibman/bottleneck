@@ -257,7 +257,7 @@ export function PRTreeView({
               onClick={handleClick}
               style={{
                 // Force override any inherited styles from react-complex-tree
-                backgroundColor: isSelected 
+                backgroundColor: isSelected
                   ? (theme === "dark" ? "rgb(55 65 81)" : "rgb(239 246 255)")
                   : "transparent",
                 color: theme === "dark" ? "rgb(243 244 246)" : "rgb(17 24 39)",
