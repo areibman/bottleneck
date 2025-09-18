@@ -14,8 +14,9 @@ export function AgentIcon({ agentName, className, fallback }: AgentIconProps) {
   const agentKey = resolveAgentKey(agentName);
   const iconInfo = agentName ? getAgentIcon(agentName) : undefined;
   const resolvedFallback = fallback ?? (agentName === "manual" ? "user" : "bot");
+  const usesOpenAIIcon = agentKey === "openai" || agentKey === "codex";
   const shouldInvertColors =
-    (agentKey === "openai" && theme === "dark") ||
+    (usesOpenAIIcon && theme === "dark") ||
     (agentKey === "cursor" && theme !== "dark");
 
   if (iconInfo) {
