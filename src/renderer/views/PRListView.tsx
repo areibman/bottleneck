@@ -11,9 +11,18 @@ import { PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
 
+type StatusType = "open" | "draft" | "merged" | "closed";
+
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
   { value: "created", label: "Recently created" },
+];
+
+const statusOptions = [
+  { value: "open" as StatusType, label: "Open" },
+  { value: "draft" as StatusType, label: "Draft" },
+  { value: "merged" as StatusType, label: "Merged" },
+  { value: "closed" as StatusType, label: "Closed" },
 ];
 
 export default function PRListView() {
@@ -33,6 +42,9 @@ export default function PRListView() {
   const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set(["all"]));
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<StatusType>>(new Set(["open", "draft"]));
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -40,16 +52,19 @@ export default function PRListView() {
       if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
         setShowAuthorDropdown(false);
       }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
     };
 
-    if (showAuthorDropdown) {
+    if (showAuthorDropdown || showStatusDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAuthorDropdown]);
+  }, [showAuthorDropdown, showStatusDropdown]);
 
   const selectedRepoKey = useMemo(() => {
     if (!selectedRepo) return null;
@@ -167,6 +182,36 @@ export default function PRListView() {
     });
   }, [authors]);
 
+  // Helper function to get PR status
+  const getPRStatus = useCallback((pr: PullRequest): StatusType => {
+    if (pr.draft) return "draft";
+    if (pr.merged) return "merged";
+    if (pr.state === "closed") return "closed";
+    return "open";
+  }, []);
+
+  const handleStatusToggle = useCallback((status: StatusType | "all") => {
+    setSelectedStatuses(prev => {
+      const newSet = new Set(prev);
+      if (status === "all") {
+        if (newSet.size === statusOptions.length) {
+          // If all are selected, deselect all
+          return new Set();
+        } else {
+          // Select all
+          return new Set(statusOptions.map(s => s.value));
+        }
+      } else {
+        // Toggle individual status
+        if (newSet.has(status)) {
+          newSet.delete(status);
+        } else {
+          newSet.add(status);
+        }
+      }
+      return newSet;
+    });
+  }, []);
 
   // Extract common prefix from PR title for sub-grouping
   const getTitlePrefix = useCallback((title: string): string => {
@@ -229,6 +274,14 @@ export default function PRListView() {
       prs = [];
     }
 
+    // Apply status filter
+    if (selectedStatuses.size > 0) {
+      prs = prs.filter((pr) => selectedStatuses.has(getPRStatus(pr)));
+    } else {
+      // No statuses selected, show no PRs
+      prs = [];
+    }
+
     // Sort using cached dates from the map
     prs.sort((a, b) => {
       const aKey = `${a.base.repo.owner.login}/${a.base.repo.name}#${a.number}`;
@@ -251,8 +304,10 @@ export default function PRListView() {
     pullRequests,
     parsedDates,
     selectedAuthors,
+    selectedStatuses,
     sortBy,
     selectedRepo,
+    getPRStatus,
   ]);
 
   // Pre-compute PR metadata for grouping
@@ -460,6 +515,88 @@ export default function PRListView() {
                 onChange={setSortBy}
                 labelPrefix="Sort by: "
               />
+
+              {/* Status filter dropdown */}
+              <div className="relative" ref={statusDropdownRef}>
+                <button
+                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[120px]",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                >
+                  <span>Status:</span>
+                  <span className={cn(
+                    "truncate",
+                    theme === "dark" ? "text-gray-300" : "text-gray-700"
+                  )}>
+                    {selectedStatuses.size === 0
+                      ? "None"
+                      : selectedStatuses.size === statusOptions.length
+                        ? "All"
+                        : `${selectedStatuses.size} selected`}
+                  </span>
+                </button>
+
+                {showStatusDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[150px] rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2">
+                      {/* Select All option */}
+                      <label
+                        className={cn(
+                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                          theme === "dark"
+                            ? "hover:bg-gray-700"
+                            : "hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStatuses.size === statusOptions.length}
+                          onChange={() => handleStatusToggle("all")}
+                          className="rounded"
+                        />
+                        <span className="text-sm font-medium">All Statuses</span>
+                      </label>
+
+                      <div className={cn(
+                        "my-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )} />
+
+                      {/* Individual status options */}
+                      {statusOptions.map(status => (
+                        <label
+                          key={status.value}
+                          className={cn(
+                            "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                            theme === "dark"
+                              ? "hover:bg-gray-700"
+                              : "hover:bg-gray-50"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedStatuses.has(status.value)}
+                            onChange={() => handleStatusToggle(status.value)}
+                            className="rounded"
+                          />
+                          <span className="text-sm">{status.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Author filter with checkbox list */}
               <div className="relative" ref={authorDropdownRef}>
