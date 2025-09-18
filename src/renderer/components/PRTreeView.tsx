@@ -251,8 +251,8 @@ export function PRTreeView({
             <div
               className={cn(
                 "flex items-center w-full py-1 px-2 rounded cursor-pointer",
-                theme === "dark" 
-                  ? "hover:bg-gray-800" 
+                theme === "dark"
+                  ? "hover:bg-gray-800"
                   : "hover:bg-gray-100",
                 item.data.type === "pr" && "text-sm",
                 item.data.type === "task" && "text-sm",

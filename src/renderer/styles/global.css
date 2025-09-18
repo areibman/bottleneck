@@ -327,6 +327,32 @@
     transition-delay: 0ms;
   }
 
+  /* Override react-complex-tree hover styles for dark mode */
+  .dark .rct-tree-item-li:hover {
+    background-color: rgb(31, 41, 55) !important; /* gray-800 */
+  }
+
+  .dark .rct-tree-item-title-container:hover {
+    background-color: transparent !important;
+  }
+
+  .dark .rct-tree-item-title:hover {
+    background-color: transparent !important;
+  }
+
+  /* Override react-complex-tree hover styles for light mode */
+  .light .rct-tree-item-li:hover {
+    background-color: rgb(243, 244, 246) !important; /* gray-100 */
+  }
+
+  .light .rct-tree-item-title-container:hover {
+    background-color: transparent !important;
+  }
+
+  .light .rct-tree-item-title:hover {
+    background-color: transparent !important;
+  }
+
   /* Syntax highlighting token colors for light mode */
   .light .markdown-content .token.comment,
   .light .markdown-content .token.prolog,
