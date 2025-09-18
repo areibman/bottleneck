@@ -1,36 +1,25 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { GitPullRequest } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
-import { AgentIcon } from "../components/AgentIcon";
 import { detectAgentName } from "../utils/agentIcons";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
 import { PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
-import type { GroupByType, SortByType, PRWithMetadata } from "../types/prList";
+import type { SortByType, PRWithMetadata } from "../types/prList";
 
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
   { value: "created", label: "Recently created" },
-  { value: "title", label: "Title" },
-];
-
-const groupOptions: DropdownOption<GroupByType>[] = [
-  { value: "none", label: "No grouping" },
-  { value: "agent", label: "By agent" },
-  { value: "author", label: "By author" },
-  { value: "label", label: "By label" },
 ];
 
 export default function PRListView() {
   const navigate = useNavigate();
   const {
     pullRequests,
-    filters,
-    setFilters,
     loading,
     selectedRepo,
     fetchPRDetails,
@@ -41,7 +30,26 @@ export default function PRListView() {
   const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
     useUIStore();
   const [sortBy, setSortBy] = useState<SortByType>("updated");
-  const [groupBy, setGroupBy] = useState<GroupByType>("agent");
+  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set(["all"]));
+  const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
+  const authorDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
+        setShowAuthorDropdown(false);
+      }
+    };
+
+    if (showAuthorDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAuthorDropdown]);
 
   const selectedRepoKey = useMemo(() => {
     if (!selectedRepo) return null;
@@ -128,40 +136,37 @@ export default function PRListView() {
     pullRequests.forEach((pr) => {
       authorMap.set(pr.user.login, pr.user);
     });
-    const authorOptions: DropdownOption<string>[] = [
-      { value: "all", label: "All Authors" },
-      ...Array.from(authorMap.values()).map((author) => ({
-        value: author.login,
-        label: author.login,
-        icon: (
-          <img
-            src={author.avatar_url}
-            alt={author.login}
-            className="w-4 h-4 rounded-full"
-          />
-        ),
-      })),
-    ];
-    return authorOptions;
+    return Array.from(authorMap.values());
   }, [pullRequests]);
 
-  const agents = useMemo(() => {
-    const agentSet = new Set<string>();
-    pullRequests.forEach((pr) => {
-      agentSet.add(getAgentFromPR(pr));
+  const handleAuthorToggle = useCallback((authorLogin: string) => {
+    setSelectedAuthors(prev => {
+      const newSet = new Set(prev);
+      if (authorLogin === "all") {
+        if (newSet.has("all")) {
+          // If "all" is selected and clicked, deselect all
+          return new Set();
+        } else {
+          // Select all
+          return new Set(["all", ...authors.map(a => a.login)]);
+        }
+      } else {
+        // Toggle individual author
+        if (newSet.has(authorLogin)) {
+          newSet.delete(authorLogin);
+          newSet.delete("all"); // Remove "all" if deselecting an individual
+        } else {
+          newSet.add(authorLogin);
+          // Check if all authors are now selected
+          if (authors.every(a => newSet.has(a.login))) {
+            newSet.add("all");
+          }
+        }
+      }
+      return newSet;
     });
+  }, [authors]);
 
-    const agentOptions: DropdownOption<string>[] = [
-      { value: "all", label: "All Agents" },
-      ...Array.from(agentSet).map((agent) => ({
-        value: agent,
-        label: agent,
-        icon: <AgentIcon agentName={agent} />,
-      })),
-    ];
-
-    return agentOptions;
-  }, [pullRequests, getAgentFromPR]);
 
   // Extract common prefix from PR title for sub-grouping
   const getTitlePrefix = useCallback((title: string): string => {
@@ -216,16 +221,13 @@ export default function PRListView() {
       );
     });
 
-    // Apply filters
-    prs = prs.filter((pr) => {
-      if (filters.author !== "all" && pr.user.login !== filters.author) {
-        return false;
-      }
-      if (filters.agent !== "all" && getAgentFromPR(pr) !== filters.agent) {
-        return false;
-      }
-      return true;
-    });
+    // Apply author filter
+    if (!selectedAuthors.has("all") && selectedAuthors.size > 0) {
+      prs = prs.filter((pr) => selectedAuthors.has(pr.user.login));
+    } else if (selectedAuthors.size === 0) {
+      // No authors selected, show no PRs
+      prs = [];
+    }
 
     // Sort using cached dates from the map
     prs.sort((a, b) => {
@@ -239,8 +241,6 @@ export default function PRListView() {
           return bDates.updated - aDates.updated;
         case "created":
           return bDates.created - aDates.created;
-        case "title":
-          return a.title.localeCompare(b.title);
         default:
           return 0;
       }
@@ -250,9 +250,8 @@ export default function PRListView() {
   }, [
     pullRequests,
     parsedDates,
-    filters,
+    selectedAuthors,
     sortBy,
-    getAgentFromPR,
     selectedRepo,
   ]);
 
@@ -272,45 +271,42 @@ export default function PRListView() {
       // Find if this PR belongs to a task subgroup and fetch all siblings
       let navigationState = {};
 
-      if (groupBy === "agent") {
-        const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
-        if (prMetadata) {
-          const { agent, titlePrefix } = prMetadata;
+      const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
+      if (prMetadata) {
+        const { titlePrefix } = prMetadata;
 
-          // Find all sibling PRs in the same task group
-          const siblingPRs = prsWithMetadata
-            .filter((item) => item.agent === agent && item.titlePrefix === titlePrefix)
-            .map((item) => item.pr);
+        // Find all sibling PRs in the same task group
+        const siblingPRs = prsWithMetadata
+          .filter((item) => item.titlePrefix === titlePrefix)
+          .map((item) => item.pr);
 
-          if (siblingPRs.length > 1) {
-            console.log(
-              `Fetching detailed data for ${siblingPRs.length} sibling PRs in task: ${titlePrefix}`,
-            );
+        if (siblingPRs.length > 1) {
+          console.log(
+            `Fetching detailed data for ${siblingPRs.length} sibling PRs in task: ${titlePrefix}`,
+          );
 
-            // Fetch detailed data for all siblings in the background
-            fetchDetailedPRsInBackground(siblingPRs);
+          // Fetch detailed data for all siblings in the background
+          fetchDetailedPRsInBackground(siblingPRs);
 
-            // Pass sibling PRs to the detail view via navigation state
-            navigationState = {
-              siblingPRs: siblingPRs.map((p) => ({
-                id: p.id,
-                number: p.number,
-                title: p.title,
-                state: p.state,
-                draft: p.draft,
-                merged: p.merged,
-                user: p.user,
-                created_at: p.created_at,
-                updated_at: p.updated_at,
-                approvalStatus: p.approvalStatus,
-                additions: p.additions,
-                deletions: p.deletions,
-                changed_files: p.changed_files,
-              })),
-              currentTaskGroup: titlePrefix,
-              currentAgent: agent,
-            };
-          }
+          // Pass sibling PRs to the detail view via navigation state
+          navigationState = {
+            siblingPRs: siblingPRs.map((p) => ({
+              id: p.id,
+              number: p.number,
+              title: p.title,
+              state: p.state,
+              draft: p.draft,
+              merged: p.merged,
+              user: p.user,
+              created_at: p.created_at,
+              updated_at: p.updated_at,
+              approvalStatus: p.approvalStatus,
+              additions: p.additions,
+              deletions: p.deletions,
+              changed_files: p.changed_files,
+            })),
+            currentTaskGroup: titlePrefix,
+          };
         }
       }
 
@@ -319,7 +315,7 @@ export default function PRListView() {
         { state: navigationState },
       );
     },
-    [navigate, groupBy, prsWithMetadata, fetchDetailedPRsInBackground],
+    [navigate, prsWithMetadata, fetchDetailedPRsInBackground],
   );
 
   const handleCheckboxChange = useCallback(
@@ -464,24 +460,95 @@ export default function PRListView() {
                 onChange={setSortBy}
                 labelPrefix="Sort by: "
               />
-              <Dropdown<GroupByType>
-                options={groupOptions}
-                value={groupBy}
-                onChange={setGroupBy}
-                labelPrefix="Group by: "
-              />
-              <Dropdown
-                options={authors}
-                value={filters.author}
-                onChange={(value) => setFilters({ author: value })}
-                labelPrefix="Author: "
-              />
-              <Dropdown
-                options={agents}
-                value={filters.agent}
-                onChange={(value) => setFilters({ agent: value })}
-                labelPrefix="Agent: "
-              />
+
+              {/* Author filter with checkbox list */}
+              <div className="relative" ref={authorDropdownRef}>
+                <button
+                  onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-sm",
+                    theme === "dark"
+                      ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                      : "bg-white border-gray-300 hover:bg-gray-50"
+                  )}
+                >
+                  <span>Authors:</span>
+                  <span className={cn(
+                    "font-medium",
+                    theme === "dark" ? "text-gray-300" : "text-gray-700"
+                  )}>
+                    {selectedAuthors.has("all")
+                      ? "All"
+                      : selectedAuthors.size === 0
+                        ? "None"
+                        : selectedAuthors.size === 1
+                          ? Array.from(selectedAuthors)[0]
+                          : `${selectedAuthors.size} selected`}
+                  </span>
+                </button>
+
+                {showAuthorDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[200px] rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2 max-h-64 overflow-y-auto">
+                      {/* All Authors option */}
+                      <label
+                        className={cn(
+                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                          theme === "dark"
+                            ? "hover:bg-gray-700"
+                            : "hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAuthors.has("all")}
+                          onChange={() => handleAuthorToggle("all")}
+                          className="rounded"
+                        />
+                        <span className="text-sm font-medium">All Authors</span>
+                      </label>
+
+                      <div className={cn(
+                        "my-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )} />
+
+                      {/* Individual authors */}
+                      {authors.map(author => (
+                        <label
+                          key={author.login}
+                          className={cn(
+                            "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                            theme === "dark"
+                              ? "hover:bg-gray-700"
+                              : "hover:bg-gray-50"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAuthors.has(author.login)}
+                            onChange={() => handleAuthorToggle(author.login)}
+                            className="rounded"
+                          />
+                          <img
+                            src={author.avatar_url}
+                            alt={author.login}
+                            className="w-5 h-5 rounded-full"
+                          />
+                          <span className="text-sm">{author.login}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -519,9 +586,9 @@ export default function PRListView() {
         ) : (
           <PRTreeView
             theme={theme}
-            groupBy={groupBy}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
+            sortBy={sortBy}
             onTogglePRSelection={handleCheckboxChange}
             onToggleGroupSelection={handleGroupSelection}
             onPRClick={handlePRClick}

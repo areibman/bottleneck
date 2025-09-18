@@ -1,8 +1,6 @@
 import type { PullRequest } from "../services/github";
 
-export type SortByType = "updated" | "created" | "title";
-
-export type GroupByType = "none" | "agent" | "author" | "label";
+export type SortByType = "updated" | "created";
 
 export interface PRWithMetadata {
   pr: PullRequest;

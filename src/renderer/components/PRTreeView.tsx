@@ -22,35 +22,75 @@ import {
 import { cn } from "../utils/cn";
 import { AgentIcon } from "./AgentIcon";
 import type { PullRequest } from "../services/github";
-import type { GroupByType, PRWithMetadata } from "../types/prList";
+import type { PRWithMetadata, SortByType } from "../types/prList";
 
 interface TreeData {
-  type: "agent" | "task" | "pr";
+  type: "task" | "pr";
   pr?: PullRequest;
-  agent?: string;
+  taskPrefix?: string;
   count?: number;
 }
 
 const getPRId = (pr: PullRequest) =>
   `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
 
-// Build tree data similar to sidebar pattern
+// Build tree data with only task grouping (no agent level)
 function buildTreeItems(
-  prsWithMetadata: PRWithMetadata[],
-  groupBy: GroupByType
+  prsWithMetadata: PRWithMetadata[]
 ): Record<TreeItemIndex, TreeItem<TreeData>> {
   const items: Record<TreeItemIndex, TreeItem<TreeData>> = {
     root: {
       index: "root",
       isFolder: true,
       children: [],
-      data: { type: "agent" },
+      data: { type: "task" },
     },
   };
 
-  if (groupBy === "none") {
-    // No grouping - just add all PRs as direct children
-    prsWithMetadata.forEach((item) => {
+  // Group by task/prompt prefix
+  const taskGroups: Record<string, PRWithMetadata[]> = {};
+
+  prsWithMetadata.forEach((item) => {
+    const prefix = item.titlePrefix;
+    if (!taskGroups[prefix]) {
+      taskGroups[prefix] = [];
+    }
+    taskGroups[prefix].push(item);
+  });
+
+  for (const prefix in taskGroups) {
+    const taskPRs = taskGroups[prefix];
+
+    if (taskPRs.length > 1) {
+      // Multiple PRs with same prefix - create task group
+      const taskKey = `task-${prefix}`;
+      items[taskKey] = {
+        index: taskKey,
+        isFolder: true,
+        children: [],
+        data: {
+          type: "task",
+          taskPrefix: prefix,
+          count: taskPRs.length,
+        },
+      };
+      (items.root.children as TreeItemIndex[]).push(taskKey);
+
+      taskPRs.forEach((item) => {
+        const prKey = `pr-${item.pr.id}`;
+        items[prKey] = {
+          index: prKey,
+          children: [],
+          data: {
+            type: "pr",
+            pr: item.pr,
+          },
+        };
+        (items[taskKey].children as TreeItemIndex[]).push(prKey);
+      });
+    } else {
+      // Single PR - add directly under root
+      const item = taskPRs[0];
       const prKey = `pr-${item.pr.id}`;
       items[prKey] = {
         index: prKey,
@@ -61,87 +101,6 @@ function buildTreeItems(
         },
       };
       (items.root.children as TreeItemIndex[]).push(prKey);
-    });
-    return items;
-  }
-
-  // Group by agent first (Author level)
-  const agentGroups: Record<string, PRWithMetadata[]> = {};
-
-  prsWithMetadata.forEach((item) => {
-    const agent = item.agent;
-    if (!agentGroups[agent]) {
-      agentGroups[agent] = [];
-    }
-    agentGroups[agent].push(item);
-  });
-
-  for (const agentName in agentGroups) {
-    const agentKey = `agent-${agentName}`;
-    items[agentKey] = {
-      index: agentKey,
-      isFolder: true,
-      children: [],
-      data: {
-        type: "agent",
-        agent: agentName,
-        count: agentGroups[agentName].length,
-      },
-    };
-    (items.root.children as TreeItemIndex[]).push(agentKey);
-
-    // Group by task/prompt within each agent
-    const taskGroups: Record<string, PRWithMetadata[]> = {};
-    agentGroups[agentName].forEach((item) => {
-      const prefix = item.titlePrefix;
-      if (!taskGroups[prefix]) {
-        taskGroups[prefix] = [];
-      }
-      taskGroups[prefix].push(item);
-    });
-
-    for (const prefix in taskGroups) {
-      const taskPRs = taskGroups[prefix];
-      if (taskPRs.length > 1) {
-        // Multiple PRs with same prefix - create task group
-        const taskKey = `${agentKey}-task-${prefix}`;
-        items[taskKey] = {
-          index: taskKey,
-          isFolder: true,
-          children: [],
-          data: {
-            type: "task",
-            count: taskPRs.length,
-          },
-        };
-        (items[agentKey].children as TreeItemIndex[]).push(taskKey);
-
-        taskPRs.forEach((item) => {
-          const prKey = `pr-${item.pr.id}`;
-          items[prKey] = {
-            index: prKey,
-            children: [],
-            data: {
-              type: "pr",
-              pr: item.pr,
-            },
-          };
-          (items[taskKey].children as TreeItemIndex[]).push(prKey);
-        });
-      } else {
-        // Single PR - add directly under agent
-        const item = taskPRs[0];
-        const prKey = `pr-${item.pr.id}`;
-        items[prKey] = {
-          index: prKey,
-          children: [],
-          data: {
-            type: "pr",
-            pr: item.pr,
-          },
-        };
-        (items[agentKey].children as TreeItemIndex[]).push(prKey);
-      }
     }
   }
 
@@ -150,26 +109,68 @@ function buildTreeItems(
 
 interface PRTreeViewProps {
   theme: "light" | "dark";
-  groupBy: GroupByType;
   prsWithMetadata: PRWithMetadata[];
   selectedPRs: Set<string>;
+  sortBy: SortByType;
   onTogglePRSelection: (prId: string, checked: boolean) => void;
   onToggleGroupSelection: (prIds: string[], checked: boolean) => void;
   onPRClick: (pr: PullRequest) => void;
 }
 
+// Helper function to format date and time
+function formatDateTime(date: string): string {
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Format time as HH:MM AM/PM
+  const timeStr = d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  // If today, show "Today at HH:MM AM/PM"
+  if (diffDays === 0) {
+    return `Today at ${timeStr}`;
+  }
+
+  // If yesterday, show "Yesterday at HH:MM AM/PM"
+  if (diffDays === 1) {
+    return `Yesterday at ${timeStr}`;
+  }
+
+  // If within this year, show "MMM DD at HH:MM AM/PM"
+  if (d.getFullYear() === now.getFullYear()) {
+    const dateStr = d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+    return `${dateStr} at ${timeStr}`;
+  }
+
+  // Otherwise show "MMM DD, YYYY at HH:MM AM/PM"
+  const dateStr = d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+  return `${dateStr} at ${timeStr}`;
+}
+
 export function PRTreeView({
   theme,
-  groupBy,
   prsWithMetadata,
   selectedPRs,
+  sortBy,
   onTogglePRSelection,
   onToggleGroupSelection,
   onPRClick,
 }: PRTreeViewProps) {
   const treeItems = useMemo(
-    () => buildTreeItems(prsWithMetadata, groupBy),
-    [prsWithMetadata, groupBy]
+    () => buildTreeItems(prsWithMetadata),
+    [prsWithMetadata]
   );
 
   const treeDataProvider = useMemo(
@@ -182,14 +183,8 @@ export function PRTreeView({
       <UncontrolledTreeEnvironment
         dataProvider={treeDataProvider}
         getItemTitle={(item) => {
-          if (item.data.type === "agent" && item.data.agent) {
-            const agentName = item.data.agent;
-            return agentName === "manual" ? "Manual PRs" : agentName;
-          }
-
-          if (item.data.type === "task") {
-            const prefix = (item.index as string).split("-task-").slice(1).join("-task-");
-            return prefix;
+          if (item.data.type === "task" && item.data.taskPrefix) {
+            return item.data.taskPrefix;
           }
 
           if (item.data.type === "pr" && item.data.pr) {
@@ -211,8 +206,11 @@ export function PRTreeView({
           }
         }}
         renderItemTitle={({ title, item, ...rest }) => {
-          const agentName = item.data.type === "agent" ? item.data.agent : undefined;
           const isSelected = item.data.type === "pr" && item.data.pr ? selectedPRs.has(getPRId(item.data.pr)) : false;
+          // Get agent name from PR metadata
+          const prAgent = item.data.type === "pr" && item.data.pr
+            ? prsWithMetadata.find(m => m.pr.id === item.data.pr!.id)?.agent
+            : undefined;
 
           const handleClick = (e: React.MouseEvent) => {
             if (item.data.type === "pr" && item.data.pr) {
@@ -222,7 +220,7 @@ export function PRTreeView({
                 e.stopPropagation();
                 onTogglePRSelection(getPRId(item.data.pr), !isSelected);
               }
-            } else if (item.data.type === "agent" || item.data.type === "task") {
+            } else if (item.data.type === "task") {
               // Group selection on CMD/CTRL click
               if (e.metaKey || e.ctrlKey) {
                 e.preventDefault();
@@ -276,54 +274,75 @@ export function PRTreeView({
               }}
             >
               {item.isFolder ? (
-                (rest as any).arrow
+                <>
+                  {(rest as any).arrow}
+                  <FolderOpen className="w-4 h-4 mr-2 text-gray-500" />
+                </>
               ) : (
-                <span
-                  className={cn(
-                    "mr-2",
-                    item.data.pr?.state === "open"
-                      ? "text-green-400"
-                      : item.data.pr?.merged
-                        ? "text-purple-400"
-                        : "text-gray-400"
+                <>
+                  <span
+                    className={cn(
+                      "mr-2",
+                      item.data.pr?.state === "open"
+                        ? "text-green-400"
+                        : item.data.pr?.merged
+                          ? "text-purple-400"
+                          : "text-red-400"
+                    )}
+                  >
+                    {item.data.pr?.draft ? (
+                      <GitPullRequestDraft className="w-4 h-4" />
+                    ) : item.data.pr?.merged ? (
+                      <GitMerge className="w-4 h-4" />
+                    ) : item.data.pr?.state === "open" ? (
+                      <GitPullRequest className="w-4 h-4" />
+                    ) : (
+                      <X className="w-4 h-4" />
+                    )}
+                  </span>
+
+                  {item.data.type === "pr" && item.data.pr && (
+                    <>
+                      <img
+                        src={item.data.pr.user.avatar_url}
+                        alt={item.data.pr.user.login}
+                        className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
+                        title={item.data.pr.user.login}
+                      />
+                      {prAgent && (
+                        <div title={prAgent === "manual" ? "Manual PR" : prAgent}>
+                          <AgentIcon
+                            agentName={prAgent}
+                            className="mr-2 flex-shrink-0"
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
-                >
-                  {item.data.pr?.draft ? (
-                    <GitPullRequestDraft className="w-4 h-4" />
-                  ) : item.data.pr?.merged ? (
-                    <GitMerge className="w-4 h-4" />
-                  ) : item.data.pr?.state === "open" ? (
-                    <GitPullRequest className="w-4 h-4" />
-                  ) : (
-                    <X className="w-4 h-4" />
-                  )}
-                </span>
-              )}
-
-
-              {agentName && (
-                <AgentIcon
-                  agentName={agentName}
-                  className="mr-2"
-                />
-              )}
-
-              {item.data.type === "task" && (
-                <FolderOpen className="w-3 h-3 mr-1 text-gray-500" />
-              )}
-
-              {item.data.type === "pr" && item.data.pr && (
-                <img
-                  src={item.data.pr.user.avatar_url}
-                  alt={item.data.pr.user.login}
-                  className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
-                />
+                </>
               )}
 
               <span className="flex-1 truncate">{title}</span>
 
               {item.data.type === "pr" && item.data.pr && (
                 <div className="flex items-center space-x-2 ml-2">
+                  {/* Date display based on sort */}
+                  <span
+                    className={cn(
+                      "text-xs",
+                      theme === "dark" ? "text-gray-400" : "text-gray-500"
+                    )}
+                    title={sortBy === "created"
+                      ? `Created: ${new Date(item.data.pr.created_at).toLocaleString()}`
+                      : `Updated: ${new Date(item.data.pr.updated_at).toLocaleString()}`
+                    }
+                  >
+                    {sortBy === "created"
+                      ? formatDateTime(item.data.pr.created_at)
+                      : formatDateTime(item.data.pr.updated_at)
+                    }
+                  </span>
+
                   {item.data.pr.changed_files !== undefined && (
                     <div className="flex items-center space-x-1">
                       <FileText className={cn(
