@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer components {
+
+    /* React Complex Tree dark mode overrides */
+    .pr-tree-view-container .dark .rct-tree-item-li {
+        @apply text-gray-100;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-li:hover {
+        @apply bg-gray-800 !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-li.rct-tree-item-li-selected {
+        @apply bg-gray-700 !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-li.rct-tree-item-li-focused {
+        @apply bg-gray-700 !important;
+    }
+
+    /* Override the button styles that are causing white backgrounds */
+    .pr-tree-view-container .dark .rct-tree-item-button {
+        @apply bg-transparent !important;
+        @apply text-gray-100 !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-button:hover {
+        @apply bg-gray-800 !important;
+        @apply text-gray-100 !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-button-selected {
+        @apply bg-gray-700 !important;
+        @apply text-gray-100 !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-button-focused {
+        @apply bg-gray-700 !important;
+        @apply text-gray-100 !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-button-selected.rct-tree-item-button-focused {
+        @apply bg-gray-700 !important;
+        @apply text-gray-100 !important;
+    }
+
+    /* Override the default white background on hover */
+    .pr-tree-view-container .dark .rct-tree-item-title-container {
+        @apply bg-transparent !important;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-title-container:hover {
+        @apply bg-transparent !important;
+    }
+
+    /* Ensure text stays readable */
+    .pr-tree-view-container .dark .rct-tree-item-title {
+        @apply text-gray-100 !important;
+    }
+
+    /* Arrow color in dark mode */
+    .pr-tree-view-container .dark .rct-tree-item-arrow {
+        @apply text-gray-400;
+    }
+
+    .pr-tree-view-container .dark .rct-tree-item-arrow:hover {
+        @apply text-gray-200;
+    }
+
+    /* Force override any background color changes on all tree item states */
+    .pr-tree-view-container .dark [data-rct-item-focus="true"],
+    .pr-tree-view-container .dark [data-rct-item-interactive="true"] {
+        @apply bg-transparent !important;
+    }
+
+    .pr-tree-view-container .dark [data-rct-item-focus="true"]:hover,
+    .pr-tree-view-container .dark [data-rct-item-interactive="true"]:hover {
+        @apply bg-gray-800 !important;
+    }
+
+    /* Override TreeItemElement button height to prevent overlapping */
+    .pr-tree-view-container .rct-tree-item-button,
+    .pr-tree-view-container button.rct-tree-item-button,
+    .pr-tree-view-container button[data-rct-item-interactive="true"] {
+        height: 52px !important;
+        min-height: 52px !important;
+        padding: 0 !important;
+        display: block !important;
+        width: 100% !important;
+    }
+
+
+    /* Ensure inner divs fill the height and center content */
+    .pr-tree-view-container .rct-tree-item-button>div {
+        height: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+
+    /* Center the blue selection indicator nub */
+    .pr-tree-view-container .rct-tree-item-button {
+        position: relative !important;
+        padding-left: 8px !important;
+        /* Add some padding for the indicator */
+    }
+
+    .pr-tree-view-container .rct-tree-item-button::before,
+    .pr-tree-view-container button.rct-tree-item-button::before,
+    .pr-tree-view-container button[data-rct-item-interactive="true"]::before {
+        position: absolute !important;
+        left: 0 !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        height: 20px !important;
+        /* Make it smaller and centered */
+        width: 3px !important;
+        border-radius: 0 2px 2px 0 !important;
+    }
+
+    /* Keep the blue color but make it more subtle */
+    .pr-tree-view-container .rct-tree-item-button {
+        --rct-bar-color: #0366d6 !important;
+    }
+
+    /* Ensure the indicator only shows on selected/focused items */
+    .pr-tree-view-container .rct-tree-item-button::before {
+        opacity: 0 !important;
+    }
+
+    .pr-tree-view-container .rct-tree-item-button-selected::before,
+    .pr-tree-view-container .rct-tree-item-button-focused::before,
+    .pr-tree-view-container .rct-tree-item-button:focus::before,
+    .pr-tree-view-container button[data-rct-item-focus="true"]::before {
+        opacity: 1 !important;
+    }
+}
