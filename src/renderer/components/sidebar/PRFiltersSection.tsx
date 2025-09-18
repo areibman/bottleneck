@@ -1,15 +1,12 @@
 import { useMemo } from "react";
 import { Filter, Plus, FolderOpen } from "lucide-react";
 import {
-  UncontrolledTreeEnvironment,
-  Tree,
   StaticTreeDataProvider,
   TreeItem,
   TreeItemIndex,
 } from "react-complex-tree";
 import "react-complex-tree/lib/style-modern.css";
 import { cn } from "../../utils/cn";
-import { AgentIcon } from "../AgentIcon";
 import { detectAgentName } from "../../utils/agentIcons";
 import type { PRFilterType } from "../../stores/prStore";
 

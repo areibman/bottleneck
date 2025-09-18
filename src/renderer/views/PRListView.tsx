@@ -482,7 +482,7 @@ export default function PRListView() {
                             <img
                               src={author.avatar_url}
                               alt={author.login}
-                              className="w-5 h-5 rounded-full flex-shrink-0"
+                              className="w-4 h-4 rounded-full flex-shrink-0"
                             />
                             <span className={cn(
                               "truncate",
@@ -515,7 +515,7 @@ export default function PRListView() {
                                     key={author.login}
                                     src={author.avatar_url}
                                     alt={author.login}
-                                    className="w-5 h-5 rounded-full border-2 border-gray-800"
+                                    className="w-4 h-4 rounded-full border border-gray-800"
                                     style={{
                                       borderColor: theme === "dark" ? "#1f2937" : "#ffffff"
                                     }}
@@ -524,7 +524,7 @@ export default function PRListView() {
                               })}
                             {selectedAuthors.size > 3 && (
                               <div className={cn(
-                                "w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium border-2",
+                                "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-medium border",
                                 theme === "dark"
                                   ? "bg-gray-700 text-gray-300 border-gray-800"
                                   : "bg-gray-200 text-gray-700 border-white"
