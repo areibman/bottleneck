@@ -16,6 +16,7 @@ import {
   mockFiles,
   mockComments,
   mockReviews,
+  mockReviewComments,
 } from "../mockData";
 import { useUIStore } from "../stores/uiStore";
 
@@ -49,6 +50,7 @@ export default function PRDetailView() {
   const [pr, setPR] = useState<PullRequest | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [reviewComments, setReviewComments] = useState<Comment[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,6 +140,7 @@ export default function PRDetailView() {
         setFiles(mockFiles as any);
         setComments(mockComments as any);
         setReviews(mockReviews as any);
+        setReviewComments(mockReviewComments as any);
 
         if (mockFiles.length > 0) {
           setSelectedFile(mockFiles[0] as any);
@@ -146,18 +149,26 @@ export default function PRDetailView() {
         const api = new GitHubAPI(token);
         const prNumber = parseInt(number);
 
-        const [prData, filesData, commentsData, reviewsData] =
+        const [
+          prData,
+          filesData,
+          commentsData,
+          reviewsData,
+          reviewCommentsData,
+        ] =
           await Promise.all([
             api.getPullRequest(owner, repo, prNumber),
             api.getPullRequestFiles(owner, repo, prNumber),
             api.getPullRequestConversationComments(owner, repo, prNumber),
             api.getPullRequestReviews(owner, repo, prNumber),
+            api.getPullRequestReviewComments(owner, repo, prNumber),
           ]);
 
         setPR(prData);
         setFiles(filesData);
         setComments(commentsData);
         setReviews(reviewsData);
+        setReviewComments(reviewCommentsData);
 
         // If we don't have navigation state yet, try to fetch sibling PRs
         if (!navigationState?.siblingPRs) {
@@ -529,11 +540,19 @@ export default function PRDetailView() {
                   file={selectedFile}
                   originalContent={fileContent?.original}
                   modifiedContent={fileContent?.modified}
-                  comments={comments.filter(
+                  comments={reviewComments.filter(
                     (c) => c.path === selectedFile.filename,
                   )}
                   onMarkViewed={() => toggleFileViewed(selectedFile.filename)}
                   isViewed={viewedFiles.has(selectedFile.filename)}
+                  repoOwner={owner || pr?.base.repo.owner.login || ""}
+                  repoName={repo || pr?.base.repo.name || ""}
+                  pullNumber={pr?.number ?? parseInt(number || "0", 10)}
+                  token={token}
+                  currentUser={currentUser}
+                  onCommentAdded={(newComment) => {
+                    setReviewComments((prev) => [...prev, newComment]);
+                  }}
                 />
               )}
             </div>

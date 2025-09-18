@@ -481,6 +481,40 @@ export const mockReviews = [
   },
 ];
 
+export const mockReviewComments = [
+  {
+    id: 101,
+    body: "Consider extracting this logic into a helper to keep the component tidy.",
+    user: {
+      login: "reviewer2",
+      avatar_url: "https://github.com/octocat.png",
+    },
+    created_at: new Date(Date.now() - 2400000).toISOString(),
+    updated_at: new Date(Date.now() - 2400000).toISOString(),
+    html_url: "#",
+    path: "src/components/Button.tsx",
+    line: 42,
+    side: "RIGHT" as const,
+    diff_hunk: "@@ -38,6 +42,10 @@",
+  },
+  {
+    id: 102,
+    body: "Nit: we usually keep imports alphabetised.",
+    user: {
+      login: "reviewer3",
+      avatar_url: "https://github.com/github.png",
+    },
+    created_at: new Date(Date.now() - 1800000).toISOString(),
+    updated_at: new Date(Date.now() - 1800000).toISOString(),
+    html_url: "#",
+    path: "src/components/Button.tsx",
+    line: 18,
+    side: "RIGHT" as const,
+    diff_hunk: "@@ -12,3 +18,3 @@",
+    in_reply_to_id: 101,
+  },
+];
+
 export const mockIssues = [
   {
     id: 1,

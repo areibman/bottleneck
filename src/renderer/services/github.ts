@@ -124,10 +124,18 @@ export interface Comment {
   updated_at: string;
   html_url: string;
   path?: string;
-  line?: number;
+  diff_hunk?: string;
+  position?: number | null;
+  original_position?: number | null;
+  line?: number | null;
+  original_line?: number | null;
+  start_line?: number | null;
+  original_start_line?: number | null;
   side?: "LEFT" | "RIGHT";
-  start_line?: number;
-  start_side?: "LEFT" | "RIGHT";
+  start_side?: "LEFT" | "RIGHT" | null;
+  commit_id?: string;
+  original_commit_id?: string;
+  pull_request_review_id?: number;
   in_reply_to_id?: number;
 }
 
@@ -579,6 +587,21 @@ export class GitHubAPI {
     return data as Comment[];
   }
 
+  async getPullRequestReviewComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ): Promise<Comment[]> {
+    const { data } = await this.octokit.pulls.listReviewComments({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      per_page: 100,
+    });
+
+    return data as Comment[];
+  }
+
   async getPullRequestReviews(owner: string, repo: string, pullNumber: number) {
     const { data } = await this.octokit.pulls.listReviews({
       owner,
@@ -650,6 +673,8 @@ export class GitHubAPI {
     path?: string,
     line?: number,
     side?: "LEFT" | "RIGHT",
+    startLine?: number,
+    startSide?: "LEFT" | "RIGHT",
   ) {
     if (path && line) {
       const { data } = await this.octokit.pulls.createReviewComment({
@@ -660,9 +685,11 @@ export class GitHubAPI {
         path,
         line,
         side,
+        start_line: startLine,
+        start_side: startSide,
         commit_id: await this.getLatestCommitSha(owner, repo, pullNumber),
       });
-      return data;
+      return data as Comment;
     } else {
       const { data } = await this.octokit.issues.createComment({
         owner,
@@ -670,8 +697,26 @@ export class GitHubAPI {
         issue_number: pullNumber,
         body,
       });
-      return data;
+      return data as Comment;
     }
+  }
+
+  async replyToReviewComment(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    commentId: number,
+    body: string,
+  ): Promise<Comment> {
+    const { data } = await this.octokit.pulls.createReplyForReviewComment({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      comment_id: commentId,
+      body,
+    });
+
+    return data as Comment;
   }
 
   async mergePullRequest(
