@@ -177,10 +177,7 @@ export function PRTreeView({
   );
 
   return (
-    <div className={cn(
-      "flex-1 overflow-y-auto",
-      theme === "dark" && "[&_.rct-tree-item-arrow]:text-gray-400"
-    )}>
+    <div className="flex-1 overflow-y-auto">
       <UncontrolledTreeEnvironment
         dataProvider={treeDataProvider}
         getItemTitle={(item) => {
@@ -214,30 +211,7 @@ export function PRTreeView({
         }}
         renderItemTitle={({ title, item, ...rest }) => {
           const agentName = item.data.type === "agent" ? item.data.agent : undefined;
-          
-          // Check if this is a selected PR
           const isSelected = item.data.type === "pr" && item.data.pr ? selectedPRs.has(getPRId(item.data.pr)) : false;
-          
-          // Check if this is a group with all children selected
-          let isGroupFullySelected = false;
-          let isGroupPartiallySelected = false;
-          if (item.data.type === "agent" || item.data.type === "task") {
-            const prIds: string[] = [];
-            const collectPRIds = (nodeIndex: TreeItemIndex) => {
-              const node = treeItems[nodeIndex];
-              if (node?.data.type === "pr" && node.data.pr) {
-                prIds.push(getPRId(node.data.pr));
-              }
-              if (node?.children) {
-                node.children.forEach(collectPRIds);
-              }
-            };
-            if (item.children) {
-              item.children.forEach(collectPRIds);
-            }
-            isGroupFullySelected = prIds.length > 0 && prIds.every(id => selectedPRs.has(id));
-            isGroupPartiallySelected = !isGroupFullySelected && prIds.some(id => selectedPRs.has(id));
-          }
 
           const handleClick = (e: React.MouseEvent) => {
             if (item.data.type === "pr" && item.data.pr) {
@@ -277,15 +251,20 @@ export function PRTreeView({
             <div
               className={cn(
                 "flex items-center w-full py-1 px-2 rounded cursor-pointer",
-                theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100",
+                theme === "dark" 
+                  ? "hover:bg-gray-800 text-gray-100" 
+                  : "hover:bg-gray-100 text-gray-900",
                 item.data.type === "pr" && "text-sm",
                 item.data.type === "task" && "text-sm",
-                // Selection states
-                isSelected && (theme === "dark" ? "bg-gray-700" : "bg-blue-50"),
-                isGroupFullySelected && (theme === "dark" ? "bg-gray-700" : "bg-blue-50"),
-                isGroupPartiallySelected && (theme === "dark" ? "bg-gray-800/50" : "bg-blue-50/50")
+                isSelected && (theme === "dark" ? "bg-gray-700" : "bg-blue-50")
               )}
               onClick={handleClick}
+              style={{
+                // Override any inherited styles from react-complex-tree
+                backgroundColor: isSelected 
+                  ? (theme === "dark" ? "rgb(55 65 81)" : "rgb(239 246 255)")
+                  : "transparent"
+              }}
             >
               {item.isFolder ? (
                 (rest as any).arrow
