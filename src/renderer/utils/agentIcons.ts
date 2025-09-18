@@ -6,13 +6,26 @@ import devinIconUrl from "../assets/agents/devin.svg";
 export interface AgentIconInfo {
   src: string;
   alt: string;
+  themeFilter?: Partial<Record<"light" | "dark", string>>;
 }
 
 const BASE_ICON_MAP: Record<string, AgentIconInfo> = {
-  cursor: { src: cursorIconUrl, alt: "Cursor" },
+  cursor: {
+    src: cursorIconUrl,
+    alt: "Cursor",
+    themeFilter: { light: "invert(1)" },
+  },
   claude: { src: claudeIconUrl, alt: "Claude" },
-  openai: { src: openaiIconUrl, alt: "OpenAI" },
-  codex: { src: openaiIconUrl, alt: "Codex" }, // Using OpenAI icon temporarily for Codex
+  openai: {
+    src: openaiIconUrl,
+    alt: "OpenAI",
+    themeFilter: { dark: "invert(1)" },
+  },
+  codex: {
+    src: openaiIconUrl,
+    alt: "Codex",
+    themeFilter: { dark: "invert(1)" }, // Using OpenAI icon temporarily for Codex
+  },
   devin: { src: devinIconUrl, alt: "Devin" },
 };
 
