@@ -1,385 +1,22 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  GitPullRequest,
-  GitPullRequestDraft,
-  GitMerge,
-  X,
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
-  MoreHorizontal,
-  FileText,
-  ExternalLink,
-  CheckCircle2,
-  XCircle,
-  Clock,
-} from "lucide-react";
+import { GitPullRequest } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { AgentIcon } from "../components/AgentIcon";
 import { detectAgentName } from "../utils/agentIcons";
-import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
-import { getLabelColors } from "../utils/labelColors";
 import WelcomeView from "./WelcomeView";
 import { PullRequest } from "../services/github";
-
-const PRItem = React.memo(
-  ({
-    pr,
-    isNested,
-    onPRClick,
-    onCheckboxChange,
-    isSelected,
-    theme,
-  }: {
-    pr: PullRequest;
-    isNested?: boolean;
-    onPRClick: (pr: PullRequest) => void;
-    onCheckboxChange: (prId: string, checked: boolean) => void;
-    isSelected: boolean;
-    theme: "light" | "dark";
-  }) => {
-    const prId = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
-
-    const handleRowClick = (e: React.MouseEvent) => {
-      // If clicking on checkbox or its label area, toggle selection
-      const target = e.target as HTMLElement;
-      const isCheckboxArea = target.closest(".checkbox-area");
-
-      if (e.metaKey || e.ctrlKey || isCheckboxArea) {
-        // Multi-select with cmd/ctrl or clicking checkbox area
-        e.stopPropagation();
-        onCheckboxChange(prId, !isSelected);
-      } else if (e.shiftKey) {
-        // Range select with shift (to be implemented)
-        e.stopPropagation();
-        onCheckboxChange(prId, true);
-      }
-      // Removed automatic navigation on row click
-    };
-
-    const handleContentClick = (e: React.MouseEvent) => {
-      // Only navigate if clicking on the content area
-      if (!e.metaKey && !e.ctrlKey && !e.shiftKey) {
-        e.stopPropagation();
-        onPRClick(pr);
-      }
-    };
-
-    return (
-      <div
-        className={cn(
-          "px-4 py-3 select-none",
-          theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100",
-          isSelected && (theme === "dark" ? "bg-gray-800" : "bg-gray-100"),
-          isNested && "pl-12",
-        )}
-        onClick={handleRowClick}
-      >
-        <div className="flex items-center space-x-3">
-          {/* Checkbox with larger click area */}
-          <div className="checkbox-area flex items-center -ml-2 pl-2 pr-2 py-2 -my-2">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={(e) => {
-                e.stopPropagation();
-                onCheckboxChange(prId, e.target.checked);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className={cn(
-                "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
-                theme === "dark"
-                  ? "border-gray-600 bg-gray-700 text-blue-500"
-                  : "border-gray-300 bg-white text-blue-600",
-              )}
-            />
-          </div>
-
-          {/* PR Icon/Status */}
-          <div
-            className="flex-shrink-0 flex items-center"
-            title={
-              pr.draft
-                ? "Draft"
-                : pr.merged
-                  ? "Merged"
-                  : pr.state === "open"
-                    ? "Open"
-                    : "Closed"
-            }
-          >
-            {pr.draft ? (
-              <GitPullRequestDraft className="w-5 h-5 text-gray-400" />
-            ) : pr.merged ? (
-              <GitMerge className="w-5 h-5 text-purple-400" />
-            ) : pr.state === "open" ? (
-              <GitPullRequest className="w-5 h-5 text-green-400" />
-            ) : (
-              <X className="w-5 h-5 text-red-400" />
-            )}
-          </div>
-
-          {/* Author Avatar */}
-          <div className="flex-shrink-0 flex items-center">
-            <img
-              src={pr.user.avatar_url}
-              alt={pr.user.login}
-              className={cn(
-                "w-8 h-8 rounded-full border",
-                theme === "dark" ? "border-gray-700" : "border-gray-300",
-              )}
-              title={`Author: ${pr.user.login}`}
-            />
-          </div>
-
-          {/* PR Details - Clickable content area */}
-          <div
-            className="flex-1 min-w-0 cursor-pointer"
-            onClick={handleContentClick}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <h3
-                  className={cn(
-                    "text-sm font-medium truncate",
-                    theme === "dark" ? "text-white" : "text-gray-900",
-                  )}
-                >
-                  {pr.title}
-                  {pr.draft && (
-                    <span
-                      className={cn(
-                        "ml-2 text-xs px-1.5 py-0.5 rounded",
-                        theme === "dark"
-                          ? "bg-gray-700 text-gray-400"
-                          : "bg-gray-200 text-gray-600",
-                      )}
-                    >
-                      Draft
-                    </span>
-                  )}
-                </h3>
-
-                <div
-                  className={cn(
-                    "flex items-center mt-1 text-xs space-x-3",
-                    theme === "dark" ? "text-gray-400" : "text-gray-600",
-                  )}
-                >
-                  <span>#{pr.number}</span>
-                  <span>
-                    {formatDistanceToNow(new Date(pr.updated_at), {
-                      addSuffix: true,
-                    })}
-                  </span>
-                  {pr.comments > 0 && (
-                    <span className="flex items-center">
-                      <MessageSquare className="w-3 h-3 mr-1" />
-                      {pr.comments}
-                    </span>
-                  )}
-                  {/* File change statistics - Force display for debugging */}
-                  <span className="flex items-center space-x-1.5">
-                    <span className="text-gray-500">•</span>
-                    <span className="flex items-center">
-                      <FileText className="w-3 h-3 mr-1" />
-                      <span>{pr.changed_files || 0}</span>
-                    </span>
-                    <span className="text-green-500 font-semibold">
-                      +{pr.additions || 0}
-                    </span>
-                    <span className="text-red-500 font-semibold">
-                      −{pr.deletions || 0}
-                    </span>
-                  </span>
-                </div>
-
-                {/* Labels */}
-                {pr.labels.length > 0 && (
-                  <div className="flex items-center mt-2 space-x-1">
-                    {pr.labels.slice(0, 3).map((label: any) => {
-                      const labelColors = getLabelColors(label.color, theme);
-                      return (
-                        <span
-                          key={label.name}
-                          className="px-2 py-0.5 text-xs rounded font-medium"
-                          style={{
-                            backgroundColor: labelColors.backgroundColor,
-                            color: labelColors.color,
-                          }}
-                        >
-                          {label.name}
-                        </span>
-                      );
-                    })}
-                    {pr.labels.length > 3 && (
-                      <span
-                        className={cn(
-                          "text-xs",
-                          theme === "dark" ? "text-gray-500" : "text-gray-600",
-                        )}
-                      >
-                        +{pr.labels.length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Right side info - Not clickable */}
-              <div
-                className="flex items-center space-x-3 ml-4"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Approval Status */}
-                <div className="flex items-center space-x-2">
-                  {pr.state === "open" && !pr.merged && (
-                    <div className="flex items-center space-x-1">
-                      {pr.approvalStatus === "approved" ? (
-                        <div
-                          className="flex items-center"
-                          title={`Approved by ${pr.approvedBy?.map((r) => r.login).join(", ")}`}
-                        >
-                          <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          <span
-                            className={cn(
-                              "ml-1 text-xs",
-                              theme === "dark"
-                                ? "text-green-400"
-                                : "text-green-600",
-                            )}
-                          >
-                            Approved
-                          </span>
-                        </div>
-                      ) : pr.approvalStatus === "changes_requested" ? (
-                        <div
-                          className="flex items-center"
-                          title={`Changes requested by ${pr.changesRequestedBy?.map((r) => r.login).join(", ")}`}
-                        >
-                          <XCircle className="w-4 h-4 text-red-500" />
-                          <span
-                            className={cn(
-                              "ml-1 text-xs",
-                              theme === "dark"
-                                ? "text-red-400"
-                                : "text-red-600",
-                            )}
-                          >
-                            Changes
-                          </span>
-                        </div>
-                      ) : pr.approvalStatus === "pending" ? (
-                        <div
-                          className="flex items-center"
-                          title="Review pending"
-                        >
-                          <Clock className="w-4 h-4 text-yellow-500" />
-                          <span
-                            className={cn(
-                              "ml-1 text-xs",
-                              theme === "dark"
-                                ? "text-yellow-400"
-                                : "text-yellow-600",
-                            )}
-                          >
-                            Pending
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center" title="No reviews">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <span
-                            className={cn(
-                              "ml-1 text-xs",
-                              theme === "dark"
-                                ? "text-gray-400"
-                                : "text-gray-600",
-                            )}
-                          >
-                            No review
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Review status avatars */}
-                {pr.requested_reviewers.length > 0 && (
-                  <div className="flex -space-x-2">
-                    {pr.requested_reviewers.slice(0, 3).map((reviewer: any) => (
-                      <img
-                        key={reviewer.login}
-                        src={reviewer.avatar_url}
-                        alt={reviewer.login}
-                        className={cn(
-                          "w-6 h-6 rounded-full border-2",
-                          theme === "dark" ? "border-gray-800" : "border-white",
-                        )}
-                        title={`Review requested: ${reviewer.login}`}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* GitHub Link */}
-                <a
-                  href={`https://github.com/${pr.base.repo.owner.login}/${pr.base.repo.name}/pull/${pr.number}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  className={cn(
-                    "p-1 rounded transition-colors",
-                    theme === "dark"
-                      ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
-                      : "hover:bg-gray-100 text-gray-600 hover:text-gray-900",
-                  )}
-                  title="Open in GitHub"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-
-                {/* More actions */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    // Handle more actions
-                  }}
-                  className={cn(
-                    "p-1 rounded",
-                    theme === "dark"
-                      ? "hover:bg-gray-700"
-                      : "hover:bg-gray-100",
-                  )}
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  },
-);
-
-type SortByType = "updated" | "created" | "title";
+import { PRTreeView } from "../components/PRTreeView";
+import type { GroupByType, SortByType, PRWithMetadata } from "../types/prList";
 
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
   { value: "created", label: "Recently created" },
   { value: "title", label: "Title" },
 ];
-
-type GroupByType = "none" | "agent" | "author" | "label";
 
 const groupOptions: DropdownOption<GroupByType>[] = [
   { value: "none", label: "No grouping" },
@@ -403,13 +40,8 @@ export default function PRListView() {
   } = usePRStore();
   const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
     useUIStore();
-  const [sortBy, setSortBy] = useState<"updated" | "created" | "title">(
-    "updated",
-  );
+  const [sortBy, setSortBy] = useState<SortByType>("updated");
   const [groupBy, setGroupBy] = useState<GroupByType>("agent");
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    new Set(),
-  );
 
   const selectedRepoKey = useMemo(() => {
     if (!selectedRepo) return null;
@@ -625,7 +257,7 @@ export default function PRListView() {
   ]);
 
   // Pre-compute PR metadata for grouping
-  const prsWithMetadata = useMemo(() => {
+  const prsWithMetadata = useMemo<PRWithMetadata[]>(() => {
     return getFilteredPRs.map((pr) => ({
       pr,
       agent: getAgentFromPR(pr),
@@ -635,75 +267,13 @@ export default function PRListView() {
     }));
   }, [getFilteredPRs, getAgentFromPR, getTitlePrefix]);
 
-  // Group PRs by agent and then by title prefix
-  const groupedPRs = useMemo(() => {
-    if (groupBy === "none") {
-      return { ungrouped: prsWithMetadata.map((item) => item.pr) };
-    }
+  const handlePRClick = useCallback(
+    (pr: PullRequest) => {
+      // Find if this PR belongs to a task subgroup and fetch all siblings
+      let navigationState = {};
 
-    const groups: Record<string, Record<string, any[]>> = {};
-
-    if (groupBy === "agent") {
-      // Group by agent first
-      prsWithMetadata.forEach(({ pr, agent, titlePrefix }) => {
-        if (!groups[agent]) {
-          groups[agent] = {};
-        }
-
-        // Sub-group by title prefix within agent
-        if (!groups[agent][titlePrefix]) {
-          groups[agent][titlePrefix] = [];
-        }
-        groups[agent][titlePrefix].push(pr);
-      });
-    } else if (groupBy === "author") {
-      // Group by author
-      prsWithMetadata.forEach(({ pr, author }) => {
-        if (!groups[author]) {
-          groups[author] = { all: [] };
-        }
-        groups[author].all.push(pr);
-      });
-    } else if (groupBy === "label") {
-      // Group by labels
-      prsWithMetadata.forEach(({ pr, labelNames }) => {
-        if (labelNames.length > 0) {
-          labelNames.forEach((labelName: string) => {
-            if (!groups[labelName]) {
-              groups[labelName] = { all: [] };
-            }
-            groups[labelName].all.push(pr);
-          });
-        } else {
-          if (!groups["unlabeled"]) {
-            groups["unlabeled"] = { all: [] };
-          }
-          groups["unlabeled"].all.push(pr);
-        }
-      });
-    }
-
-    return groups;
-  }, [prsWithMetadata, groupBy]);
-
-  const toggleGroup = useCallback((groupKey: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) {
-        next.delete(groupKey);
-      } else {
-        next.add(groupKey);
-      }
-      return next;
-    });
-  }, []);
-
-  function handlePRClick(pr: PullRequest) {
-    // Find if this PR belongs to a task subgroup and fetch all siblings
-    let navigationState = {};
-
-    if (groupBy === "agent") {
-      const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
+      if (groupBy === "agent") {
+        const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
       if (prMetadata) {
         const { agent, titlePrefix } = prMetadata;
 
@@ -744,11 +314,13 @@ export default function PRListView() {
       }
     }
 
-    navigate(
-      `/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`,
-      { state: navigationState },
-    );
-  }
+      navigate(
+        `/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`,
+        { state: navigationState },
+      );
+    },
+    [navigate, groupBy, prsWithMetadata, fetchDetailedPRsInBackground],
+  );
 
   const handleCheckboxChange = useCallback(
     (prId: string, checked: boolean) => {
@@ -756,6 +328,17 @@ export default function PRListView() {
         selectPR(prId);
       } else {
         deselectPR(prId);
+      }
+    },
+    [selectPR, deselectPR],
+  );
+
+  const handleGroupSelection = useCallback(
+    (prIds: string[], checked: boolean) => {
+      if (checked) {
+        prIds.forEach((id) => selectPR(id));
+      } else {
+        prIds.forEach((id) => deselectPR(id));
       }
     },
     [selectPR, deselectPR],
@@ -931,273 +514,16 @@ export default function PRListView() {
               </p>
             )}
           </div>
-        ) : groupBy === "none" ||
-          Object.keys(groupedPRs).includes("ungrouped") ? (
-          // No grouping - flat list
-          <div
-            className={cn(
-              "divide-y",
-              theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-            )}
-          >
-            {((groupedPRs as any).ungrouped || getFilteredPRs).map(
-              (pr: PullRequest) => (
-                <PRItem
-                  key={pr.id}
-                  pr={pr}
-                  onPRClick={handlePRClick}
-                  onCheckboxChange={handleCheckboxChange}
-                  isSelected={selectedPRs.has(
-                    `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`,
-                  )}
-                  theme={theme}
-                />
-              ),
-            )}
-          </div>
         ) : (
-          // Grouped display
-          <div
-            className={cn(
-              "divide-y",
-              theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-            )}
-          >
-            {Object.entries(groupedPRs).map(([agentName, subGroups]) => {
-              const agentKey = `agent-${agentName}`;
-              const isAgentCollapsed = collapsedGroups.has(agentKey);
-              const totalPRs = Object.values(subGroups).reduce(
-                (sum: number, prs: any) => sum + prs.length,
-                0,
-              );
-
-              // Get all PR IDs in this agent group
-              const allAgentPRIds: string[] = [];
-              Object.values(subGroups).forEach((prs: any) => {
-                prs.forEach((pr: any) => {
-                  allAgentPRIds.push(
-                    `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`,
-                  );
-                });
-              });
-              const allAgentSelected = allAgentPRIds.every((id) =>
-                selectedPRs.has(id),
-              );
-              const someAgentSelected = allAgentPRIds.some((id) =>
-                selectedPRs.has(id),
-              );
-
-              return (
-                <div key={agentName}>
-                  {/* Agent Group Header */}
-                  <div
-                    className={cn(
-                      "px-4 py-2 flex items-center justify-between",
-                      theme === "dark"
-                        ? "bg-gray-750 hover:bg-gray-700"
-                        : "bg-gray-100 hover:bg-gray-200",
-                    )}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <button
-                        className="p-0.5 hover:bg-gray-600 rounded"
-                        onClick={() => toggleGroup(agentKey)}
-                      >
-                        {isAgentCollapsed ? (
-                          <ChevronRight className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-                      <input
-                        type="checkbox"
-                        checked={allAgentSelected}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          if (allAgentSelected) {
-                            // Deselect all
-                            allAgentPRIds.forEach((id) => deselectPR(id));
-                          } else {
-                            // Select all
-                            allAgentPRIds.forEach((id) => selectPR(id));
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className={cn(
-                          "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
-                          theme === "dark"
-                            ? "border-gray-600 bg-gray-700 text-blue-500"
-                            : "border-gray-300 bg-white text-blue-600",
-                        )}
-                        ref={(el) => {
-                          if (el) {
-                            el.indeterminate =
-                              someAgentSelected && !allAgentSelected;
-                          }
-                        }}
-                      />
-                      <AgentIcon agentName={agentName} />
-                      <span
-                        className="font-medium text-sm cursor-pointer"
-                        onClick={() => toggleGroup(agentKey)}
-                      >
-                        {agentName === "ai"
-                          ? "AI Generated"
-                          : agentName === "manual"
-                            ? "Manual PRs"
-                            : agentName}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-xs",
-                          theme === "dark" ? "text-gray-400" : "text-gray-600",
-                        )}
-                      >
-                        ({totalPRs})
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Agent Group Content */}
-                  {!isAgentCollapsed && (
-                    <div>
-                      {Object.entries(subGroups).map(([prefix, prefixPRs]) => {
-                        const prefixKey = `${agentKey}-${prefix}`;
-                        const isPrefixCollapsed =
-                          collapsedGroups.has(prefixKey);
-                        const hasMultiplePRs = (prefixPRs as any[]).length > 1;
-
-                        if (!hasMultiplePRs || prefix === "all") {
-                          // Single PR or no sub-grouping needed
-                          return (prefixPRs as any[]).map((pr: any) => (
-                            <PRItem
-                              key={pr.id}
-                              pr={pr}
-                              isNested={groupBy === "agent"}
-                              onPRClick={handlePRClick}
-                              onCheckboxChange={handleCheckboxChange}
-                              isSelected={selectedPRs.has(
-                                `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`,
-                              )}
-                              theme={theme}
-                            />
-                          ));
-                        }
-
-                        // Check if all PRs in this group are selected
-                        const groupPRIds = (prefixPRs as any[]).map(
-                          (pr) =>
-                            `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`,
-                        );
-                        const allSelected = groupPRIds.every((id) =>
-                          selectedPRs.has(id),
-                        );
-                        const someSelected = groupPRIds.some((id) =>
-                          selectedPRs.has(id),
-                        );
-
-                        return (
-                          <div key={prefix}>
-                            {/* Prefix Sub-group Header */}
-                            <div
-                              className={cn(
-                                "pl-8 pr-4 py-2 flex items-center justify-between border-l-2",
-                                theme === "dark"
-                                  ? "bg-gray-800 hover:bg-gray-750 border-gray-600"
-                                  : "bg-gray-50 hover:bg-gray-100 border-gray-300",
-                              )}
-                            >
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  className="p-0.5 hover:bg-gray-600 rounded"
-                                  onClick={() => toggleGroup(prefixKey)}
-                                >
-                                  {isPrefixCollapsed ? (
-                                    <ChevronRight className="w-3 h-3" />
-                                  ) : (
-                                    <ChevronDown className="w-3 h-3" />
-                                  )}
-                                </button>
-                                <input
-                                  type="checkbox"
-                                  checked={allSelected}
-                                  onChange={(e) => {
-                                    e.stopPropagation();
-                                    if (allSelected) {
-                                      // Deselect all
-                                      groupPRIds.forEach((id) =>
-                                        deselectPR(id),
-                                      );
-                                    } else {
-                                      // Select all
-                                      groupPRIds.forEach((id) => selectPR(id));
-                                    }
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className={cn(
-                                    "w-4 h-4 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer",
-                                    theme === "dark"
-                                      ? "border-gray-600 bg-gray-700 text-blue-500"
-                                      : "border-gray-300 bg-white text-blue-600",
-                                  )}
-                                  ref={(el) => {
-                                    if (el) {
-                                      el.indeterminate =
-                                        someSelected && !allSelected;
-                                    }
-                                  }}
-                                />
-                                <span
-                                  className={cn(
-                                    "text-sm cursor-pointer",
-                                    theme === "dark"
-                                      ? "text-gray-300"
-                                      : "text-gray-700",
-                                  )}
-                                  onClick={() => toggleGroup(prefixKey)}
-                                >
-                                  {prefix}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    theme === "dark"
-                                      ? "text-gray-500"
-                                      : "text-gray-600",
-                                  )}
-                                >
-                                  ({(prefixPRs as any[]).length})
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Prefix Sub-group PRs */}
-                            {!isPrefixCollapsed && (
-                              <div>
-                                {(prefixPRs as any[]).map((pr: any) => (
-                                  <PRItem
-                                    key={pr.id}
-                                    pr={pr}
-                                    isNested
-                                    onPRClick={handlePRClick}
-                                    onCheckboxChange={handleCheckboxChange}
-                                    isSelected={selectedPRs.has(
-                                      `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`,
-                                    )}
-                                    theme={theme}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <PRTreeView
+            theme={theme}
+            groupBy={groupBy}
+            prsWithMetadata={prsWithMetadata}
+            selectedPRs={selectedPRs}
+            onTogglePRSelection={handleCheckboxChange}
+            onToggleGroupSelection={handleGroupSelection}
+            onPRClick={handlePRClick}
+          />
         )}
       </div>
     </div>
