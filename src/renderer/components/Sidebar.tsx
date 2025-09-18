@@ -157,16 +157,6 @@ export default function Sidebar({
           onSelectPR={handleNavigationSelect}
         />
 
-        {location.pathname === "/pulls" && (
-          <PRFiltersSection
-            theme={theme}
-            statusFilters={statusFilters}
-            onToggleFilter={setFilter}
-            pullRequests={repoPullRequests}
-            onSelectPullRequest={handlePullRequestSelect}
-          />
-        )}
-
         <SidebarFooter theme={theme} />
       </div>
 
