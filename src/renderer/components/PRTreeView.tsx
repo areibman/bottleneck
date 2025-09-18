@@ -8,8 +8,8 @@ import {
 } from "react-complex-tree";
 import "react-complex-tree/lib/style-modern.css";
 import {
-  GitPullRequest,
   GitPullRequestDraft,
+  GitPullRequestArrow,
   GitMerge,
   X,
   ExternalLink,
@@ -28,7 +28,10 @@ interface TreeData {
   type: "task" | "pr";
   pr?: PullRequest;
   taskPrefix?: string;
+  taskAgent?: string;
   count?: number;
+  isInTaskGroup?: boolean;
+  mostRecentDate?: { created: string; updated: string };
 }
 
 const getPRId = (pr: PullRequest) =>
@@ -63,6 +66,28 @@ function buildTreeItems(
 
     if (taskPRs.length > 1) {
       // Multiple PRs with same prefix - create task group
+      // Get the most common agent in this task group
+      const agentCounts = new Map<string, number>();
+      taskPRs.forEach(item => {
+        const count = agentCounts.get(item.agent) || 0;
+        agentCounts.set(item.agent, count + 1);
+      });
+      const taskAgent = Array.from(agentCounts.entries())
+        .sort((a, b) => b[1] - a[1])[0][0];
+
+      // Find the most recent created and updated dates
+      let mostRecentCreated = taskPRs[0].pr.created_at;
+      let mostRecentUpdated = taskPRs[0].pr.updated_at;
+
+      taskPRs.forEach(item => {
+        if (new Date(item.pr.created_at) > new Date(mostRecentCreated)) {
+          mostRecentCreated = item.pr.created_at;
+        }
+        if (new Date(item.pr.updated_at) > new Date(mostRecentUpdated)) {
+          mostRecentUpdated = item.pr.updated_at;
+        }
+      });
+
       const taskKey = `task-${prefix}`;
       items[taskKey] = {
         index: taskKey,
@@ -71,7 +96,12 @@ function buildTreeItems(
         data: {
           type: "task",
           taskPrefix: prefix,
+          taskAgent: taskAgent,
           count: taskPRs.length,
+          mostRecentDate: {
+            created: mostRecentCreated,
+            updated: mostRecentUpdated,
+          },
         },
       };
       (items.root.children as TreeItemIndex[]).push(taskKey);
@@ -84,6 +114,7 @@ function buildTreeItems(
           data: {
             type: "pr",
             pr: item.pr,
+            isInTaskGroup: true,
           },
         };
         (items[taskKey].children as TreeItemIndex[]).push(prKey);
@@ -98,6 +129,7 @@ function buildTreeItems(
         data: {
           type: "pr",
           pr: item.pr,
+          isInTaskGroup: false,
         },
       };
       (items.root.children as TreeItemIndex[]).push(prKey);
@@ -182,6 +214,7 @@ export function PRTreeView({
     <div className="flex-1 overflow-y-auto">
       <UncontrolledTreeEnvironment
         dataProvider={treeDataProvider}
+        renderDepthOffset={24}
         getItemTitle={(item) => {
           if (item.data.type === "task" && item.data.taskPrefix) {
             return item.data.taskPrefix;
@@ -277,25 +310,37 @@ export function PRTreeView({
                 <>
                   {(rest as any).arrow}
                   <FolderOpen className="w-4 h-4 mr-2 text-gray-500" />
+                  {item.data.taskAgent && (
+                    <div title={item.data.taskAgent === "manual" ? "Manual PRs" : item.data.taskAgent}>
+                      <AgentIcon
+                        agentName={item.data.taskAgent}
+                        className="mr-2 flex-shrink-0"
+                      />
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
                   <span
                     className={cn(
                       "mr-2",
-                      item.data.pr?.state === "open"
-                        ? "text-green-400"
-                        : item.data.pr?.merged
-                          ? "text-purple-400"
+                      item.data.pr?.merged
+                        ? "text-purple-400"
+                        : item.data.pr?.state === "open"
+                          ? item.data.pr?.draft
+                            ? "text-gray-400"
+                            : "text-green-400"
                           : "text-red-400"
                     )}
                   >
-                    {item.data.pr?.draft ? (
-                      <GitPullRequestDraft className="w-4 h-4" />
-                    ) : item.data.pr?.merged ? (
+                    {item.data.pr?.merged ? (
                       <GitMerge className="w-4 h-4" />
                     ) : item.data.pr?.state === "open" ? (
-                      <GitPullRequest className="w-4 h-4" />
+                      item.data.pr?.draft ? (
+                        <GitPullRequestDraft className="w-4 h-4" />
+                      ) : (
+                        <GitPullRequestArrow className="w-4 h-4" />
+                      )
                     ) : (
                       <X className="w-4 h-4" />
                     )}
@@ -309,7 +354,7 @@ export function PRTreeView({
                         className="w-5 h-5 rounded-full mr-2 flex-shrink-0"
                         title={item.data.pr.user.login}
                       />
-                      {prAgent && (
+                      {prAgent && !item.data.isInTaskGroup && (
                         <div title={prAgent === "manual" ? "Manual PR" : prAgent}>
                           <AgentIcon
                             agentName={prAgent}
@@ -323,6 +368,38 @@ export function PRTreeView({
               )}
 
               <span className="flex-1 truncate">{title}</span>
+
+              {item.data.type === "task" && (
+                <div className="flex items-center space-x-2 ml-2">
+                  {item.data.mostRecentDate && (
+                    <span
+                      className={cn(
+                        "text-xs",
+                        theme === "dark" ? "text-gray-400" : "text-gray-500"
+                      )}
+                      title={sortBy === "created"
+                        ? `Most recent created: ${new Date(item.data.mostRecentDate.created).toLocaleString()}`
+                        : `Most recent updated: ${new Date(item.data.mostRecentDate.updated).toLocaleString()}`
+                      }
+                    >
+                      {sortBy === "created"
+                        ? formatDateTime(item.data.mostRecentDate.created)
+                        : formatDateTime(item.data.mostRecentDate.updated)
+                      }
+                    </span>
+                  )}
+                  {item.data.count && (
+                    <span
+                      className={cn(
+                        "text-xs",
+                        theme === "dark" ? "text-gray-500" : "text-gray-600"
+                      )}
+                    >
+                      ({item.data.count})
+                    </span>
+                  )}
+                </div>
+              )}
 
               {item.data.type === "pr" && item.data.pr && (
                 <div className="flex items-center space-x-2 ml-2">
@@ -410,17 +487,6 @@ export function PRTreeView({
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
-              )}
-
-              {item.data.count && (
-                <span
-                  className={cn(
-                    "text-xs ml-2",
-                    theme === "dark" ? "text-gray-500" : "text-gray-600"
-                  )}
-                >
-                  ({item.data.count})
-                </span>
               )}
             </div>
           );
