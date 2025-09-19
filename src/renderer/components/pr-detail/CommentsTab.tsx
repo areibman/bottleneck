@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { AlertCircle, MessageCircleReply, CheckCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  MessageCircleReply,
+  CheckCircle2,
+  Filter,
+} from "lucide-react";
 import { cn } from "../../utils/cn";
 import { ReviewThread } from "../../services/github";
 import { CompactMarkdownEditor } from "../CompactMarkdownEditor";
@@ -27,6 +32,7 @@ export function CommentsTab({
   const [openReplyThreads, setOpenReplyThreads] = useState<string[]>([]);
   const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null);
   const [resolvingThreadId, setResolvingThreadId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"open" | "resolved">("open");
 
   const isDark = theme === "dark";
 
@@ -39,6 +45,23 @@ export function CommentsTab({
       }),
     [threads],
   );
+
+  const openCount = useMemo(
+    () => threads.filter((thread) => thread.state !== "resolved").length,
+    [threads],
+  );
+
+  const resolvedCount = useMemo(
+    () => threads.filter((thread) => thread.state === "resolved").length,
+    [threads],
+  );
+
+  const filteredThreads = useMemo(() => {
+    if (filter === "open") {
+      return sortedThreads.filter((thread) => thread.state !== "resolved");
+    }
+    return sortedThreads.filter((thread) => thread.state === "resolved");
+  }, [sortedThreads, filter]);
 
   const toggleReply = (threadId: string) => {
     setOpenReplyThreads((prev) =>
@@ -92,7 +115,54 @@ export function CommentsTab({
       )}
     >
       <div className="max-w-4xl mx-auto p-6 space-y-4">
-        {sortedThreads.length === 0 && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            <Filter className="w-3 h-3" />
+            <span>Filter threads</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {(
+              [
+                { key: "open" as const, label: "Open", count: openCount },
+                { key: "resolved" as const, label: "Resolved", count: resolvedCount },
+              ]
+            ).map(({ key, label, count }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={cn(
+                  "px-3 py-1 text-xs rounded-md border transition-colors",
+                  filter === key
+                    ? isDark
+                      ? "bg-blue-500/20 border-blue-400 text-blue-200"
+                      : "bg-blue-50 border-blue-300 text-blue-700"
+                    : isDark
+                      ? "border-gray-700 text-gray-300 hover:bg-gray-800"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-100",
+                )}
+              >
+                {label}
+                <span
+                  className={cn(
+                    "ml-1 text-[10px] font-semibold",
+                    filter === key
+                      ? isDark
+                        ? "text-blue-200"
+                        : "text-blue-700"
+                      : isDark
+                        ? "text-gray-400"
+                        : "text-gray-500",
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredThreads.length === 0 && (
           <div
             className={cn(
               "rounded-md border px-4 py-6 flex items-center gap-3 text-sm",
@@ -103,20 +173,27 @@ export function CommentsTab({
           >
             <CheckCircle2 className="w-5 h-5 text-green-500" />
             <div>
-              <div className="font-medium text-sm">All review comments resolved</div>
+              <div className="font-medium text-sm">
+                {filter === "open"
+                  ? "All review comments resolved"
+                  : "No resolved threads yet"}
+              </div>
               <p className="text-xs">
-                There are no open review threads on this pull request.
+                {filter === "open"
+                  ? "There are no open review threads on this pull request."
+                  : "Resolve discussions during review to keep track of progress."}
               </p>
             </div>
           </div>
         )}
 
-        {sortedThreads.map((thread) => {
+        {filteredThreads.map((thread) => {
           const rootComment = thread.comments[0];
           const diffHunk = rootComment?.diff_hunk;
           const locationLabel = thread.line || thread.original_line;
           const isReplyOpen = openReplyThreads.includes(thread.id);
           const draftValue = drafts[thread.id] ?? "";
+          const isResolved = thread.state === "resolved";
 
           return (
             <div
@@ -154,27 +231,40 @@ export function CommentsTab({
                     className={cn(
                       "btn btn-secondary text-xs flex items-center gap-1 px-3 py-1",
                       !canReply &&
-                        (isDark
-                          ? "opacity-40 cursor-not-allowed"
-                          : "opacity-50 cursor-not-allowed"),
+                      (isDark
+                        ? "opacity-40 cursor-not-allowed"
+                        : "opacity-50 cursor-not-allowed"),
                     )}
                   >
                     <MessageCircleReply className="w-3 h-3" />
                     Reply
                   </button>
-                  <button
-                    onClick={() => handleResolve(thread.id)}
-                    disabled={!canReply || resolvingThreadId === thread.id}
-                    className={cn(
-                      "btn btn-primary text-xs px-3 py-1",
-                      (!canReply || resolvingThreadId === thread.id) &&
+                  {isResolved ? (
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-1 rounded-full border",
+                        isDark
+                          ? "border-emerald-500/40 text-emerald-300"
+                          : "border-emerald-300 text-emerald-700 bg-emerald-50",
+                      )}
+                    >
+                      Resolved
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleResolve(thread.id)}
+                      disabled={!canReply || resolvingThreadId === thread.id}
+                      className={cn(
+                        "btn btn-primary text-xs px-3 py-1",
+                        (!canReply || resolvingThreadId === thread.id) &&
                         (isDark
                           ? "opacity-40 cursor-not-allowed"
                           : "opacity-50 cursor-not-allowed"),
-                    )}
-                  >
-                    {resolvingThreadId === thread.id ? "Resolving..." : "Resolve"}
-                  </button>
+                      )}
+                    >
+                      {resolvingThreadId === thread.id ? "Resolving..." : "Resolve"}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -290,9 +380,9 @@ export function CommentsTab({
                               className={cn(
                                 "btn btn-primary px-3 py-1",
                                 (replyingThreadId === thread.id || !draftValue.trim()) &&
-                                  (isDark
-                                    ? "opacity-40 cursor-not-allowed"
-                                    : "opacity-50 cursor-not-allowed"),
+                                (isDark
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "opacity-50 cursor-not-allowed"),
                               )}
                             >
                               {replyingThreadId === thread.id ? "Posting..." : "Post reply"}

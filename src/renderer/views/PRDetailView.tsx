@@ -235,7 +235,7 @@ export default function PRDetailView() {
     const { repoOwner, repoName, pullNumber } = resolveRepoContext();
     const api = new GitHubAPI(token);
 
-    await api.updateReviewThreadResolution(
+    const updated = await api.updateReviewThreadResolution(
       repoOwner,
       repoName,
       pullNumber,
@@ -243,7 +243,16 @@ export default function PRDetailView() {
       true,
     );
 
-    await loadPRData();
+    setReviewThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === threadId
+          ? {
+              ...thread,
+              state: updated.state,
+            }
+          : thread,
+      ),
+    );
   };
 
   const handleApprove = async () => {
@@ -638,7 +647,7 @@ export default function PRDetailView() {
         )}
         {activeTab === "comments" && (
           <CommentsTab
-            threads={openReviewThreads}
+            threads={reviewThreads}
             theme={theme}
             currentUser={currentUser}
             canReply={canReplyToThreads}
