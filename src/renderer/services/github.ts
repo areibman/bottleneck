@@ -1143,4 +1143,63 @@ export class GitHubAPI {
       changesRequestedBy: [],
     } as PullRequest;
   }
+
+  async updatePullRequestDraft(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    draft: boolean,
+  ): Promise<PullRequest> {
+    // First, get the current PR data
+    const currentPR = await this.getPullRequest(owner, repo, pullNumber);
+
+    // GitHub doesn't have a direct endpoint to toggle draft status
+    // We need to use GraphQL API for this
+    const mutation = draft
+      ? `mutation($pullRequestId: ID!) {
+          convertPullRequestToDraft(input: { pullRequestId: $pullRequestId }) {
+            pullRequest {
+              id
+              number
+              isDraft
+            }
+          }
+        }`
+      : `mutation($pullRequestId: ID!) {
+          markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+            pullRequest {
+              id
+              number
+              isDraft
+            }
+          }
+        }`;
+
+    // Get the PR node ID
+    const { data: prData } = await this.octokit.pulls.get({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    const response: any = await this.octokit.graphql(mutation, {
+      pullRequestId: prData.node_id,
+    });
+
+    console.log("GraphQL mutation response:", response);
+
+    // Get the isDraft value from the GraphQL response
+    const isDraft = draft
+      ? response.convertPullRequestToDraft?.pullRequest?.isDraft
+      : response.markPullRequestReadyForReview?.pullRequest?.isDraft;
+
+    console.log("GraphQL isDraft result:", isDraft, "Expected draft state:", draft);
+
+    // Return the current PR with the updated draft status
+    // This avoids potential caching issues with immediately refetching
+    return {
+      ...currentPR,
+      draft: isDraft !== undefined ? isDraft : draft,
+    };
+  }
 }

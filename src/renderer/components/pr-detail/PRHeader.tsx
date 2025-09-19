@@ -32,6 +32,8 @@ interface PRHeaderProps {
   onApprove: () => void;
   onRequestChanges: () => void;
   onMerge: () => void;
+  onToggleDraft?: () => void;
+  isTogglingDraft?: boolean;
 }
 
 export function PRHeader({
@@ -43,6 +45,8 @@ export function PRHeader({
   onApprove,
   onRequestChanges,
   onMerge,
+  onToggleDraft,
+  isTogglingDraft,
 }: PRHeaderProps) {
   const navigate = useNavigate();
   const [showCheckoutDropdown, setShowCheckoutDropdown] = useState(false);
@@ -54,6 +58,9 @@ export function PRHeader({
   const hasRequestedChanges =
     currentUser &&
     pr.changesRequestedBy?.some((r) => r.login === currentUser.login);
+
+  // Debug logging to track PR draft state
+  console.log("PRHeader render - PR draft state:", pr.draft, "isAuthor:", isAuthor);
 
   return (
     <div
@@ -142,6 +149,40 @@ export function PRHeader({
 
           {pr.state === "open" && !pr.merged && (
             <>
+              {/* Draft toggle button - only show for PR authors */}
+              {isAuthor && onToggleDraft && (
+                <button
+                  onClick={onToggleDraft}
+                  disabled={isTogglingDraft}
+                  className={cn(
+                    "btn text-xs",
+                    pr.draft ? "btn-primary" : "btn-secondary"
+                  )}
+                  title={
+                    pr.draft
+                      ? "Mark as ready for review"
+                      : "Convert to draft"
+                  }
+                >
+                  {isTogglingDraft ? (
+                    <>
+                      <div className="w-3 h-3 mr-1 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Updating...
+                    </>
+                  ) : pr.draft ? (
+                    <>
+                      <GitPullRequest className="w-3 h-3 mr-1" />
+                      Ready for review
+                    </>
+                  ) : (
+                    <>
+                      <GitPullRequestDraft className="w-3 h-3 mr-1" />
+                      Convert to draft
+                    </>
+                  )}
+                </button>
+              )}
+
               {/* Don't show review buttons for PR authors */}
               {!isAuthor && (
                 <>

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { DiffEditor } from "../components/DiffEditor";
 import { ConversationTab } from "../components/ConversationTab";
 import { useAuthStore } from "../stores/authStore";
+import { usePRStore } from "../stores/prStore";
 import {
   GitHubAPI,
   PullRequest,
@@ -41,6 +42,7 @@ export default function PRDetailView() {
   }>();
   const { token } = useAuthStore();
   const { theme } = useUIStore();
+  const { updatePR } = usePRStore();
 
   // Use the navigation hook
   const { navigationState, fetchSiblingPRs } = usePRNavigation(
@@ -80,6 +82,7 @@ export default function PRDetailView() {
   } | null>(null);
   const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
   const [requestChangesFeedback, setRequestChangesFeedback] = useState("");
+  const [isTogglingDraft, setIsTogglingDraft] = useState(false);
 
   useEffect(() => {
     // Load data even without token if in dev mode
@@ -247,9 +250,9 @@ export default function PRDetailView() {
       prev.map((thread) =>
         thread.id === threadId
           ? {
-              ...thread,
-              state: updated.state,
-            }
+            ...thread,
+            state: updated.state,
+          }
           : thread,
       ),
     );
@@ -289,6 +292,11 @@ export default function PRDetailView() {
 
       // Reload PR data to get the actual server state
       await loadPRData();
+
+      // Update the PR in the global store
+      if (pr) {
+        updatePR(updatedPR);
+      }
 
       console.log("Successfully approved PR #" + pr.number);
     } catch (error: any) {
@@ -370,6 +378,11 @@ export default function PRDetailView() {
       // Reload PR data to get the actual server state
       await loadPRData();
 
+      // Update the PR in the global store
+      if (pr) {
+        updatePR(updatedPR);
+      }
+
       console.log("Successfully requested changes for PR #" + pr.number);
     } catch (error: any) {
       console.error("Failed to request changes:", error);
@@ -422,6 +435,80 @@ export default function PRDetailView() {
       );
     } finally {
       setIsMerging(false);
+    }
+  };
+
+  const handleToggleDraft = async () => {
+    if (!pr || !token || !owner || !repo || !currentUser) return;
+
+    // Check if user is the PR author
+    if (pr.user.login !== currentUser.login) {
+      alert("Only the pull request author can change the draft status.");
+      return;
+    }
+
+    // Store the current draft state before any changes
+    const currentDraftState = pr.draft;
+    const targetDraftState = !currentDraftState;
+
+    console.log("Toggling draft status:", {
+      current: currentDraftState,
+      target: targetDraftState,
+      prNumber: pr.number
+    });
+
+    setIsTogglingDraft(true);
+
+    // Optimistically update the PR state
+    const updatedPR = {
+      ...pr,
+      draft: targetDraftState,
+    };
+    setPR(updatedPR);
+
+    try {
+      const api = new GitHubAPI(token);
+      const newPR = await api.updatePullRequestDraft(
+        owner,
+        repo,
+        pr.number,
+        targetDraftState,
+      );
+
+      // Update the PR state with the new data from the server
+      setPR(newPR);
+
+      // Update the PR in the global store so the PR list view reflects the change
+      updatePR(newPR);
+
+      console.log(
+        `Successfully ${targetDraftState ? "converted to draft" : "marked as ready for review"} PR #${pr.number}`,
+      );
+      console.log("Updated PR draft status:", {
+        oldDraft: currentDraftState,
+        newDraft: newPR.draft,
+        expectedDraft: targetDraftState
+      });
+    } catch (error: any) {
+      console.error("Failed to toggle draft status:", error);
+
+      // Revert the optimistic update on error
+      setPR(pr);
+
+      let errorMessage = "Failed to update pull request draft status.";
+
+      if (error?.response?.status === 403) {
+        errorMessage =
+          "You do not have permission to change the draft status of this pull request.";
+      } else if (error?.response?.data?.message) {
+        errorMessage = `Failed to update: ${error.response.data.message}`;
+      } else if (error?.message) {
+        errorMessage = `Failed to update: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsTogglingDraft(false);
     }
   };
 
@@ -523,6 +610,8 @@ export default function PRDetailView() {
         onApprove={handleApprove}
         onRequestChanges={handleRequestChanges}
         onMerge={() => setShowMergeConfirm(true)}
+        onToggleDraft={handleToggleDraft}
+        isTogglingDraft={isTogglingDraft}
       />
 
       {/* Tabs */}
