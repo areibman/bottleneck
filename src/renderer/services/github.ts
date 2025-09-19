@@ -221,7 +221,264 @@ export class GitHubAPI {
     owner: string,
     repo: string,
     state: "open" | "closed" | "all" = "open",
-  ) {
+  ): Promise<PullRequest[]> {
+    // Use GraphQL to fetch all PR data in a single request
+    const stateFilter = state === "all" ? "" : `, states: [${state.toUpperCase()}]`;
+
+    const query = `
+      query ($owner: String!, $name: String!, $after: String) {
+        repository(owner: $owner, name: $name) {
+          pullRequests(first: 100, after: $after${stateFilter}, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              number
+              title
+              body
+              state
+              isDraft
+              merged
+              mergeable
+              mergeCommit {
+                oid
+              }
+              headRef {
+                name
+                target {
+                  oid
+                }
+                repository {
+                  name
+                  owner {
+                    login
+                  }
+                }
+              }
+              baseRef {
+                name
+                target {
+                  oid
+                }
+                repository {
+                  name
+                  owner {
+                    login
+                  }
+                }
+              }
+              author {
+                login
+                avatarUrl
+              }
+              assignees(first: 10) {
+                nodes {
+                  login
+                  avatarUrl
+                }
+              }
+              reviewRequests(first: 10) {
+                nodes {
+                  requestedReviewer {
+                    ... on User {
+                      login
+                      avatarUrl
+                    }
+                    ... on Team {
+                      name
+                    }
+                  }
+                }
+              }
+              labels(first: 10) {
+                nodes {
+                  name
+                  color
+                }
+              }
+              comments {
+                totalCount
+              }
+              createdAt
+              updatedAt
+              closedAt
+              mergedAt
+              changedFiles
+              additions
+              deletions
+              latestReviews(first: 30) {
+                nodes {
+                  author {
+                    login
+                    avatarUrl
+                  }
+                  state
+                  submittedAt
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const pullRequests: PullRequest[] = [];
+    let hasNextPage = true;
+    let after: string | null = null;
+
+    // Paginate through all PRs (GraphQL allows max 100 per page)
+    while (hasNextPage) {
+      try {
+        const response: any = await this.octokit.graphql(query, {
+          owner,
+          name: repo,
+          after,
+        });
+
+        const prData = response?.repository?.pullRequests;
+        if (!prData) break;
+
+        hasNextPage = prData.pageInfo.hasNextPage;
+        after = prData.pageInfo.endCursor;
+
+        for (const pr of prData.nodes) {
+          if (!pr) continue;
+
+          // Process reviews to determine approval status
+          const approvedBy: Array<{ login: string; avatar_url: string }> = [];
+          const changesRequestedBy: Array<{ login: string; avatar_url: string }> = [];
+
+          // Get the latest review from each reviewer
+          const latestReviews = new Map<string, any>();
+          if (pr.latestReviews?.nodes) {
+            pr.latestReviews.nodes.forEach((review: any) => {
+              if (
+                review?.author &&
+                review.state !== "PENDING" &&
+                review.state !== "COMMENTED"
+              ) {
+                const existing = latestReviews.get(review.author.login);
+                if (
+                  !existing ||
+                  new Date(review.submittedAt) > new Date(existing.submittedAt)
+                ) {
+                  latestReviews.set(review.author.login, review);
+                }
+              }
+            });
+          }
+
+          // Categorize reviews
+          latestReviews.forEach((review) => {
+            if (review.state === "APPROVED") {
+              approvedBy.push({
+                login: review.author.login,
+                avatar_url: review.author.avatarUrl,
+              });
+            } else if (review.state === "CHANGES_REQUESTED") {
+              changesRequestedBy.push({
+                login: review.author.login,
+                avatar_url: review.author.avatarUrl,
+              });
+            }
+          });
+
+          // Determine overall approval status
+          let approvalStatus: "approved" | "changes_requested" | "pending" | "none" = "none";
+          if (changesRequestedBy.length > 0) {
+            approvalStatus = "changes_requested";
+          } else if (approvedBy.length > 0) {
+            approvalStatus = "approved";
+          } else if (pr.reviewRequests?.nodes && pr.reviewRequests.nodes.length > 0) {
+            approvalStatus = "pending";
+          }
+
+          // Extract requested reviewers (users only, skip teams for now)
+          const requestedReviewers = pr.reviewRequests?.nodes
+            ?.filter((req: any) => req?.requestedReviewer?.login)
+            .map((req: any) => ({
+              login: req.requestedReviewer.login,
+              avatar_url: req.requestedReviewer.avatarUrl,
+            })) || [];
+
+          pullRequests.push({
+            id: pr.number, // Using number as ID for compatibility
+            number: pr.number,
+            title: pr.title,
+            body: pr.body,
+            state: pr.state.toLowerCase() as "open" | "closed",
+            draft: pr.isDraft,
+            merged: pr.merged,
+            mergeable: pr.mergeable === "MERGEABLE" ? true : pr.mergeable === "CONFLICTING" ? false : null,
+            merge_commit_sha: pr.mergeCommit?.oid || null,
+            head: {
+              ref: pr.headRef?.name || "",
+              sha: pr.headRef?.target?.oid || "",
+              repo: pr.headRef?.repository ? {
+                name: pr.headRef.repository.name,
+                owner: {
+                  login: pr.headRef.repository.owner.login,
+                },
+              } : null,
+            },
+            base: {
+              ref: pr.baseRef?.name || "",
+              sha: pr.baseRef?.target?.oid || "",
+              repo: {
+                name: pr.baseRef?.repository?.name || repo,
+                owner: {
+                  login: pr.baseRef?.repository?.owner?.login || owner,
+                },
+              },
+            },
+            user: {
+              login: pr.author?.login || "ghost",
+              avatar_url: pr.author?.avatarUrl || "",
+            },
+            assignees: pr.assignees?.nodes?.map((a: any) => ({
+              login: a.login,
+              avatar_url: a.avatarUrl,
+            })) || [],
+            requested_reviewers: requestedReviewers,
+            labels: pr.labels?.nodes?.map((l: any) => ({
+              name: l.name,
+              color: l.color,
+            })) || [],
+            comments: pr.comments?.totalCount || 0,
+            created_at: pr.createdAt,
+            updated_at: pr.updatedAt,
+            closed_at: pr.closedAt,
+            merged_at: pr.mergedAt,
+            changed_files: pr.changedFiles,
+            additions: pr.additions,
+            deletions: pr.deletions,
+            approvalStatus,
+            approvedBy,
+            changesRequestedBy,
+          });
+        }
+
+        // Only fetch first page for now to avoid rate limits
+        // You can remove this break to fetch all pages if needed
+        if (pullRequests.length >= 100) break;
+      } catch (error) {
+        console.error("Failed to fetch pull requests via GraphQL:", error);
+        // Fallback to REST API with minimal data if GraphQL fails
+        return this.getPullRequestsREST(owner, repo, state);
+      }
+    }
+
+    return pullRequests;
+  }
+
+  // Fallback REST implementation with minimal API calls
+  private async getPullRequestsREST(
+    owner: string,
+    repo: string,
+    state: "open" | "closed" | "all" = "open",
+  ): Promise<PullRequest[]> {
     const { data } = await this.octokit.pulls.list({
       owner,
       repo,
@@ -229,134 +486,53 @@ export class GitHubAPI {
       per_page: 100,
     });
 
-    // The pulls.list endpoint doesn't include comment counts, but we can get them from the issues API
-    // Since every PR is also an issue, we can fetch the issues to get comment counts
-    const issuesData = await this.octokit.issues.listForRepo({
-      owner,
-      repo,
-      state: state === "all" ? "all" : (state as "open" | "closed"),
-      per_page: 100,
-    });
-
-    // Create a map of issue number to comment count
-    const commentCounts = new Map<number, number>();
-    issuesData.data.forEach((issue) => {
-      if (issue.pull_request) {
-        commentCounts.set(issue.number, issue.comments);
-      }
-    });
-
-    // Fetch detailed PR data and reviews for each PR
-    const detailedPRs = await Promise.all(
-      data.map(async (pr) => {
-        try {
-          const [detailedPRResponse, reviewsResponse] = await Promise.all([
-            this.octokit.pulls.get({
-              owner,
-              repo,
-              pull_number: pr.number,
-            }),
-            this.octokit.pulls.listReviews({
-              owner,
-              repo,
-              pull_number: pr.number,
-              per_page: 100,
-            }),
-          ]);
-
-          const detailedPR = detailedPRResponse.data;
-          const reviews = reviewsResponse.data;
-
-          // Process reviews to determine approval status
-          const approvedBy: Array<{ login: string; avatar_url: string }> = [];
-          const changesRequestedBy: Array<{
-            login: string;
-            avatar_url: string;
-          }> = [];
-
-          // Get the latest review from each reviewer
-          const latestReviews = new Map<string, (typeof reviews)[0]>();
-          reviews.forEach((review) => {
-            if (
-              review.user &&
-              review.state !== "PENDING" &&
-              review.state !== "COMMENTED"
-            ) {
-              const existing = latestReviews.get(review.user.login);
-              if (
-                !existing ||
-                new Date(review.submitted_at!) >
-                new Date(existing.submitted_at!)
-              ) {
-                latestReviews.set(review.user.login, review);
-              }
-            }
-          });
-
-          // Categorize reviews
-          latestReviews.forEach((review) => {
-            if (review.user) {
-              if (review.state === "APPROVED") {
-                approvedBy.push({
-                  login: review.user.login,
-                  avatar_url: review.user.avatar_url,
-                });
-              } else if (review.state === "CHANGES_REQUESTED") {
-                changesRequestedBy.push({
-                  login: review.user.login,
-                  avatar_url: review.user.avatar_url,
-                });
-              }
-            }
-          });
-
-          // Determine overall approval status
-          let approvalStatus:
-            | "approved"
-            | "changes_requested"
-            | "pending"
-            | "none" = "none";
-          if (changesRequestedBy.length > 0) {
-            approvalStatus = "changes_requested";
-          } else if (approvedBy.length > 0) {
-            approvalStatus = "approved";
-          } else if (
-            pr.requested_reviewers &&
-            pr.requested_reviewers.length > 0
-          ) {
-            approvalStatus = "pending";
-          }
-
-          return {
-            ...pr,
-            comments: commentCounts.get(pr.number) || 0,
-            changed_files: detailedPR.changed_files,
-            additions: detailedPR.additions,
-            deletions: detailedPR.deletions,
-            merged: detailedPR.merged,
-            merged_at: detailedPR.merged_at,
-            approvalStatus,
-            approvedBy,
-            changesRequestedBy,
-          };
-        } catch (error) {
-          console.error(`Failed to fetch details for PR #${pr.number}:`, error);
-          // Fallback to basic PR data without stats
-          return {
-            ...pr,
-            comments: commentCounts.get(pr.number) || 0,
-            changed_files: undefined,
-            additions: undefined,
-            deletions: undefined,
-            approvalStatus: "none" as const,
-            approvedBy: [],
-            changesRequestedBy: [],
-          };
-        }
-      }),
-    );
-
-    return detailedPRs as unknown as PullRequest[];
+    // Return basic PR data without additional API calls
+    // Additional details can be fetched when the user opens a specific PR
+    return data.map(pr => ({
+      id: pr.id,
+      number: pr.number,
+      title: pr.title,
+      body: pr.body,
+      state: pr.state as "open" | "closed",
+      draft: pr.draft,
+      merged: false, // Will be fetched on detail view
+      mergeable: null,
+      merge_commit_sha: pr.merge_commit_sha,
+      head: pr.head,
+      base: pr.base,
+      user: pr.user ? {
+        login: pr.user.login,
+        avatar_url: pr.user.avatar_url,
+      } : {
+        login: "ghost",
+        avatar_url: "",
+      },
+      assignees: pr.assignees?.map(a => ({
+        login: a.login,
+        avatar_url: a.avatar_url,
+      })) || [],
+      requested_reviewers: Array.isArray(pr.requested_reviewers)
+        ? pr.requested_reviewers.filter((r: any) => r.login).map((r: any) => ({
+          login: r.login,
+          avatar_url: r.avatar_url,
+        }))
+        : [],
+      labels: pr.labels.map(l => ({
+        name: l.name,
+        color: l.color,
+      })),
+      comments: 0, // Will be fetched on detail view
+      created_at: pr.created_at,
+      updated_at: pr.updated_at,
+      closed_at: pr.closed_at,
+      merged_at: pr.merged_at,
+      changed_files: undefined,
+      additions: undefined,
+      deletions: undefined,
+      approvalStatus: "none" as const,
+      approvedBy: [],
+      changesRequestedBy: [],
+    }));
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {
