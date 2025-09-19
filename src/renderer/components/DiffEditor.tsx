@@ -6,49 +6,25 @@ import {
   useCallback,
 } from "react";
 import { DiffEditor as MonacoDiffEditor } from "@monaco-editor/react";
-import {
-  Eye,
-  MessageSquare,
-  Columns,
-  FileText,
-  Check,
-  WrapText,
-  WholeWord,
-  FilePlus,
-  FileMinus,
-  FileEdit,
-  X,
-  Loader2,
-  AlertCircle,
-} from "lucide-react";
 import type {
   editor as MonacoEditorType,
   IDisposable,
 } from "monaco-editor";
-import { formatDistanceToNow } from "date-fns";
 import { File, Comment, GitHubAPI } from "../services/github";
 import { useUIStore } from "../stores/uiStore";
-import { cn } from "../utils/cn";
 import { monaco } from "../utils/monaco-loader";
-import { CompactMarkdownEditor } from "./CompactMarkdownEditor";
-
-type CommentSide = "LEFT" | "RIGHT";
-
-interface CommentTarget {
-  lineNumber: number;
-  side: CommentSide;
-  startLineNumber?: number | null;
-  endLineNumber?: number | null;
-}
-
-interface InlineCommentThread {
-  id: number;
-  side: CommentSide;
-  lineNumber: number;
-  startLineNumber?: number | null;
-  endLineNumber?: number | null;
-  comments: Comment[];
-}
+import {
+  buildThreads,
+  CommentSide,
+  CommentTarget,
+  InlineCommentThread,
+  ActiveOverlay,
+  parsePatch,
+  getLanguageFromFilename,
+} from "./diff/commentUtils";
+import { DiffEditorHeader } from "./diff/DiffEditorHeader";
+import { CommentOverlay } from "./diff/CommentOverlay";
+import { useOverlayResize } from "./diff/useOverlayResize";
 
 interface DiffEditorProps {
   file: File;
@@ -64,88 +40,6 @@ interface DiffEditorProps {
   currentUser: { login: string; avatar_url?: string } | null;
   onCommentAdded?: (comment: Comment) => void;
 }
-
-const determineCommentSide = (comment: Comment): CommentSide => {
-  if (comment.side === "LEFT" || comment.side === "RIGHT") {
-    return comment.side;
-  }
-  if (comment.original_line && !comment.line) {
-    return "LEFT";
-  }
-  return "RIGHT";
-};
-
-const getLineNumberForSide = (
-  comment: Comment,
-  side: CommentSide,
-): number | null => {
-  if (side === "LEFT") {
-    return comment.original_line ?? null;
-  }
-  return comment.line ?? null;
-};
-
-const buildThreads = (comments: Comment[]): InlineCommentThread[] => {
-  if (!comments || comments.length === 0) {
-    return [];
-  }
-
-  const replies = new Map<number, Comment[]>();
-  comments.forEach((comment) => {
-    if (comment.in_reply_to_id) {
-      if (!replies.has(comment.in_reply_to_id)) {
-        replies.set(comment.in_reply_to_id, []);
-      }
-      replies.get(comment.in_reply_to_id)!.push(comment);
-    }
-  });
-
-  const threads: InlineCommentThread[] = [];
-
-  comments
-    .filter((comment) => !comment.in_reply_to_id)
-    .forEach((root) => {
-      const side = determineCommentSide(root);
-      const lineNumber = getLineNumberForSide(root, side);
-
-      if (!lineNumber || lineNumber <= 0) {
-        return;
-      }
-
-      const threadComments = [root, ...(replies.get(root.id) || [])].sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      );
-
-      const startLineNumber =
-        side === "LEFT"
-          ? root.original_start_line ?? root.start_line ?? null
-          : root.start_line ?? root.original_start_line ?? null;
-      const endLineNumber =
-        side === "LEFT"
-          ? root.original_line ?? root.line ?? lineNumber
-          : root.line ?? root.original_line ?? lineNumber;
-      const normalizedStart = Math.min(
-        startLineNumber ?? lineNumber,
-        endLineNumber ?? lineNumber,
-      );
-      const normalizedEnd = Math.max(
-        startLineNumber ?? lineNumber,
-        endLineNumber ?? lineNumber,
-      );
-
-      threads.push({
-        id: root.id,
-        side,
-        lineNumber: normalizedEnd,
-        startLineNumber: normalizedStart,
-        endLineNumber: normalizedEnd,
-        comments: threadComments,
-      });
-    });
-
-  return threads.sort((a, b) => a.lineNumber - b.lineNumber);
-};
 
 export function DiffEditor({
   file,
@@ -191,11 +85,7 @@ export function DiffEditor({
   const [patchModifiedContent, setPatchModifiedContent] = useState("");
   const [showFullFile, setShowFullFile] = useState(false);
   const [diffEditorReady, setDiffEditorReady] = useState(false);
-  const [activeOverlay, setActiveOverlay] = useState<
-    | { type: "new"; target: CommentTarget }
-    | { type: "thread"; target: CommentTarget; threadId: number }
-    | null
-  >(null);
+  const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay | null>(null);
   const [overlayPosition, setOverlayPosition] = useState<
     | { top: number; left: number }
     | null
@@ -203,13 +93,13 @@ export function DiffEditor({
   const [commentDraft, setCommentDraft] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
-  const [overlayWidth, setOverlayWidth] = useState(384); // Default w-96
-  const [overlayHeight, setOverlayHeight] = useState(300); // Default height
-  const [resizeMode, setResizeMode] = useState<'none' | 'width' | 'height' | 'both'>('none');
-  const resizeStartX = useRef<number>(0);
-  const resizeStartY = useRef<number>(0);
-  const resizeStartWidth = useRef<number>(0);
-  const resizeStartHeight = useRef<number>(0);
+  const {
+    width: overlayWidth,
+    height: overlayHeight,
+    resizeMode,
+    handleResizeStart,
+    resetSize: resetOverlaySize,
+  } = useOverlayResize();
 
   useEffect(() => {
     setShowFullFile(false);
@@ -703,70 +593,15 @@ export function DiffEditor({
 
   const activeThread =
     activeOverlay?.type === "thread"
-      ? commentThreads.find((thread) => thread.id === activeOverlay.threadId)
+      ? commentThreads.find((thread) => thread.id === activeOverlay.threadId) ?? null
       : null;
 
   const closeOverlay = useCallback(() => {
     setActiveOverlay(null);
     setCommentDraft("");
     setCommentError(null);
-    setOverlayWidth(384); // Reset to default width
-    setOverlayHeight(300); // Reset to default height
-  }, []);
-
-  const handleResizeStart = useCallback((mode: 'width' | 'height' | 'both') => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizeMode(mode);
-    resizeStartX.current = e.clientX;
-    resizeStartY.current = e.clientY;
-    resizeStartWidth.current = overlayWidth;
-    resizeStartHeight.current = overlayHeight;
-  }, [overlayWidth, overlayHeight]);
-
-  const handleResizeMove = useCallback((e: MouseEvent) => {
-    if (resizeMode === 'none') return;
-
-    if (resizeMode === 'width' || resizeMode === 'both') {
-      const deltaX = e.clientX - resizeStartX.current;
-      const newWidth = Math.max(320, Math.min(800, resizeStartWidth.current + deltaX));
-      setOverlayWidth(newWidth);
-    }
-
-    if (resizeMode === 'height' || resizeMode === 'both') {
-      const deltaY = e.clientY - resizeStartY.current;
-      const newHeight = Math.max(200, Math.min(600, resizeStartHeight.current + deltaY));
-      setOverlayHeight(newHeight);
-    }
-  }, [resizeMode]);
-
-  const handleResizeEnd = useCallback(() => {
-    setResizeMode('none');
-  }, []);
-
-  useEffect(() => {
-    if (resizeMode !== 'none') {
-      document.addEventListener('mousemove', handleResizeMove);
-      document.addEventListener('mouseup', handleResizeEnd);
-
-      // Set appropriate cursor
-      if (resizeMode === 'width') {
-        document.body.style.cursor = 'ew-resize';
-      } else if (resizeMode === 'height') {
-        document.body.style.cursor = 'ns-resize';
-      } else if (resizeMode === 'both') {
-        document.body.style.cursor = 'nwse-resize';
-      }
-      document.body.style.userSelect = 'none';
-
-      return () => {
-        document.removeEventListener('mousemove', handleResizeMove);
-        document.removeEventListener('mouseup', handleResizeEnd);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-    }
-  }, [resizeMode, handleResizeMove, handleResizeEnd]);
+    resetOverlaySize();
+  }, [resetOverlaySize]);
 
   const canSubmitComments = Boolean(
     token && repoOwner && repoName && pullNumber,
@@ -1043,54 +878,14 @@ export function DiffEditor({
     token,
   ]);
 
-  const getLanguageFromFilename = (filename: string) => {
-    const ext = filename.split(".").pop()?.toLowerCase();
-    const languageMap: Record<string, string> = {
-      js: "javascript",
-      jsx: "javascript",
-      ts: "typescript",
-      tsx: "typescript",
-      py: "python",
-      rb: "ruby",
-      go: "go",
-      rs: "rust",
-      java: "java",
-      c: "c",
-      cpp: "cpp",
-      cs: "csharp",
-      php: "php",
-      swift: "swift",
-      kt: "kotlin",
-      scala: "scala",
-      r: "r",
-      lua: "lua",
-      dart: "dart",
-      vue: "vue",
-      css: "css",
-      scss: "scss",
-      sass: "sass",
-      less: "less",
-      html: "html",
-      xml: "xml",
-      json: "json",
-      yml: "yaml",
-      yaml: "yaml",
-      toml: "toml",
-      md: "markdown",
-      sh: "shell",
-      bash: "shell",
-      zsh: "shell",
-      fish: "shell",
-      ps1: "powershell",
-      sql: "sql",
-      graphql: "graphql",
-      dockerfile: "dockerfile",
-    };
-
-    return languageMap[ext || ""] || "plaintext";
-  };
-
   const language = getLanguageFromFilename(file.filename);
+  const canShowFullFile = !(
+    originalContent === undefined && modifiedContent === undefined
+  );
+  const handleToggleFullFile = useCallback(() => {
+    if (file.status !== "modified" || !canShowFullFile) return;
+    setShowFullFile((prev) => !prev);
+  }, [canShowFullFile, file.status, setShowFullFile]);
 
   const effectiveOriginalContent =
     showFullFile && originalContent !== undefined
@@ -1103,134 +898,21 @@ export function DiffEditor({
 
   return (
     <div className="flex flex-col h-full">
-      <div
-        className={cn(
-          "py-1 px-2 flex items-center justify-between border-b",
-          theme === "dark"
-            ? "bg-gray-800 border-gray-700"
-            : "bg-gray-50 border-gray-200",
-        )}
-      >
-        <div className="flex items-center space-x-3">
-          <h3 className="font-mono text-xs flex items-center gap-2">
-            {file.status === "added" && (
-              <FilePlus className="w-4 h-4 text-green-500" />
-            )}
-            {file.status === "removed" && (
-              <FileMinus className="w-4 h-4 text-red-500" />
-            )}
-            {file.status === "modified" && (
-              <FileEdit className="w-4 h-4 text-yellow-500" />
-            )}
-            {file.filename}
-          </h3>
-          <div className="flex items-center space-x-2 text-xs">
-            {file.status === "added" ? (
-              <span className="text-green-500 font-medium">
-                New file (+{file.additions} lines)
-              </span>
-            ) : file.status === "removed" ? (
-              <span className="text-red-500 font-medium">
-                Deleted (-{file.deletions} lines)
-              </span>
-            ) : (
-              <>
-                <span className="text-green-400">+{file.additions}</span>
-                <span className="text-red-400">-{file.deletions}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {file.status !== "added" && (
-            <button
-              onClick={toggleDiffView}
-              className="btn btn-ghost p-1 text-xs"
-              title={
-                diffView === "unified"
-                  ? "Switch to split view"
-                  : "Switch to unified view"
-              }
-            >
-              {diffView === "unified" ? (
-                <Columns className="w-4 h-4" />
-              ) : (
-                <FileText className="w-4 h-4" />
-              )}
-            </button>
-          )}
-
-          <button
-            onClick={toggleWhitespace}
-            className={cn(
-              "btn btn-ghost p-1 text-xs",
-              showWhitespace &&
-              (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
-            )}
-            title="Toggle whitespace"
-          >
-            W
-          </button>
-
-          {file.status === "modified" && (
-            <button
-              onClick={() => {
-                if (
-                  originalContent !== undefined ||
-                  modifiedContent !== undefined
-                ) {
-                  setShowFullFile(!showFullFile);
-                }
-              }}
-              className={cn(
-                "btn btn-ghost px-2 py-1 text-xs flex items-center gap-1",
-                showFullFile &&
-                (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
-                originalContent === undefined &&
-                modifiedContent === undefined &&
-                "opacity-50 cursor-not-allowed",
-              )}
-              disabled={
-                originalContent === undefined && modifiedContent === undefined
-              }
-              title={
-                originalContent === undefined && modifiedContent === undefined
-                  ? "Full file content not available"
-                  : showFullFile
-                    ? "Show diff"
-                    : "Show full file"
-              }
-            >
-              <WholeWord className="w-4 h-4" />
-              <span>{showFullFile ? "Diff" : "Full"}</span>
-            </button>
-          )}
-
-          <button
-            onClick={toggleWordWrap}
-            className={cn(
-              "btn btn-ghost p-1 text-sm",
-              wordWrap && (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
-            )}
-            title="Toggle word wrap"
-          >
-            <WrapText className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={onMarkViewed}
-            className="btn btn-ghost p-1 text-sm flex items-center"
-            title={isViewed ? "Mark as not viewed" : "Mark as viewed"}
-          >
-            {isViewed ? (
-              <Check className="w-4 h-4 text-green-500" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-      </div>
+      <DiffEditorHeader
+        file={file}
+        theme={theme}
+        diffView={diffView}
+        showWhitespace={showWhitespace}
+        wordWrap={wordWrap}
+        showFullFile={showFullFile}
+        isViewed={isViewed}
+        canShowFullFile={canShowFullFile}
+        onToggleDiffView={toggleDiffView}
+        onToggleWhitespace={toggleWhitespace}
+        onToggleWordWrap={toggleWordWrap}
+        onToggleFullFile={handleToggleFullFile}
+        onMarkViewed={onMarkViewed}
+      />
 
       <div className="flex-1 relative" ref={containerRef}>
         <MonacoDiffEditor
@@ -1293,406 +975,31 @@ export function DiffEditor({
         />
 
         {activeOverlay && overlayPosition && (
-          <div
-            className={cn(
-              "absolute rounded-md shadow-lg border z-20 flex flex-col",
-              theme === "dark"
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-gray-200",
-              resizeMode !== 'none' && "select-none",
-            )}
-            style={{
-              top: overlayPosition.top,
-              left: overlayPosition.left,
-              width: `${overlayWidth}px`,
-              height: `${overlayHeight}px`,
-              maxWidth: '90vw',
-              maxHeight: '80vh',
+          <CommentOverlay
+            overlay={activeOverlay}
+            position={overlayPosition}
+            theme={theme}
+            canSubmitComments={canSubmitComments}
+            currentUser={currentUser}
+            activeThread={activeThread}
+            commentDraft={commentDraft}
+            commentError={commentError}
+            isSubmittingComment={isSubmittingComment}
+            overlayWidth={overlayWidth}
+            overlayHeight={overlayHeight}
+            resizeMode={resizeMode}
+            onCommentDraftChange={(newValue) => {
+              setCommentDraft(newValue);
+              if (commentError) {
+                setCommentError(null);
+              }
             }}
-          >
-            <div
-              className={cn(
-                "flex items-center justify-between px-3 py-1.5 border-b",
-                theme === "dark"
-                  ? "border-gray-700 text-gray-100"
-                  : "border-gray-200 text-gray-800",
-              )}
-            >
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {canSubmitComments && currentUser && activeOverlay.type === "new" && (
-                  <img
-                    src={currentUser.avatar_url || ""}
-                    alt={currentUser.login || "You"}
-                    className="w-5 h-5 rounded-full flex-shrink-0"
-                  />
-                )}
-                <div className="flex flex-col text-xs min-w-0">
-                  <div className="flex items-center gap-1.5 font-medium text-xs">
-                    <MessageSquare className="w-3 h-3" />
-                    {activeOverlay.type === "thread"
-                      ? "Conversation"
-                      : "Start review comment"}
-                  </div>
-                  <span
-                    className={cn(
-                      "text-[10px] truncate",
-                      theme === "dark" ? "text-gray-400" : "text-gray-500",
-                    )}
-                  >
-                    {activeOverlay.target.startLineNumber &&
-                      activeOverlay.target.startLineNumber !==
-                      activeOverlay.target.lineNumber ? (
-                      <>
-                        Lines {activeOverlay.target.startLineNumber}–
-                        {activeOverlay.target.lineNumber}
-                      </>
-                    ) : (
-                      <>Line {activeOverlay.target.lineNumber}</>
-                    )}
-                    {activeOverlay.target.side === "LEFT" ? " • base" : " • head"}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={closeOverlay}
-                className={cn(
-                  "p-1 rounded transition-colors",
-                  theme === "dark"
-                    ? "text-gray-400 hover:text-gray-100 hover:bg-gray-700"
-                    : "text-gray-500 hover:text-gray-900 hover:bg-gray-100",
-                )}
-                aria-label="Close comment panel"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="px-3 py-2 flex-1 flex flex-col gap-2 overflow-y-auto min-h-0">
-              {activeOverlay.type === "thread" && activeThread && (
-                <div className="space-y-2 max-h-32 overflow-y-auto pr-1 text-sm">
-                  {activeThread.comments.map((comment) => (
-                    <div key={comment.id} className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={comment.user.avatar_url}
-                          alt={comment.user.login}
-                          className="w-4 h-4 rounded-full"
-                        />
-                        <span className="text-xs font-medium">
-                          {comment.user.login}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[10px]",
-                            theme === "dark"
-                              ? "text-gray-400"
-                              : "text-gray-500",
-                          )}
-                        >
-                          {formatDistanceToNow(new Date(comment.created_at), {
-                            addSuffix: true,
-                          })}
-                        </span>
-                      </div>
-                      <div
-                        className={cn(
-                          "text-xs whitespace-pre-wrap leading-relaxed",
-                          theme === "dark"
-                            ? "text-gray-200"
-                            : "text-gray-700",
-                        )}
-                      >
-                        {comment.body}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {activeOverlay.type === "thread" && !activeThread && (
-                <div
-                  className={cn(
-                    "text-sm rounded-md px-3 py-2",
-                    theme === "dark"
-                      ? "bg-amber-900/40 text-amber-200"
-                      : "bg-amber-50 text-amber-700",
-                  )}
-                >
-                  This comment thread is no longer available on the current diff.
-                </div>
-              )}
-
-              {!canSubmitComments ? (
-                <div
-                  className={cn(
-                    "flex items-start gap-2 rounded-md px-3 py-2 text-sm",
-                    theme === "dark"
-                      ? "bg-gray-900 text-gray-300"
-                      : "bg-gray-100 text-gray-700",
-                  )}
-                >
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>Sign in with GitHub to leave review comments.</span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex-1 flex flex-col min-h-0">
-                    <CompactMarkdownEditor
-                      value={commentDraft}
-                      onChange={(newValue) => {
-                        setCommentDraft(newValue);
-                        if (commentError) {
-                          setCommentError(null);
-                        }
-                      }}
-                      placeholder={
-                        activeOverlay.type === "thread"
-                          ? "Reply to this thread..."
-                          : "Leave a comment on this line..."
-                      }
-                      autoFocus
-                      flexible
-                      className="flex-1"
-                    />
-                  </div>
-
-                  {commentError && (
-                    <div className="flex items-center gap-2 text-sm text-red-500">
-                      <AlertCircle className="w-4 h-4" />
-                      <span>{commentError}</span>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-2 pt-1 flex-shrink-0">
-                    <button
-                      onClick={closeOverlay}
-                      className="btn btn-ghost text-xs px-3 py-1"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleCommentSubmit}
-                      disabled={
-                        !commentDraft.trim() || isSubmittingComment || !canSubmitComments
-                      }
-                      className="btn btn-primary text-xs px-3 py-1 flex items-center gap-1"
-                    >
-                      {isSubmittingComment && (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      )}
-                      {activeOverlay.type === "thread" ? "Reply" : "Comment"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Right edge resize handle */}
-            <div
-              className={cn(
-                "absolute top-0 right-0 w-1 h-full cursor-ew-resize group",
-                "hover:bg-blue-500/30 transition-colors",
-                resizeMode === 'width' && "bg-blue-500/30",
-              )}
-              onMouseDown={handleResizeStart('width')}
-            >
-              <div
-                className={cn(
-                  "absolute right-0 top-1/2 -translate-y-1/2 w-4 h-8 -mr-1.5",
-                  "flex items-center justify-center",
-                  "opacity-0 group-hover:opacity-100 transition-opacity",
-                  resizeMode === 'width' && "opacity-100",
-                )}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <div className={cn(
-                    "w-0.5 h-0.5 rounded-full",
-                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
-                  )} />
-                  <div className={cn(
-                    "w-0.5 h-0.5 rounded-full",
-                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
-                  )} />
-                  <div className={cn(
-                    "w-0.5 h-0.5 rounded-full",
-                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
-                  )} />
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom edge resize handle */}
-            <div
-              className={cn(
-                "absolute bottom-0 left-0 right-0 h-1 cursor-ns-resize group",
-                "hover:bg-blue-500/30 transition-colors",
-                resizeMode === 'height' && "bg-blue-500/30",
-              )}
-              onMouseDown={handleResizeStart('height')}
-            >
-              <div
-                className={cn(
-                  "absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-4 -mb-1.5",
-                  "flex items-center justify-center",
-                  "opacity-0 group-hover:opacity-100 transition-opacity",
-                  resizeMode === 'height' && "opacity-100",
-                )}
-              >
-                <div className="flex gap-0.5">
-                  <div className={cn(
-                    "w-0.5 h-0.5 rounded-full",
-                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
-                  )} />
-                  <div className={cn(
-                    "w-0.5 h-0.5 rounded-full",
-                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
-                  )} />
-                  <div className={cn(
-                    "w-0.5 h-0.5 rounded-full",
-                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
-                  )} />
-                </div>
-              </div>
-            </div>
-
-            {/* Corner resize handle */}
-            <div
-              className={cn(
-                "absolute bottom-0 right-0 w-3 h-3 cursor-nwse-resize",
-                "hover:bg-blue-500/50 transition-colors",
-                resizeMode === 'both' && "bg-blue-500/50",
-              )}
-              onMouseDown={handleResizeStart('both')}
-            >
-              <div
-                className={cn(
-                  "absolute bottom-0.5 right-0.5 w-2 h-2",
-                  "border-b-2 border-r-2",
-                  theme === "dark" ? "border-gray-400" : "border-gray-500",
-                  "opacity-50 group-hover:opacity-100 transition-opacity",
-                  resizeMode === 'both' && "opacity-100",
-                )}
-              />
-            </div>
-          </div>
+            onClose={closeOverlay}
+            onSubmit={handleCommentSubmit}
+            onResizeStart={handleResizeStart}
+          />
         )}
       </div>
     </div>
   );
-}
-
-function parsePatch(patch: string) {
-  if (!patch || patch.trim() === "") {
-    return { original: "", modified: "" };
-  }
-
-  const lines = patch.split("\n");
-  const hunks: Array<{
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-    lines: Array<{ type: "-" | "+" | " "; content: string }>;
-  }> = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.startsWith("@@")) {
-      const match = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
-      if (match) {
-        const hunk = {
-          oldStart: parseInt(match[1], 10),
-          oldLines: parseInt(match[2] || "1", 10),
-          newStart: parseInt(match[3], 10),
-          newLines: parseInt(match[4] || "1", 10),
-          lines: [] as Array<{ type: "-" | "+" | " "; content: string }>,
-        };
-
-        i++;
-        while (
-          i < lines.length &&
-          !lines[i].startsWith("@@") &&
-          !lines[i].startsWith("diff --git")
-        ) {
-          const hunkLine = lines[i];
-          if (hunkLine.startsWith("-")) {
-            hunk.lines.push({ type: "-", content: hunkLine.substring(1) });
-          } else if (hunkLine.startsWith("+")) {
-            hunk.lines.push({ type: "+", content: hunkLine.substring(1) });
-          } else if (hunkLine.startsWith(" ")) {
-            hunk.lines.push({ type: " ", content: hunkLine.substring(1) });
-          } else if (
-            hunkLine === "\\No newline at end of file" ||
-            hunkLine === "\\ No newline at end of file"
-          ) {
-            // Ignore
-          } else if (
-            hunkLine.startsWith("---") ||
-            hunkLine.startsWith("+++") ||
-            hunkLine.startsWith("index ")
-          ) {
-            // Skip headers
-          } else if (hunkLine.startsWith("\\")) {
-            // Skip Git markers
-          } else {
-            if (hunkLine.length > 0) {
-              hunk.lines.push({ type: " ", content: hunkLine });
-            }
-          }
-          i++;
-        }
-        i--;
-
-        hunks.push(hunk);
-      }
-    }
-  }
-
-  if (hunks.length === 0) {
-    return { original: "", modified: "" };
-  }
-
-  const originalLines: string[] = [];
-  const modifiedLines: string[] = [];
-
-  for (const hunk of hunks) {
-    let i = 0;
-    while (i < hunk.lines.length) {
-      const line = hunk.lines[i];
-
-      if (line.type === " ") {
-        originalLines.push(line.content);
-        modifiedLines.push(line.content);
-        i++;
-      } else if (line.type === "-") {
-        const deletions: string[] = [];
-        while (i < hunk.lines.length && hunk.lines[i].type === "-") {
-          deletions.push(hunk.lines[i].content);
-          i++;
-        }
-
-        const additions: string[] = [];
-        while (i < hunk.lines.length && hunk.lines[i].type === "+") {
-          additions.push(hunk.lines[i].content);
-          i++;
-        }
-
-        const maxLines = Math.max(deletions.length, additions.length);
-        for (let j = 0; j < maxLines; j++) {
-          originalLines.push(deletions[j] || "");
-          modifiedLines.push(additions[j] || "");
-        }
-      } else if (line.type === "+") {
-        originalLines.push("");
-        modifiedLines.push(line.content);
-        i++;
-      }
-    }
-  }
-
-  return {
-    original: originalLines.length > 0 ? originalLines.join("\n") : "",
-    modified: modifiedLines.length > 0 ? modifiedLines.join("\n") : "",
-  };
 }
