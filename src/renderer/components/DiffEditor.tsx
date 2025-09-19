@@ -30,8 +30,7 @@ import { File, Comment, GitHubAPI } from "../services/github";
 import { useUIStore } from "../stores/uiStore";
 import { cn } from "../utils/cn";
 import { monaco } from "../utils/monaco-loader";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { CompactMarkdownEditor } from "./CompactMarkdownEditor";
 
 type CommentSide = "LEFT" | "RIGHT";
 
@@ -204,7 +203,13 @@ export function DiffEditor({
   const [commentDraft, setCommentDraft] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
-  const [commentTab, setCommentTab] = useState<"write" | "preview">("write");
+  const [overlayWidth, setOverlayWidth] = useState(384); // Default w-96
+  const [overlayHeight, setOverlayHeight] = useState(300); // Default height
+  const [resizeMode, setResizeMode] = useState<'none' | 'width' | 'height' | 'both'>('none');
+  const resizeStartX = useRef<number>(0);
+  const resizeStartY = useRef<number>(0);
+  const resizeStartWidth = useRef<number>(0);
+  const resizeStartHeight = useRef<number>(0);
 
   useEffect(() => {
     setShowFullFile(false);
@@ -231,9 +236,6 @@ export function DiffEditor({
     setCommentError(null);
   }, [file.filename]);
 
-  useEffect(() => {
-    setCommentTab("write");
-  }, [activeOverlay]);
 
   const clearHoverDecoration = useCallback((side: CommentSide) => {
     const diffEditor = diffEditorRef.current;
@@ -282,9 +284,8 @@ export function DiffEditor({
             hoverMessage:
               current === startLine
                 ? {
-                  value: `${thread.comments.length} comment${
-                    thread.comments.length === 1 ? "" : "s"
-                  }`,
+                  value: `${thread.comments.length} comment${thread.comments.length === 1 ? "" : "s"
+                    }`,
                 }
                 : undefined,
           },
@@ -370,7 +371,7 @@ export function DiffEditor({
         if (
           e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
           e.target.type !==
-            monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
+          monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
           e.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
         ) {
           return;
@@ -380,6 +381,10 @@ export function DiffEditor({
 
         const lineNumber = e.target.position?.lineNumber;
         if (!lineNumber) return;
+
+        // In patch view, we need to map the editor line number to the actual file line number
+        // This is a simplified mapping - in reality we'd need to parse the patch to get accurate mappings
+        console.log('Clicked on editor line', lineNumber, 'side', side);
 
         const selectionRange = getSelectionRangeForSide(side);
         const startRange = selectionRange ? selectionRange.start : lineNumber;
@@ -442,7 +447,7 @@ export function DiffEditor({
         if (
           e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
           e.target.type !==
-            monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
+          monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
           e.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
         ) {
           clearHoverDecoration(side);
@@ -563,18 +568,19 @@ export function DiffEditor({
       ),
     );
 
-    const proposedLeft = editorRect.right - containerRect.left + 16;
-    const maxLeft =
-      containerRef.current.clientWidth > 0
-        ? containerRef.current.clientWidth - 360
-        : proposedLeft;
+    // Position the overlay near the gutter/line numbers area instead of far right
+    const gutterWidth = 60; // Approximate width of line numbers + gutter
+    const currentOverlayWidth = overlayWidth || 384; // Use dynamic width or default
+    const proposedLeft = editorRect.left - containerRect.left + gutterWidth + 8;
+    const containerWidth = containerRef.current.clientWidth;
+    const maxLeft = containerWidth > 0 ? containerWidth - currentOverlayWidth - 16 : proposedLeft;
     const constrainedLeft = Math.max(
-      16,
-      Math.min(proposedLeft, Math.max(maxLeft, 16)),
+      8,
+      Math.min(proposedLeft, maxLeft),
     );
 
     setOverlayPosition({ top: constrainedTop, left: constrainedLeft });
-  }, [activeOverlay]);
+  }, [activeOverlay, overlayWidth]);
 
   useEffect(() => {
     updateOverlayPosition();
@@ -704,11 +710,193 @@ export function DiffEditor({
     setActiveOverlay(null);
     setCommentDraft("");
     setCommentError(null);
+    setOverlayWidth(384); // Reset to default width
+    setOverlayHeight(300); // Reset to default height
   }, []);
+
+  const handleResizeStart = useCallback((mode: 'width' | 'height' | 'both') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizeMode(mode);
+    resizeStartX.current = e.clientX;
+    resizeStartY.current = e.clientY;
+    resizeStartWidth.current = overlayWidth;
+    resizeStartHeight.current = overlayHeight;
+  }, [overlayWidth, overlayHeight]);
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (resizeMode === 'none') return;
+
+    if (resizeMode === 'width' || resizeMode === 'both') {
+      const deltaX = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(320, Math.min(800, resizeStartWidth.current + deltaX));
+      setOverlayWidth(newWidth);
+    }
+
+    if (resizeMode === 'height' || resizeMode === 'both') {
+      const deltaY = e.clientY - resizeStartY.current;
+      const newHeight = Math.max(200, Math.min(600, resizeStartHeight.current + deltaY));
+      setOverlayHeight(newHeight);
+    }
+  }, [resizeMode]);
+
+  const handleResizeEnd = useCallback(() => {
+    setResizeMode('none');
+  }, []);
+
+  useEffect(() => {
+    if (resizeMode !== 'none') {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+
+      // Set appropriate cursor
+      if (resizeMode === 'width') {
+        document.body.style.cursor = 'ew-resize';
+      } else if (resizeMode === 'height') {
+        document.body.style.cursor = 'ns-resize';
+      } else if (resizeMode === 'both') {
+        document.body.style.cursor = 'nwse-resize';
+      }
+      document.body.style.userSelect = 'none';
+
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [resizeMode, handleResizeMove, handleResizeEnd]);
 
   const canSubmitComments = Boolean(
     token && repoOwner && repoName && pullNumber,
   );
+
+  // Get the position in the diff for a given editor line
+  const getDiffPositionForEditorLine = useCallback((editorLine: number, side: CommentSide): number | undefined => {
+    if (!file.patch || showFullFile) return undefined;
+
+    const lines = file.patch.split('\n');
+    let position = 0;
+    let currentEditorLine = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Skip headers
+      if (line.startsWith('diff --git') || line.startsWith('index ') ||
+        line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
+        continue;
+      }
+
+      // Count diff position
+      position++;
+
+      // Track editor lines based on side
+      if (side === 'RIGHT') {
+        // For RIGHT side, count everything except lines that start with '-'
+        if (!line.startsWith('-')) {
+          currentEditorLine++;
+          if (currentEditorLine === editorLine) {
+            return position;
+          }
+        }
+      } else {
+        // For LEFT side, count everything except lines that start with '+'
+        if (!line.startsWith('+')) {
+          currentEditorLine++;
+          if (currentEditorLine === editorLine) {
+            return position;
+          }
+        }
+      }
+    }
+
+    return undefined;
+  }, [file.patch, showFullFile]);
+
+  // Extract diff hunk for a given line
+  const getDiffHunkForLine = useCallback((targetLine: number, side: CommentSide): string | undefined => {
+    if (!file.patch) return undefined;
+
+    // When showFullFile is true, we're showing the full file content, not the patch
+    // In this case, we can't generate a proper diff hunk
+    if (showFullFile) {
+      console.warn('Cannot create comments when viewing full file - switch to diff view');
+      return undefined;
+    }
+
+    const lines = file.patch.split('\n');
+    let currentHunkHeader = '';
+    let currentHunkLines: string[] = [];
+    let leftLine = 0;
+    let rightLine = 0;
+    let foundHunk = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith('@@')) {
+        // If we already found the hunk, return it
+        if (foundHunk && currentHunkHeader) {
+          const hunkContent = [currentHunkHeader, ...currentHunkLines];
+          return hunkContent.join('\n');
+        }
+
+        // New hunk header
+        currentHunkHeader = line;
+        currentHunkLines = [];
+
+        // Parse the line numbers from the hunk header
+        const match = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        if (match) {
+          leftLine = parseInt(match[1], 10);
+          rightLine = parseInt(match[3], 10);
+        }
+      } else if (currentHunkHeader && !line.startsWith('diff --git') && !line.startsWith('index ') && !line.startsWith('---') && !line.startsWith('+++')) {
+        // We're in a hunk content
+        currentHunkLines.push(line);
+
+        // Track line numbers based on the diff markers
+        if (line.startsWith('-')) {
+          // Line only in left side
+          if (side === 'LEFT' && leftLine === targetLine) {
+            foundHunk = true;
+          }
+          leftLine++;
+        } else if (line.startsWith('+')) {
+          // Line only in right side  
+          if (side === 'RIGHT' && rightLine === targetLine) {
+            foundHunk = true;
+          }
+          rightLine++;
+        } else if (line.startsWith(' ')) {
+          // Context line (exists in both sides)
+          if ((side === 'LEFT' && leftLine === targetLine) || (side === 'RIGHT' && rightLine === targetLine)) {
+            foundHunk = true;
+          }
+          leftLine++;
+          rightLine++;
+        } else if (!line.startsWith('\\')) {
+          // Regular context line without space prefix (some patches don't have the space)
+          if ((side === 'LEFT' && leftLine === targetLine) || (side === 'RIGHT' && rightLine === targetLine)) {
+            foundHunk = true;
+          }
+          leftLine++;
+          rightLine++;
+        }
+      }
+    }
+
+    // If we found the hunk but didn't return it yet (last hunk in file)
+    if (foundHunk && currentHunkHeader) {
+      const hunkContent = [currentHunkHeader, ...currentHunkLines];
+      return hunkContent.join('\n');
+    }
+
+    console.warn(`Could not find diff hunk for line ${targetLine} on ${side} side`);
+    return undefined;
+  }, [file.patch, showFullFile]);
 
   const handleCommentSubmit = useCallback(async () => {
     if (!activeOverlay || !canSubmitComments || !token) return;
@@ -727,34 +915,98 @@ export function DiffEditor({
           activeOverlay.target;
         const startLine = startLineNumber ?? lineNumber;
         const endLine = endLineNumber ?? lineNumber;
-        const newComment = await api.createComment(
-          repoOwner,
-          repoName,
-          pullNumber,
-          trimmed,
-          file.filename,
-          endLine,
-          side,
-          startLine !== endLine ? startLine : undefined,
-          startLine !== endLine ? side : undefined,
-        );
 
-        onCommentAdded?.(newComment);
-        setActiveOverlay({
-          type: "thread",
-          threadId: newComment.id,
-          target: {
-            lineNumber: newComment.line ?? endLine,
-            startLineNumber:
-              newComment.start_line ??
-              newComment.original_start_line ??
-              (startLine !== endLine ? startLine : undefined),
-            endLineNumber:
-              newComment.line ?? newComment.original_line ?? endLine,
+        // Try to use position-based API first (more reliable for patch view)
+        const position = getDiffPositionForEditorLine(endLine, side);
+
+        if (position !== undefined) {
+          // Use position-based API
+          console.log('Creating comment with position:', {
+            path: file.filename,
+            position,
+            editorLine: endLine,
             side,
-          },
-        });
-        setCommentDraft("");
+          });
+
+          const newComment = await api.createComment(
+            repoOwner,
+            repoName,
+            pullNumber,
+            trimmed,
+            file.filename,
+            undefined, // no line number for position-based
+            undefined, // no side for position-based
+            undefined, // no startLine for position-based
+            undefined, // no startSide for position-based
+            undefined, // no diffHunk needed for position-based
+            position,
+          );
+
+          onCommentAdded?.(newComment);
+          setActiveOverlay({
+            type: "thread",
+            threadId: newComment.id,
+            target: {
+              lineNumber: newComment.line ?? endLine,
+              startLineNumber:
+                newComment.start_line ??
+                newComment.original_start_line ??
+                (startLine !== endLine ? startLine : undefined),
+              endLineNumber:
+                newComment.line ?? newComment.original_line ?? endLine,
+              side,
+            },
+          });
+          setCommentDraft("");
+        } else {
+          // Fallback to line-based API with diff hunk
+          const diffHunk = getDiffHunkForLine(endLine, side);
+
+          if (!diffHunk) {
+            console.error('Unable to get diff hunk for line', endLine, 'side', side);
+            setCommentError('Cannot comment on this line. Make sure you are in diff view and commenting on a changed line.');
+            setIsSubmittingComment(false);
+            return;
+          }
+
+          console.log('Creating comment with line/hunk:', {
+            path: file.filename,
+            line: endLine,
+            side,
+            startLine: startLine !== endLine ? startLine : undefined,
+            diffHunk: diffHunk.substring(0, 100) + '...'
+          });
+
+          const newComment = await api.createComment(
+            repoOwner,
+            repoName,
+            pullNumber,
+            trimmed,
+            file.filename,
+            endLine,
+            side,
+            startLine !== endLine ? startLine : undefined,
+            startLine !== endLine ? side : undefined,
+            diffHunk,
+          );
+
+          onCommentAdded?.(newComment);
+          setActiveOverlay({
+            type: "thread",
+            threadId: newComment.id,
+            target: {
+              lineNumber: newComment.line ?? endLine,
+              startLineNumber:
+                newComment.start_line ??
+                newComment.original_start_line ??
+                (startLine !== endLine ? startLine : undefined),
+              endLineNumber:
+                newComment.line ?? newComment.original_line ?? endLine,
+              side,
+            },
+          });
+          setCommentDraft("");
+        }
       } else if (activeOverlay.type === "thread") {
         const thread = commentThreads.find(
           (t) => t.id === activeOverlay.threadId,
@@ -914,7 +1166,7 @@ export function DiffEditor({
             className={cn(
               "btn btn-ghost p-1 text-xs",
               showWhitespace &&
-                (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
+              (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
             )}
             title="Toggle whitespace"
           >
@@ -934,10 +1186,10 @@ export function DiffEditor({
               className={cn(
                 "btn btn-ghost px-2 py-1 text-xs flex items-center gap-1",
                 showFullFile &&
-                  (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
+                (theme === "dark" ? "bg-gray-700" : "bg-gray-200"),
                 originalContent === undefined &&
-                  modifiedContent === undefined &&
-                  "opacity-50 cursor-not-allowed",
+                modifiedContent === undefined &&
+                "opacity-50 cursor-not-allowed",
               )}
               disabled={
                 originalContent === undefined && modifiedContent === undefined
@@ -946,8 +1198,8 @@ export function DiffEditor({
                 originalContent === undefined && modifiedContent === undefined
                   ? "Full file content not available"
                   : showFullFile
-                  ? "Show diff"
-                  : "Show full file"
+                    ? "Show diff"
+                    : "Show full file"
               }
             >
               <WholeWord className="w-4 h-4" />
@@ -1043,49 +1295,63 @@ export function DiffEditor({
         {activeOverlay && overlayPosition && (
           <div
             className={cn(
-              "absolute w-[560px] max-w-[560px] rounded-lg shadow-xl border z-20",
+              "absolute rounded-md shadow-lg border z-20 flex flex-col",
               theme === "dark"
                 ? "bg-gray-800 border-gray-700"
                 : "bg-white border-gray-200",
+              resizeMode !== 'none' && "select-none",
             )}
             style={{
               top: overlayPosition.top,
               left: overlayPosition.left,
+              width: `${overlayWidth}px`,
+              height: `${overlayHeight}px`,
+              maxWidth: '90vw',
+              maxHeight: '80vh',
             }}
           >
             <div
               className={cn(
-                "flex items-center justify-between px-4 py-2 border-b",
+                "flex items-center justify-between px-3 py-1.5 border-b",
                 theme === "dark"
                   ? "border-gray-700 text-gray-100"
                   : "border-gray-200 text-gray-800",
               )}
             >
-              <div className="flex flex-col text-xs">
-                <div className="flex items-center gap-2 font-semibold">
-                  <MessageSquare className="w-4 h-4" />
-                  {activeOverlay.type === "thread"
-                    ? "Conversation"
-                    : "Start review comment"}
-                </div>
-                <span
-                  className={cn(
-                    "text-[11px]", 
-                    theme === "dark" ? "text-gray-400" : "text-gray-500",
-                  )}
-                >
-                  {activeOverlay.target.startLineNumber &&
-                  activeOverlay.target.startLineNumber !==
-                    activeOverlay.target.lineNumber ? (
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {canSubmitComments && currentUser && activeOverlay.type === "new" && (
+                  <img
+                    src={currentUser.avatar_url || ""}
+                    alt={currentUser.login || "You"}
+                    className="w-5 h-5 rounded-full flex-shrink-0"
+                  />
+                )}
+                <div className="flex flex-col text-xs min-w-0">
+                  <div className="flex items-center gap-1.5 font-medium text-xs">
+                    <MessageSquare className="w-3 h-3" />
+                    {activeOverlay.type === "thread"
+                      ? "Conversation"
+                      : "Start review comment"}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-[10px] truncate",
+                      theme === "dark" ? "text-gray-400" : "text-gray-500",
+                    )}
+                  >
+                    {activeOverlay.target.startLineNumber &&
+                      activeOverlay.target.startLineNumber !==
+                      activeOverlay.target.lineNumber ? (
                       <>
                         Lines {activeOverlay.target.startLineNumber}–
                         {activeOverlay.target.lineNumber}
                       </>
                     ) : (
-                    <>Line {activeOverlay.target.lineNumber}</>
-                  )}
-                  {activeOverlay.target.side === "LEFT" ? " • base" : " • head"}
-                </span>
+                      <>Line {activeOverlay.target.lineNumber}</>
+                    )}
+                    {activeOverlay.target.side === "LEFT" ? " • base" : " • head"}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={closeOverlay}
@@ -1101,23 +1367,23 @@ export function DiffEditor({
               </button>
             </div>
 
-            <div className="px-4 py-3 space-y-3">
+            <div className="px-3 py-2 flex-1 flex flex-col gap-2 overflow-y-auto min-h-0">
               {activeOverlay.type === "thread" && activeThread && (
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-32 overflow-y-auto pr-1 text-sm">
                   {activeThread.comments.map((comment) => (
-                    <div key={comment.id} className="space-y-1">
+                    <div key={comment.id} className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <img
                           src={comment.user.avatar_url}
                           alt={comment.user.login}
-                          className="w-6 h-6 rounded-full"
+                          className="w-4 h-4 rounded-full"
                         />
-                        <span className="text-sm font-medium">
+                        <span className="text-xs font-medium">
                           {comment.user.login}
                         </span>
                         <span
                           className={cn(
-                            "text-xs",
+                            "text-[10px]",
                             theme === "dark"
                               ? "text-gray-400"
                               : "text-gray-500",
@@ -1130,7 +1396,7 @@ export function DiffEditor({
                       </div>
                       <div
                         className={cn(
-                          "text-sm whitespace-pre-wrap", 
+                          "text-xs whitespace-pre-wrap leading-relaxed",
                           theme === "dark"
                             ? "text-gray-200"
                             : "text-gray-700",
@@ -1170,101 +1436,24 @@ export function DiffEditor({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-start gap-3">
-                    <img
-                      src={currentUser?.avatar_url || ""}
-                      alt={currentUser?.login || "You"}
-                      className="w-8 h-8 rounded-full mt-1"
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <CompactMarkdownEditor
+                      value={commentDraft}
+                      onChange={(newValue) => {
+                        setCommentDraft(newValue);
+                        if (commentError) {
+                          setCommentError(null);
+                        }
+                      }}
+                      placeholder={
+                        activeOverlay.type === "thread"
+                          ? "Reply to this thread..."
+                          : "Leave a comment on this line..."
+                      }
+                      autoFocus
+                      flexible
+                      className="flex-1"
                     />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 text-xs font-medium">
-                          <button
-                            onClick={() => setCommentTab("write")}
-                            className={cn(
-                              "px-3 py-1 rounded-md",
-                              commentTab === "write"
-                                ? theme === "dark"
-                                  ? "bg-gray-700 text-white"
-                                  : "bg-gray-200 text-gray-900"
-                                : theme === "dark"
-                                  ? "text-gray-400 hover:text-gray-200"
-                                  : "text-gray-500 hover:text-gray-800",
-                            )}
-                          >
-                            Write
-                          </button>
-                          <button
-                            onClick={() => setCommentTab("preview")}
-                            className={cn(
-                              "px-3 py-1 rounded-md",
-                              commentTab === "preview"
-                                ? theme === "dark"
-                                  ? "bg-gray-700 text-white"
-                                  : "bg-gray-200 text-gray-900"
-                                : theme === "dark"
-                                  ? "text-gray-400 hover:text-gray-200"
-                                  : "text-gray-500 hover:text-gray-800",
-                            )}
-                          >
-                            Preview
-                          </button>
-                        </div>
-                        <span
-                          className={cn(
-                            "text-xs",
-                            theme === "dark" ? "text-gray-400" : "text-gray-500",
-                          )}
-                        >
-                          Markdown supported
-                        </span>
-                      </div>
-                      {commentTab === "write" ? (
-                        <textarea
-                          value={commentDraft}
-                          onChange={(e) => {
-                            setCommentDraft(e.target.value);
-                            if (commentError) {
-                              setCommentError(null);
-                            }
-                          }}
-                          className="input w-full h-40 resize-none text-sm"
-                          placeholder={
-                            activeOverlay.type === "thread"
-                              ? "Reply to this thread..."
-                              : "Leave a comment on this line..."
-                          }
-                          autoFocus
-                        />
-                      ) : (
-                        <div
-                          className={cn(
-                            "rounded-md border px-3 py-2 text-sm",
-                            theme === "dark"
-                              ? "border-gray-700 bg-gray-900 text-gray-200"
-                              : "border-gray-200 bg-gray-50 text-gray-700",
-                          )}
-                          style={{ minHeight: "10rem" }}
-                        >
-                          {commentDraft.trim() ? (
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {commentDraft}
-                            </ReactMarkdown>
-                          ) : (
-                            <span
-                              className={cn(
-                                "text-sm italic",
-                                theme === "dark"
-                                  ? "text-gray-500"
-                                  : "text-gray-500",
-                              )}
-                            >
-                              Nothing to preview
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {commentError && (
@@ -1274,10 +1463,10 @@ export function DiffEditor({
                     </div>
                   )}
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 pt-1 flex-shrink-0">
                     <button
                       onClick={closeOverlay}
-                      className="btn btn-ghost text-sm"
+                      className="btn btn-ghost text-xs px-3 py-1"
                     >
                       Cancel
                     </button>
@@ -1286,16 +1475,104 @@ export function DiffEditor({
                       disabled={
                         !commentDraft.trim() || isSubmittingComment || !canSubmitComments
                       }
-                      className="btn btn-primary text-sm flex items-center gap-2"
+                      className="btn btn-primary text-xs px-3 py-1 flex items-center gap-1"
                     >
                       {isSubmittingComment && (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-3 h-3 animate-spin" />
                       )}
                       {activeOverlay.type === "thread" ? "Reply" : "Comment"}
                     </button>
                   </div>
                 </>
               )}
+            </div>
+
+            {/* Right edge resize handle */}
+            <div
+              className={cn(
+                "absolute top-0 right-0 w-1 h-full cursor-ew-resize group",
+                "hover:bg-blue-500/30 transition-colors",
+                resizeMode === 'width' && "bg-blue-500/30",
+              )}
+              onMouseDown={handleResizeStart('width')}
+            >
+              <div
+                className={cn(
+                  "absolute right-0 top-1/2 -translate-y-1/2 w-4 h-8 -mr-1.5",
+                  "flex items-center justify-center",
+                  "opacity-0 group-hover:opacity-100 transition-opacity",
+                  resizeMode === 'width' && "opacity-100",
+                )}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <div className={cn(
+                    "w-0.5 h-0.5 rounded-full",
+                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
+                  )} />
+                  <div className={cn(
+                    "w-0.5 h-0.5 rounded-full",
+                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
+                  )} />
+                  <div className={cn(
+                    "w-0.5 h-0.5 rounded-full",
+                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
+                  )} />
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom edge resize handle */}
+            <div
+              className={cn(
+                "absolute bottom-0 left-0 right-0 h-1 cursor-ns-resize group",
+                "hover:bg-blue-500/30 transition-colors",
+                resizeMode === 'height' && "bg-blue-500/30",
+              )}
+              onMouseDown={handleResizeStart('height')}
+            >
+              <div
+                className={cn(
+                  "absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-4 -mb-1.5",
+                  "flex items-center justify-center",
+                  "opacity-0 group-hover:opacity-100 transition-opacity",
+                  resizeMode === 'height' && "opacity-100",
+                )}
+              >
+                <div className="flex gap-0.5">
+                  <div className={cn(
+                    "w-0.5 h-0.5 rounded-full",
+                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
+                  )} />
+                  <div className={cn(
+                    "w-0.5 h-0.5 rounded-full",
+                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
+                  )} />
+                  <div className={cn(
+                    "w-0.5 h-0.5 rounded-full",
+                    theme === "dark" ? "bg-gray-400" : "bg-gray-500",
+                  )} />
+                </div>
+              </div>
+            </div>
+
+            {/* Corner resize handle */}
+            <div
+              className={cn(
+                "absolute bottom-0 right-0 w-3 h-3 cursor-nwse-resize",
+                "hover:bg-blue-500/50 transition-colors",
+                resizeMode === 'both' && "bg-blue-500/50",
+              )}
+              onMouseDown={handleResizeStart('both')}
+            >
+              <div
+                className={cn(
+                  "absolute bottom-0.5 right-0.5 w-2 h-2",
+                  "border-b-2 border-r-2",
+                  theme === "dark" ? "border-gray-400" : "border-gray-500",
+                  "opacity-50 group-hover:opacity-100 transition-opacity",
+                  resizeMode === 'both' && "opacity-100",
+                )}
+              />
             </div>
           </div>
         )}
