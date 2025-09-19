@@ -484,7 +484,7 @@ export class GitHubAPI {
       owner,
       repo,
       state,
-      per_page: 100,
+      per_page: 500,
     });
 
     // Return basic PR data without additional API calls
@@ -552,7 +552,7 @@ export class GitHubAPI {
         owner,
         repo,
         pull_number: pullNumber,
-        per_page: 100,
+        per_page: 500,
       }),
     ]);
 
@@ -638,7 +638,7 @@ export class GitHubAPI {
     const { data } = await this.octokit.repos.listBranches({
       owner,
       repo,
-      per_page: 100,
+      per_page: 500,
     });
 
     // Get additional details for each branch
@@ -712,7 +712,7 @@ export class GitHubAPI {
       owner,
       repo,
       state,
-      per_page: 100,
+      per_page: 500,
     });
 
     // Filter out pull requests - GitHub API returns both issues and PRs from this endpoint
@@ -727,7 +727,7 @@ export class GitHubAPI {
       owner,
       repo,
       pull_number: pullNumber,
-      per_page: 100,
+      per_page: 500,
     });
 
     return data as File[];
@@ -743,13 +743,13 @@ export class GitHubAPI {
         owner,
         repo,
         issue_number: pullNumber,
-        per_page: 100,
+        per_page: 500,
       }),
       this.octokit.pulls.listReviewComments({
         owner,
         repo,
         pull_number: pullNumber,
-        per_page: 100,
+        per_page: 500,
       }),
     ]);
 
@@ -769,7 +769,7 @@ export class GitHubAPI {
       owner,
       repo,
       issue_number: pullNumber,
-      per_page: 100,
+      per_page: 500,
     });
 
     return data as Comment[];
@@ -784,7 +784,7 @@ export class GitHubAPI {
       owner,
       repo,
       pull_number: pullNumber,
-      per_page: 100,
+      per_page: 500,
     });
 
     return data as Comment[];
@@ -973,7 +973,7 @@ export class GitHubAPI {
       owner,
       repo,
       pull_number: pullNumber,
-      per_page: 100,
+      per_page: 500,
     });
 
     return data as Review[];
@@ -1208,7 +1208,7 @@ export class GitHubAPI {
   async searchPullRequests(query: string) {
     const { data } = await this.octokit.search.issuesAndPullRequests({
       q: `${query} type:pr`,
-      per_page: 100,
+      per_page: 500,
     });
 
     return data.items;
