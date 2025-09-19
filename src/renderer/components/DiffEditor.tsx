@@ -19,6 +19,7 @@ import {
   CommentTarget,
   InlineCommentThread,
   ActiveOverlay,
+  PatchMappings,
   parsePatch,
   getLanguageFromFilename,
 } from "./diff/commentUtils";
@@ -83,6 +84,7 @@ export function DiffEditor({
 
   const [patchOriginalContent, setPatchOriginalContent] = useState("");
   const [patchModifiedContent, setPatchModifiedContent] = useState("");
+  const [patchMappings, setPatchMappings] = useState<PatchMappings | null>(null);
   const [showFullFile, setShowFullFile] = useState(false);
   const [diffEditorReady, setDiffEditorReady] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay | null>(null);
@@ -105,16 +107,118 @@ export function DiffEditor({
     setShowFullFile(false);
 
     if (file.patch) {
-      const { original, modified } = parsePatch(file.patch);
+      const { original, modified, mappings } = parsePatch(file.patch);
       setPatchOriginalContent(original);
       setPatchModifiedContent(modified);
+      setPatchMappings(mappings);
     } else {
       setPatchOriginalContent("");
       setPatchModifiedContent("");
+      setPatchMappings(null);
     }
   }, [file.patch, file.filename]);
 
-  const commentThreads = useMemo(() => buildThreads(comments), [comments]);
+  const mapLineForSide = useCallback(
+    (line: number | null | undefined, side: CommentSide): number | null => {
+      if (line === null || line === undefined || line <= 0) {
+        return null;
+      }
+
+      if (showFullFile || !patchMappings) {
+        return line;
+      }
+
+      const mapping =
+        side === "LEFT"
+          ? patchMappings.originalLineToEditorLine
+          : patchMappings.modifiedLineToEditorLine;
+
+      return mapping.get(line) ?? line;
+    },
+    [patchMappings, showFullFile],
+  );
+
+  const mapPositionForSide = useCallback(
+    (position: number | null | undefined, side: CommentSide): number | null => {
+      if (
+        position === null ||
+        position === undefined ||
+        position <= 0 ||
+        showFullFile ||
+        !patchMappings
+      ) {
+        return null;
+      }
+
+      const mapping =
+        side === "LEFT"
+          ? patchMappings.diffPositionToEditorLine.LEFT
+          : patchMappings.diffPositionToEditorLine.RIGHT;
+
+      return mapping.get(position) ?? null;
+    },
+    [patchMappings, showFullFile],
+  );
+
+  const commentThreads = useMemo(() => {
+    const threads = buildThreads(comments);
+
+    return threads
+      .map((thread) => {
+        const rootComment = thread.comments[0];
+        if (!rootComment) {
+          return thread;
+        }
+
+        const side = thread.side;
+
+        const positionLine = mapPositionForSide(
+          side === "LEFT"
+            ? rootComment.original_position ?? null
+            : rootComment.position ?? null,
+          side,
+        );
+
+        const baseLine =
+          side === "LEFT"
+            ? rootComment.original_line ?? rootComment.line ?? null
+            : rootComment.line ?? rootComment.original_line ?? null;
+
+        const mappedThreadLine = mapLineForSide(thread.lineNumber, side);
+        const mappedBaseLine = mapLineForSide(baseLine, side);
+
+        const lineNumber =
+          positionLine ?? mappedThreadLine ?? mappedBaseLine ?? thread.lineNumber;
+
+        const baseStartLine =
+          side === "LEFT"
+            ? rootComment.original_start_line ?? rootComment.start_line ?? null
+            : rootComment.start_line ?? rootComment.original_start_line ?? null;
+
+        const mappedStart = mapLineForSide(
+          thread.startLineNumber ?? baseStartLine ?? null,
+          side,
+        );
+        const mappedEnd = mapLineForSide(
+          thread.endLineNumber ?? baseLine ?? null,
+          side,
+        );
+
+        const startLineNumber = mappedStart ?? lineNumber;
+        const endLineNumber = mappedEnd ?? lineNumber;
+
+        const normalizedStart = Math.min(startLineNumber, endLineNumber);
+        const normalizedEnd = Math.max(startLineNumber, endLineNumber);
+
+        return {
+          ...thread,
+          lineNumber: normalizedEnd,
+          startLineNumber: normalizedStart,
+          endLineNumber: normalizedEnd,
+        };
+      })
+      .sort((a, b) => a.lineNumber - b.lineNumber);
+  }, [comments, mapLineForSide, mapPositionForSide]);
 
   useEffect(() => {
     threadsRef.current = commentThreads;
@@ -607,48 +711,54 @@ export function DiffEditor({
     token && repoOwner && repoName && pullNumber,
   );
 
+  const mapEditorLineToFileLine = useCallback(
+    (editorLine: number | null | undefined, side: CommentSide): number | null => {
+      if (!editorLine || editorLine <= 0) {
+        return null;
+      }
+
+      if (showFullFile || !patchMappings) {
+        return editorLine;
+      }
+
+      if (editorLine > patchMappings.rows.length) {
+        return null;
+      }
+
+      const row = patchMappings.rows[editorLine - 1];
+      const fileLine =
+        side === "LEFT" ? row.originalLineNumber : row.modifiedLineNumber;
+
+      return fileLine ?? null;
+    },
+    [patchMappings, showFullFile],
+  );
+
   // Get the position in the diff for a given editor line
-  const getDiffPositionForEditorLine = useCallback((editorLine: number, side: CommentSide): number | undefined => {
-    if (!file.patch || showFullFile) return undefined;
-
-    const lines = file.patch.split('\n');
-    let position = 0;
-    let currentEditorLine = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Skip headers
-      if (line.startsWith('diff --git') || line.startsWith('index ') ||
-        line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
-        continue;
+  const getDiffPositionForEditorLine = useCallback(
+    (editorLine: number, side: CommentSide): number | undefined => {
+      if (!file.patch || showFullFile) {
+        return undefined;
       }
 
-      // Count diff position
-      position++;
-
-      // Track editor lines based on side
-      if (side === 'RIGHT') {
-        // For RIGHT side, count everything except lines that start with '-'
-        if (!line.startsWith('-')) {
-          currentEditorLine++;
-          if (currentEditorLine === editorLine) {
-            return position;
-          }
-        }
-      } else {
-        // For LEFT side, count everything except lines that start with '+'
-        if (!line.startsWith('+')) {
-          currentEditorLine++;
-          if (currentEditorLine === editorLine) {
-            return position;
-          }
-        }
+      if (!patchMappings) {
+        return undefined;
       }
-    }
 
-    return undefined;
-  }, [file.patch, showFullFile]);
+      if (editorLine <= 0 || editorLine > patchMappings.rows.length) {
+        return undefined;
+      }
+
+      const row = patchMappings.rows[editorLine - 1];
+      const position =
+        side === "LEFT"
+          ? row.originalDiffPosition
+          : row.modifiedDiffPosition;
+
+      return position ?? undefined;
+    },
+    [file.patch, patchMappings, showFullFile],
+  );
 
   // Extract diff hunk for a given line
   const getDiffHunkForLine = useCallback((targetLine: number, side: CommentSide): string | undefined => {
@@ -750,6 +860,10 @@ export function DiffEditor({
           activeOverlay.target;
         const startLine = startLineNumber ?? lineNumber;
         const endLine = endLineNumber ?? lineNumber;
+        const startLineForApi =
+          mapEditorLineToFileLine(startLine, side) ?? startLine;
+        const endLineForApi =
+          mapEditorLineToFileLine(endLine, side) ?? endLine;
 
         // Try to use position-based API first (more reliable for patch view)
         const position = getDiffPositionForEditorLine(endLine, side);
@@ -782,23 +896,19 @@ export function DiffEditor({
             type: "thread",
             threadId: newComment.id,
             target: {
-              lineNumber: newComment.line ?? endLine,
-              startLineNumber:
-                newComment.start_line ??
-                newComment.original_start_line ??
-                (startLine !== endLine ? startLine : undefined),
-              endLineNumber:
-                newComment.line ?? newComment.original_line ?? endLine,
+              lineNumber,
+              startLineNumber: startLineNumber,
+              endLineNumber: endLineNumber,
               side,
             },
           });
           setCommentDraft("");
         } else {
           // Fallback to line-based API with diff hunk
-          const diffHunk = getDiffHunkForLine(endLine, side);
+          const diffHunk = getDiffHunkForLine(endLineForApi, side);
 
           if (!diffHunk) {
-            console.error('Unable to get diff hunk for line', endLine, 'side', side);
+            console.error('Unable to get diff hunk for line', endLineForApi, 'side', side);
             setCommentError('Cannot comment on this line. Make sure you are in diff view and commenting on a changed line.');
             setIsSubmittingComment(false);
             return;
@@ -806,9 +916,9 @@ export function DiffEditor({
 
           console.log('Creating comment with line/hunk:', {
             path: file.filename,
-            line: endLine,
+            line: endLineForApi,
             side,
-            startLine: startLine !== endLine ? startLine : undefined,
+            startLine: startLineForApi !== endLineForApi ? startLineForApi : undefined,
             diffHunk: diffHunk.substring(0, 100) + '...'
           });
 
@@ -818,10 +928,10 @@ export function DiffEditor({
             pullNumber,
             trimmed,
             file.filename,
-            endLine,
+            endLineForApi,
             side,
-            startLine !== endLine ? startLine : undefined,
-            startLine !== endLine ? side : undefined,
+            startLineForApi !== endLineForApi ? startLineForApi : undefined,
+            startLineForApi !== endLineForApi ? side : undefined,
             diffHunk,
           );
 
@@ -830,13 +940,9 @@ export function DiffEditor({
             type: "thread",
             threadId: newComment.id,
             target: {
-              lineNumber: newComment.line ?? endLine,
-              startLineNumber:
-                newComment.start_line ??
-                newComment.original_start_line ??
-                (startLine !== endLine ? startLine : undefined),
-              endLineNumber:
-                newComment.line ?? newComment.original_line ?? endLine,
+              lineNumber,
+              startLineNumber: startLineNumber,
+              endLineNumber: endLineNumber,
               side,
             },
           });
@@ -871,6 +977,9 @@ export function DiffEditor({
     commentDraft,
     commentThreads,
     file.filename,
+    getDiffHunkForLine,
+    getDiffPositionForEditorLine,
+    mapEditorLineToFileLine,
     onCommentAdded,
     pullNumber,
     repoName,

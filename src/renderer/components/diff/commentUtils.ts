@@ -22,6 +22,29 @@ export type ActiveOverlay =
   | { type: "new"; target: CommentTarget }
   | { type: "thread"; target: CommentTarget; threadId: number };
 
+export interface PatchLineMapping {
+  originalLineNumber: number | null;
+  modifiedLineNumber: number | null;
+  originalDiffPosition: number | null;
+  modifiedDiffPosition: number | null;
+}
+
+export interface PatchMappings {
+  rows: PatchLineMapping[];
+  originalLineToEditorLine: Map<number, number>;
+  modifiedLineToEditorLine: Map<number, number>;
+  diffPositionToEditorLine: {
+    LEFT: Map<number, number>;
+    RIGHT: Map<number, number>;
+  };
+}
+
+export interface ParsedPatch {
+  original: string;
+  modified: string;
+  mappings: PatchMappings | null;
+}
+
 export const determineCommentSide = (comment: Comment): CommentSide => {
   if (comment.side === "LEFT" || comment.side === "RIGHT") {
     return comment.side;
@@ -151,118 +174,170 @@ export const getLanguageFromFilename = (filename: string) => {
   return LANGUAGE_MAP[ext || ""] || "plaintext";
 };
 
-export function parsePatch(patch: string) {
+export function parsePatch(patch: string): ParsedPatch {
   if (!patch || patch.trim() === "") {
-    return { original: "", modified: "" };
+    return { original: "", modified: "", mappings: null };
   }
 
   const lines = patch.split("\n");
-  const hunks: Array<{
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-    lines: Array<{ type: "-" | "+" | " "; content: string }>;
-  }> = [];
+  const rows: PatchLineMapping[] = [];
+  const originalLines: string[] = [];
+  const modifiedLines: string[] = [];
 
-  for (let i = 0; i < lines.length; i++) {
+  let currentOriginalLine = 0;
+  let currentModifiedLine = 0;
+  let diffPosition = 0;
+
+  for (let i = 0; i < lines.length; ) {
     const line = lines[i];
+
+    if (
+      line.startsWith("diff --git") ||
+      line.startsWith("index ") ||
+      line.startsWith("---") ||
+      line.startsWith("+++")
+    ) {
+      i++;
+      continue;
+    }
 
     if (line.startsWith("@@")) {
       const match = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
       if (match) {
-        const hunk = {
-          oldStart: parseInt(match[1], 10),
-          oldLines: parseInt(match[2] || "1", 10),
-          newStart: parseInt(match[3], 10),
-          newLines: parseInt(match[4] || "1", 10),
-          lines: [] as Array<{ type: "-" | "+" | " "; content: string }>,
-        };
-
-        i++;
-        while (
-          i < lines.length &&
-          !lines[i].startsWith("@@") &&
-          !lines[i].startsWith("diff --git")
-        ) {
-          const hunkLine = lines[i];
-          if (hunkLine.startsWith("-")) {
-            hunk.lines.push({ type: "-", content: hunkLine.substring(1) });
-          } else if (hunkLine.startsWith("+")) {
-            hunk.lines.push({ type: "+", content: hunkLine.substring(1) });
-          } else if (hunkLine.startsWith(" ")) {
-            hunk.lines.push({ type: " ", content: hunkLine.substring(1) });
-          } else if (
-            hunkLine === "\\No newline at end of file" ||
-            hunkLine === "\\ No newline at end of file"
-          ) {
-            // Ignore
-          } else if (
-            hunkLine.startsWith("---") ||
-            hunkLine.startsWith("+++") ||
-            hunkLine.startsWith("index ")
-          ) {
-            // Skip headers
-          } else if (hunkLine.startsWith("\\")) {
-            // Skip Git markers
-          } else {
-            if (hunkLine.length > 0) {
-              hunk.lines.push({ type: " ", content: hunkLine });
-            }
-          }
-          i++;
-        }
-        i--;
-
-        hunks.push(hunk);
+        currentOriginalLine = parseInt(match[1], 10);
+        currentModifiedLine = parseInt(match[3], 10);
       }
+      i++;
+      continue;
     }
-  }
 
-  if (hunks.length === 0) {
-    return { original: "", modified: "" };
-  }
+    if (
+      line === "\\No newline at end of file" ||
+      line === "\\ No newline at end of file"
+    ) {
+      i++;
+      continue;
+    }
 
-  const originalLines: string[] = [];
-  const modifiedLines: string[] = [];
+    if (line.startsWith(" ")) {
+      diffPosition++;
+      const content = line.substring(1);
+      originalLines.push(content);
+      modifiedLines.push(content);
+      rows.push({
+        originalLineNumber: currentOriginalLine,
+        modifiedLineNumber: currentModifiedLine,
+        originalDiffPosition: diffPosition,
+        modifiedDiffPosition: diffPosition,
+      });
+      currentOriginalLine++;
+      currentModifiedLine++;
+      i++;
+      continue;
+    }
 
-  for (const hunk of hunks) {
-    let i = 0;
-    while (i < hunk.lines.length) {
-      const line = hunk.lines[i];
-
-      if (line.type === " ") {
-        originalLines.push(line.content);
-        modifiedLines.push(line.content);
-        i++;
-      } else if (line.type === "-") {
-        const deletions: string[] = [];
-        while (i < hunk.lines.length && hunk.lines[i].type === "-") {
-          deletions.push(hunk.lines[i].content);
-          i++;
-        }
-
-        const additions: string[] = [];
-        while (i < hunk.lines.length && hunk.lines[i].type === "+") {
-          additions.push(hunk.lines[i].content);
-          i++;
-        }
-
-        const maxLines = Math.max(deletions.length, additions.length);
-        for (let j = 0; j < maxLines; j++) {
-          originalLines.push(deletions[j] || "");
-          modifiedLines.push(additions[j] || "");
-        }
-      } else if (line.type === "+") {
-        originalLines.push("");
-        modifiedLines.push(line.content);
+    if (line.startsWith("-")) {
+      const deletions: Array<{ content: string; lineNumber: number; diffPos: number }> = [];
+      while (i < lines.length && lines[i].startsWith("-")) {
+        diffPosition++;
+        deletions.push({
+          content: lines[i].substring(1),
+          lineNumber: currentOriginalLine,
+          diffPos: diffPosition,
+        });
+        currentOriginalLine++;
         i++;
       }
+
+      const additions: Array<{ content: string; lineNumber: number; diffPos: number }> = [];
+      while (i < lines.length && lines[i].startsWith("+")) {
+        diffPosition++;
+        additions.push({
+          content: lines[i].substring(1),
+          lineNumber: currentModifiedLine,
+          diffPos: diffPosition,
+        });
+        currentModifiedLine++;
+        i++;
+      }
+
+      const maxLines = Math.max(deletions.length, additions.length);
+      for (let j = 0; j < maxLines; j++) {
+        const deletion = deletions[j];
+        const addition = additions[j];
+        originalLines.push(deletion ? deletion.content : "");
+        modifiedLines.push(addition ? addition.content : "");
+        rows.push({
+          originalLineNumber: deletion ? deletion.lineNumber : null,
+          modifiedLineNumber: addition ? addition.lineNumber : null,
+          originalDiffPosition: deletion ? deletion.diffPos : null,
+          modifiedDiffPosition: addition ? addition.diffPos : null,
+        });
+      }
+      continue;
     }
+
+    if (line.startsWith("+")) {
+      diffPosition++;
+      const content = line.substring(1);
+      originalLines.push("");
+      modifiedLines.push(content);
+      rows.push({
+        originalLineNumber: null,
+        modifiedLineNumber: currentModifiedLine,
+        originalDiffPosition: null,
+        modifiedDiffPosition: diffPosition,
+      });
+      currentModifiedLine++;
+      i++;
+      continue;
+    }
+
+    i++;
   }
+
+  if (rows.length === 0) {
+    return {
+      original: originalLines.length > 0 ? originalLines.join("\n") : "",
+      modified: modifiedLines.length > 0 ? modifiedLines.join("\n") : "",
+      mappings: null,
+    };
+  }
+
+  const originalLineToEditorLine = new Map<number, number>();
+  const modifiedLineToEditorLine = new Map<number, number>();
+  const leftDiffPositionToEditorLine = new Map<number, number>();
+  const rightDiffPositionToEditorLine = new Map<number, number>();
+
+  rows.forEach((row, index) => {
+    const editorLine = index + 1;
+    if (row.originalLineNumber !== null) {
+      originalLineToEditorLine.set(row.originalLineNumber, editorLine);
+    }
+    if (row.modifiedLineNumber !== null) {
+      modifiedLineToEditorLine.set(row.modifiedLineNumber, editorLine);
+    }
+    if (row.originalDiffPosition !== null) {
+      leftDiffPositionToEditorLine.set(row.originalDiffPosition, editorLine);
+    }
+    if (row.modifiedDiffPosition !== null) {
+      rightDiffPositionToEditorLine.set(row.modifiedDiffPosition, editorLine);
+    }
+  });
+
+  const mappings: PatchMappings = {
+    rows,
+    originalLineToEditorLine,
+    modifiedLineToEditorLine,
+    diffPositionToEditorLine: {
+      LEFT: leftDiffPositionToEditorLine,
+      RIGHT: rightDiffPositionToEditorLine,
+    },
+  };
 
   return {
     original: originalLines.length > 0 ? originalLines.join("\n") : "",
     modified: modifiedLines.length > 0 ? modifiedLines.join("\n") : "",
+    mappings,
   };
 }
