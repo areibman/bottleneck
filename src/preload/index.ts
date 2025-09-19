@@ -1,84 +1,99 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 
-console.log('Preload script is running!');
+console.log("Preload script is running!");
 
 // Define the API that will be exposed to the renderer process
 const electronAPI = {
   // Authentication
   auth: {
-    login: () => ipcRenderer.invoke('auth:login'),
-    logout: () => ipcRenderer.invoke('auth:logout'),
-    getToken: () => ipcRenderer.invoke('auth:get-token'),
+    login: () => ipcRenderer.invoke("auth:login"),
+    logout: () => ipcRenderer.invoke("auth:logout"),
+    getToken: () => ipcRenderer.invoke("auth:get-token"),
   },
 
   // Database operations
   db: {
-    query: (sql: string, params?: any[]) => ipcRenderer.invoke('db:query', sql, params),
-    execute: (sql: string, params?: any[]) => ipcRenderer.invoke('db:execute', sql, params),
+    query: (sql: string, params?: any[]) =>
+      ipcRenderer.invoke("db:query", sql, params),
+    execute: (sql: string, params?: any[]) =>
+      ipcRenderer.invoke("db:execute", sql, params),
   },
 
   // Git operations
   git: {
-    clone: (repoUrl: string, localPath: string) => ipcRenderer.invoke('git:clone', repoUrl, localPath),
-    checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
-    pull: (repoPath: string) => ipcRenderer.invoke('git:pull', repoPath),
-    fetch: (repoPath: string) => ipcRenderer.invoke('git:fetch', repoPath),
-    getBranches: (repoPath: string) => ipcRenderer.invoke('git:branches', repoPath),
+    clone: (repoUrl: string, localPath: string) =>
+      ipcRenderer.invoke("git:clone", repoUrl, localPath),
+    checkout: (repoPath: string, branch: string) =>
+      ipcRenderer.invoke("git:checkout", repoPath, branch),
+    pull: (repoPath: string) => ipcRenderer.invoke("git:pull", repoPath),
+    fetch: (repoPath: string) => ipcRenderer.invoke("git:fetch", repoPath),
+    getBranches: (repoPath: string) =>
+      ipcRenderer.invoke("git:branches", repoPath),
   },
 
   // App utilities
   app: {
-    selectDirectory: () => ipcRenderer.invoke('app:select-directory'),
-    getVersion: () => ipcRenderer.invoke('app:get-version'),
+    selectDirectory: () => ipcRenderer.invoke("app:select-directory"),
+    getVersion: () => ipcRenderer.invoke("app:get-version"),
+  },
+
+  // Utility functions
+  utils: {
+    fromBase64: (data: string) => ipcRenderer.invoke("utils:fromBase64", data),
   },
 
   // Terminal operations
   terminal: {
-    spawn: (cwd?: string) => ipcRenderer.invoke('terminal:spawn', cwd),
-    write: (data: string) => ipcRenderer.send('terminal:write', data),
-    kill: () => ipcRenderer.invoke('terminal:kill'),
-    resize: (cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', cols, rows),
-    restart: (cwd?: string) => ipcRenderer.invoke('terminal:restart', cwd),
-    health: () => ipcRenderer.invoke('terminal:health'),
+    spawn: (cwd?: string) => ipcRenderer.invoke("terminal:spawn", cwd),
+    write: (data: string) => ipcRenderer.send("terminal:write", data),
+    kill: () => ipcRenderer.invoke("terminal:kill"),
+    resize: (cols: number, rows: number) =>
+      ipcRenderer.invoke("terminal:resize", cols, rows),
+    restart: (cwd?: string) => ipcRenderer.invoke("terminal:restart", cwd),
+    health: () => ipcRenderer.invoke("terminal:health"),
     onData: (callback: (data: string) => void) => {
-      ipcRenderer.on('terminal:data', (_event, data) => callback(data));
+      ipcRenderer.on("terminal:data", (_event, data) => callback(data));
     },
     offData: () => {
-      ipcRenderer.removeAllListeners('terminal:data');
+      ipcRenderer.removeAllListeners("terminal:data");
     },
   },
 
   // Settings operations
   settings: {
-    get: (key?: string) => ipcRenderer.invoke('settings:get', key),
-    set: (key: string, value: any) => ipcRenderer.invoke('settings:set', key, value),
+    get: (key?: string) => ipcRenderer.invoke("settings:get", key),
+    set: (key: string, value: any) =>
+      ipcRenderer.invoke("settings:set", key, value),
   },
 
   // IPC event listeners
-  on: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
+  on: (
+    channel: string,
+    callback: (event: IpcRendererEvent, ...args: any[]) => void,
+  ) => {
     const validChannels = [
-      'open-preferences',
-      'new-draft-pr',
-      'clone-repository',
-      'sync-all',
-      'open-command-palette',
-      'toggle-sidebar',
-      'toggle-right-panel',
-      'go-to-pr',
-      'go-to-file',
-      'next-pr',
-      'previous-pr',
-      'next-file',
-      'previous-file',
-      'next-comment',
-      'previous-comment',
-      'approve-pr',
-      'request-changes',
-      'submit-comment',
-      'mark-file-viewed',
-      'toggle-diff-view',
-      'toggle-whitespace',
-      'show-shortcuts'
+      "open-preferences",
+      "new-draft-pr",
+      "clone-repository",
+      "sync-all",
+      "open-command-palette",
+      "toggle-sidebar",
+      "toggle-right-panel",
+      "go-to-pr",
+      "go-to-file",
+      "next-pr",
+      "previous-pr",
+      "next-file",
+      "previous-file",
+      "next-comment",
+      "previous-comment",
+      "approve-pr",
+      "request-changes",
+      "submit-comment",
+      "mark-file-viewed",
+      "toggle-diff-view",
+      "toggle-whitespace",
+      "show-shortcuts",
     ];
 
     if (validChannels.includes(channel)) {
@@ -86,19 +101,25 @@ const electronAPI = {
     }
   },
 
-  off: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
+  off: (
+    channel: string,
+    callback: (event: IpcRendererEvent, ...args: any[]) => void,
+  ) => {
     ipcRenderer.removeListener(channel, callback);
   },
 
-  once: (channel: string, callback: (event: IpcRendererEvent, ...args: any[]) => void) => {
+  once: (
+    channel: string,
+    callback: (event: IpcRendererEvent, ...args: any[]) => void,
+  ) => {
     ipcRenderer.once(channel, callback);
-  }
+  },
 };
 
 // Expose the API to the renderer process
-contextBridge.exposeInMainWorld('electron', electronAPI);
+contextBridge.exposeInMainWorld("electron", electronAPI);
 
-console.log('Electron API exposed to window.electron');
+console.log("Electron API exposed to window.electron");
 
 // Type definitions for TypeScript
 export type ElectronAPI = typeof electronAPI;

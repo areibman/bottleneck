@@ -1,18 +1,18 @@
-import { BrowserWindow, shell, dialog } from 'electron';
-import Store from 'electron-store';
-import { Octokit } from '@octokit/rest';
+import { BrowserWindow, shell, dialog } from "electron";
+import Store from "electron-store";
+import { Octokit } from "@octokit/rest";
 
 interface AuthToken {
   token: string;
   expiresAt?: string;
   refreshToken?: string;
   refreshTokenExpiresAt?: string;
-  type?: 'oauth' | 'pat';
+  type?: "oauth" | "pat";
 }
 
 export class GitHubAuth {
   private store: Store;
-  
+
   constructor(store: Store) {
     this.store = store;
   }
@@ -27,8 +27,8 @@ export class GitHubAuth {
         await octokit.users.getAuthenticated();
         return existingToken;
       } catch (error) {
-        console.log('Stored token is invalid, requesting new token');
-        this.store.delete('github_auth');
+        console.log("Stored token is invalid, requesting new token");
+        this.store.delete("github_auth");
       }
     }
 
@@ -38,21 +38,24 @@ export class GitHubAuth {
 
   private async personalAccessTokenAuth(): Promise<string> {
     const result = await dialog.showMessageBox({
-      type: 'question',
-      buttons: ['Enter Token', 'Create Token', 'Cancel'],
+      type: "question",
+      buttons: ["Enter Token", "Create Token", "Cancel"],
       defaultId: 0,
-      title: 'GitHub Authentication',
-      message: 'GitHub Personal Access Token Required',
-      detail: 'To use Bottleneck, you need a GitHub Personal Access Token with the following scopes:\n\n• repo (Full control of private repositories)\n• read:org (Read organization data)\n• read:user (Read user profile data)\n\nClick "Create Token" to open GitHub and create one, or "Enter Token" if you already have one.',
+      title: "GitHub Authentication",
+      message: "GitHub Personal Access Token Required",
+      detail:
+        'To use Bottleneck, you need a GitHub Personal Access Token with the following scopes:\n\n• repo (Full control of private repositories)\n• read:org (Read organization data)\n• read:user (Read user profile data)\n\nClick "Create Token" to open GitHub and create one, or "Enter Token" if you already have one.',
     });
 
     if (result.response === 2) {
-      throw new Error('Authentication cancelled');
+      throw new Error("Authentication cancelled");
     }
 
     if (result.response === 1) {
       // Open GitHub token creation page
-      shell.openExternal('https://github.com/settings/tokens/new?description=Bottleneck%20App&scopes=repo,read:org,read:user,workflow');
+      shell.openExternal(
+        "https://github.com/settings/tokens/new?description=Bottleneck%20App&scopes=repo,read:org,read:user,workflow",
+      );
     }
 
     // Show input dialog for token
@@ -70,29 +73,55 @@ export class GitHubAuth {
     });
 
     const tokenPromise = new Promise<string>((resolve, reject) => {
-      const { ipcMain } = require('electron');
-      
-      ipcMain.once('token-submitted', (_event: any, token: string) => {
+      const { ipcMain } = require("electron");
+      let isResolved = false;
+
+      const handleTokenSubmit = (_event: any, token: string) => {
+        if (isResolved) return;
+
         if (token && token.trim()) {
+          isResolved = true;
           resolve(token.trim());
         } else {
-          reject(new Error('No token provided'));
+          isResolved = true;
+          reject(new Error("No token provided"));
         }
-        tokenWindow.close();
-      });
 
-      ipcMain.once('token-cancelled', () => {
-        reject(new Error('Authentication cancelled'));
-        tokenWindow.close();
-      });
+        if (!tokenWindow.isDestroyed()) {
+          tokenWindow.close();
+        }
+      };
 
-      tokenWindow.on('closed', () => {
-        reject(new Error('Authentication window closed'));
+      const handleTokenCancel = () => {
+        if (isResolved) return;
+
+        isResolved = true;
+        reject(new Error("Authentication cancelled"));
+
+        if (!tokenWindow.isDestroyed()) {
+          tokenWindow.close();
+        }
+      };
+
+      ipcMain.once("token-submitted", handleTokenSubmit);
+      ipcMain.once("token-cancelled", handleTokenCancel);
+
+      tokenWindow.on("closed", () => {
+        // Clean up IPC listeners
+        ipcMain.removeListener("token-submitted", handleTokenSubmit);
+        ipcMain.removeListener("token-cancelled", handleTokenCancel);
+
+        // Only reject if we haven't already resolved/rejected
+        if (!isResolved) {
+          isResolved = true;
+          reject(new Error("Authentication window closed"));
+        }
       });
     });
 
     // Load token input HTML
-    tokenWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+    tokenWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(`
       <!DOCTYPE html>
       <html>
         <head>
@@ -203,7 +232,8 @@ export class GitHubAuth {
           </script>
         </body>
       </html>
-    `)}`);
+    `)}`,
+    );
 
     const token = await tokenPromise;
 
@@ -211,28 +241,28 @@ export class GitHubAuth {
     try {
       const octokit = new Octokit({ auth: token });
       const { data: user } = await octokit.users.getAuthenticated();
-      
+
       // Store the token
       const authToken: AuthToken = {
         token,
-        type: 'pat'
+        type: "pat",
       };
-      
-      this.store.set('github_auth', authToken);
-      
+
+      this.store.set("github_auth", authToken);
+
       // Show success message
       dialog.showMessageBox({
-        type: 'info',
-        title: 'Authentication Successful',
+        type: "info",
+        title: "Authentication Successful",
         message: `Successfully authenticated as ${user.login}`,
-        buttons: ['OK']
+        buttons: ["OK"],
       });
-      
+
       return token;
     } catch (error) {
       dialog.showErrorBox(
-        'Invalid Token',
-        'The provided token is invalid or doesn\'t have the required permissions. Please ensure your token has repo, read:org, and read:user scopes.'
+        "Invalid Token",
+        "The provided token is invalid or doesn't have the required permissions. Please ensure your token has repo, read:org, and read:user scopes.",
       );
       throw error;
     }
@@ -262,8 +292,8 @@ export class GitHubAuth {
   // }
 
   async getToken(): Promise<string | null> {
-    const auth = this.store.get('github_auth') as AuthToken | undefined;
-    
+    const auth = this.store.get("github_auth") as AuthToken | undefined;
+
     if (!auth) {
       return null;
     }
@@ -275,7 +305,7 @@ export class GitHubAuth {
         try {
           return await this.refreshToken(auth.refreshToken);
         } catch (error) {
-          console.error('Failed to refresh token:', error);
+          console.error("Failed to refresh token:", error);
           return null;
         }
       }
@@ -288,11 +318,11 @@ export class GitHubAuth {
   private async refreshToken(_refreshToken: string): Promise<string> {
     // This would need to be implemented with your OAuth app's refresh endpoint
     // For now, return null to trigger re-authentication
-    throw new Error('Token refresh not implemented');
+    throw new Error("Token refresh not implemented");
   }
 
   async logout(): Promise<void> {
-    this.store.delete('github_auth');
+    this.store.delete("github_auth");
   }
 
   isAuthenticated(): boolean {

@@ -1,6 +1,6 @@
-import { useRef, useCallback, memo } from 'react';
-import { cn } from '../utils/cn';
-import { useUIStore } from '../stores/uiStore';
+import { useRef, useCallback, memo } from "react";
+import { cn } from "../utils/cn";
+import { useUIStore } from "../stores/uiStore";
 
 interface SimpleMarkdownEditorProps {
   value: string;
@@ -15,68 +15,91 @@ interface SimpleMarkdownEditorProps {
 export const SimpleMarkdownEditor = memo(function SimpleMarkdownEditor({
   value,
   onChange,
-  placeholder = 'Write your comment here... (Markdown supported)',
-  minHeight = '120px',
+  placeholder = "Write your comment here... (Markdown supported)",
+  minHeight = "120px",
   autoFocus = false,
-  className
+  className,
 }: SimpleMarkdownEditorProps) {
   const { theme } = useUIStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   // Direct handler, no debouncing, no local state
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value);
-  }, [onChange]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      onChange(e.target.value);
+    },
+    [onChange],
+  );
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
 
-    // Tab for indentation
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newValue = value.substring(0, start) + '  ' + value.substring(end);
-      onChange(newValue);
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 2;
-      }, 0);
-    }
-    
-    // Cmd/Ctrl + B for bold
-    if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-      e.preventDefault();
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const selectedText = value.substring(start, end);
-      const newValue = value.substring(0, start) + '**' + selectedText + '**' + value.substring(end);
-      onChange(newValue);
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 2 + selectedText.length;
-      }, 0);
-    }
-    
-    // Cmd/Ctrl + I for italic
-    if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
-      e.preventDefault();
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const selectedText = value.substring(start, end);
-      const newValue = value.substring(0, start) + '*' + selectedText + '*' + value.substring(end);
-      onChange(newValue);
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 1 + selectedText.length;
-      }, 0);
-    }
-  }, [value, onChange]);
+      // Tab for indentation
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const newValue =
+          value.substring(0, start) + "  " + value.substring(end);
+        onChange(newValue);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + 2;
+        }, 0);
+      }
+
+      // Cmd/Ctrl + B for bold
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selectedText = value.substring(start, end);
+        const newValue =
+          value.substring(0, start) +
+          "**" +
+          selectedText +
+          "**" +
+          value.substring(end);
+        onChange(newValue);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd =
+            start + 2 + selectedText.length;
+        }, 0);
+      }
+
+      // Cmd/Ctrl + I for italic
+      if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selectedText = value.substring(start, end);
+        const newValue =
+          value.substring(0, start) +
+          "*" +
+          selectedText +
+          "*" +
+          value.substring(end);
+        onChange(newValue);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd =
+            start + 1 + selectedText.length;
+        }, 0);
+      }
+    },
+    [value, onChange],
+  );
 
   return (
-    <div className={cn(
-      "rounded-lg border overflow-hidden",
-      theme === 'dark' ? "bg-gray-900 border-gray-700" : "bg-white border-gray-300",
-      className
-    )}>
+    <div
+      className={cn(
+        "rounded-lg border overflow-hidden",
+        theme === "dark"
+          ? "bg-gray-900 border-gray-700"
+          : "bg-white border-gray-300",
+        className,
+      )}
+    >
       <textarea
         ref={textareaRef}
         value={value}
@@ -86,19 +109,23 @@ export const SimpleMarkdownEditor = memo(function SimpleMarkdownEditor({
         autoFocus={autoFocus}
         className={cn(
           "w-full p-4 resize-vertical focus:outline-none font-mono text-sm",
-          theme === 'dark'
+          theme === "dark"
             ? "bg-gray-900 text-gray-100 placeholder-gray-500"
-            : "bg-white text-gray-900 placeholder-gray-400"
+            : "bg-white text-gray-900 placeholder-gray-400",
         )}
         style={{ minHeight }}
       />
-      <div className={cn(
-        "px-3 py-1 text-xs border-t",
-        theme === 'dark' 
-          ? "bg-gray-800 border-gray-700 text-gray-500" 
-          : "bg-gray-50 border-gray-200 text-gray-400"
-      )}>
-        <span>Markdown supported • Cmd+B bold • Cmd+I italic • Tab to indent</span>
+      <div
+        className={cn(
+          "px-3 py-1 text-xs border-t",
+          theme === "dark"
+            ? "bg-gray-800 border-gray-700 text-gray-500"
+            : "bg-gray-50 border-gray-200 text-gray-400",
+        )}
+      >
+        <span>
+          Markdown supported • Cmd+B bold • Cmd+I italic • Tab to indent
+        </span>
       </div>
     </div>
   );

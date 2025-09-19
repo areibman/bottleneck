@@ -1,132 +1,573 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { DiffEditor } from "../components/DiffEditor";
+import { ConversationTab } from "../components/ConversationTab";
+import { useAuthStore } from "../stores/authStore";
+import { usePRStore } from "../stores/prStore";
 import {
-  ArrowLeft,
-  GitPullRequest,
-  GitMerge,
-  X,
-  Check,
-  MessageSquare,
-  Eye,
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  Minus,
-  FileDiff,
-  Terminal
-} from 'lucide-react';
-import { DiffEditor } from '../components/DiffEditor';
-import { ConversationTab } from '../components/ConversationTab';
-import { useAuthStore } from '../stores/authStore';
-import { GitHubAPI, PullRequest, File, Comment, Review } from '../services/github';
-import { formatDistanceToNow } from 'date-fns';
-import { cn } from '../utils/cn';
-import { mockPullRequests, mockFiles, mockComments, mockReviews } from '../mockData';
-import { useUIStore } from '../stores/uiStore';
+  GitHubAPI,
+  PullRequest,
+  File,
+  Comment,
+  Review,
+  ReviewThread,
+} from "../services/github";
+import { cn } from "../utils/cn";
+import {
+  mockPullRequests,
+  mockFiles,
+  mockComments,
+  mockReviews,
+  mockReviewComments,
+  mockReviewThreads,
+} from "../mockData";
+import { useUIStore } from "../stores/uiStore";
+
+// Import new components
+import {
+  PRHeader,
+  PRTabs,
+  CommentsTab,
+  FileTree,
+  MergeConfirmDialog,
+  RequestChangesDialog,
+  usePRNavigation,
+} from "../components/pr-detail";
 
 export default function PRDetailView() {
-  const { owner, repo, number } = useParams<{ owner: string; repo: string; number: string }>();
-  const navigate = useNavigate();
+  const { owner, repo, number } = useParams<{
+    owner: string;
+    repo: string;
+    number: string;
+  }>();
   const { token } = useAuthStore();
   const { theme } = useUIStore();
-  
-  const [activeTab, setActiveTab] = useState<'conversation' | 'files'>('files');
+  const { updatePR } = usePRStore();
+
+  // Use the navigation hook
+  const { navigationState, fetchSiblingPRs } = usePRNavigation(
+    owner,
+    repo,
+    number,
+  );
+
+  const [activeTab, setActiveTab] = useState<"conversation" | "files" | "comments">(
+    "files",
+  );
   const [pr, setPR] = useState<PullRequest | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [reviewComments, setReviewComments] = useState<Comment[]>([]);
+  const [reviewThreads, setReviewThreads] = useState<ReviewThread[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set());
+  const [fileContent, setFileContent] = useState<{
+    original: string;
+    modified: string;
+  } | null>(null);
+  const [fileListWidth, setFileListWidth] = useState(300);
+  const [isResizing, setIsResizing] = useState(false);
+  const fileListRef = useRef<HTMLDivElement>(null);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeMethod, setMergeMethod] = useState<"merge" | "squash" | "rebase">(
+    "merge",
+  );
+  const [currentUser, setCurrentUser] = useState<{
+    login: string;
+    avatar_url?: string;
+  } | null>(null);
+  const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
+  const [requestChangesFeedback, setRequestChangesFeedback] = useState("");
+  const [isTogglingDraft, setIsTogglingDraft] = useState(false);
 
   useEffect(() => {
     // Load data even without token if in dev mode
     if (!window.electron || (owner && repo && number)) {
       loadPRData();
     }
+
+    // Load current user if we have a token
+    if (token) {
+      const api = new GitHubAPI(token);
+      api
+        .getCurrentUser()
+        .then((user) => {
+          setCurrentUser(user);
+        })
+        .catch((err) => {
+          console.error("Failed to get current user:", err);
+        });
+    }
   }, [owner, repo, number, token]);
+
+  useEffect(() => {
+    if (files.length > 0 && !selectedFile) {
+      handleFileSelect(files[0]);
+    }
+  }, [files, selectedFile]);
+
+  const handleFileSelect = async (file: File) => {
+    setSelectedFile(file);
+    setFileContent(null);
+
+    if (token && owner && repo && pr) {
+      try {
+        const api = new GitHubAPI(token);
+        const [original, modified] = await Promise.all([
+          file.status === "added"
+            ? Promise.resolve("")
+            : api.getFileContent(owner, repo, file.filename, pr.base.sha),
+          file.status === "removed"
+            ? Promise.resolve("")
+            : api.getFileContent(owner, repo, file.filename, pr.head.sha),
+        ]);
+        setFileContent({ original, modified });
+      } catch (error) {
+        console.error("Failed to fetch file content:", error);
+        // Fallback to patch if content fetch fails
+        setFileContent(null);
+      }
+    }
+  };
 
   const loadPRData = async () => {
     setLoading(true);
-    
+
     try {
       // Use mock data if Electron API is not available
       if (!window.electron || !token) {
-        const prNumber = parseInt(number || '0');
-        const mockPR = mockPullRequests.find(pr => pr.number === prNumber) || mockPullRequests[0];
-        
+        const prNumber = parseInt(number || "0");
+        const mockPR =
+          mockPullRequests.find((pr) => pr.number === prNumber) ||
+          mockPullRequests[0];
+
         setPR(mockPR as any);
         setFiles(mockFiles as any);
         setComments(mockComments as any);
         setReviews(mockReviews as any);
-        
+        setReviewComments(mockReviewComments as any);
+        setReviewThreads(mockReviewThreads as any);
+
         if (mockFiles.length > 0) {
           setSelectedFile(mockFiles[0] as any);
         }
       } else if (token && owner && repo && number) {
         const api = new GitHubAPI(token);
         const prNumber = parseInt(number);
-        
-        const [prData, filesData, commentsData, reviewsData] = await Promise.all([
-          api.getPullRequest(owner, repo, prNumber),
-          api.getPullRequestFiles(owner, repo, prNumber),
-          api.getPullRequestComments(owner, repo, prNumber),
-          api.getPullRequestReviews(owner, repo, prNumber),
-        ]);
-        
+
+        const [
+          prData,
+          filesData,
+          commentsData,
+          reviewsData,
+          reviewCommentsData,
+          reviewThreadsData,
+        ] =
+          await Promise.all([
+            api.getPullRequest(owner, repo, prNumber),
+            api.getPullRequestFiles(owner, repo, prNumber),
+            api.getPullRequestConversationComments(owner, repo, prNumber),
+            api.getPullRequestReviews(owner, repo, prNumber),
+            api.getPullRequestReviewComments(owner, repo, prNumber),
+            api.getPullRequestReviewThreads(owner, repo, prNumber),
+          ]);
+
         setPR(prData);
         setFiles(filesData);
         setComments(commentsData);
         setReviews(reviewsData);
-        
-        // Auto-select first file
-        if (filesData.length > 0) {
-          setSelectedFile(filesData[0]);
+        setReviewComments(reviewCommentsData);
+        setReviewThreads(reviewThreadsData);
+
+        // If we don't have navigation state yet, try to fetch sibling PRs
+        if (!navigationState?.siblingPRs) {
+          fetchSiblingPRs(prData);
         }
       }
     } catch (error) {
-      console.error('Failed to load PR data:', error);
+      console.error("Failed to load PR data:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCheckout = async () => {
-    if (!pr) return;
-    
-    if (window.electron) {
-      const localPath = await window.electron.app.selectDirectory();
-      if (localPath) {
-        await window.electron.git.checkout(localPath, pr.head.ref);
+  const resolveRepoContext = () => {
+    const repoOwner = owner || pr?.base.repo.owner.login;
+    const repoName = repo || pr?.base.repo.name;
+    const pullNumber = pr?.number ?? parseInt(number || "0", 10);
+
+    if (!repoOwner || !repoName || !pullNumber) {
+      throw new Error("Missing pull request context");
+    }
+
+    return { repoOwner, repoName, pullNumber };
+  };
+
+  const handleThreadReply = async (
+    _threadId: string,
+    commentId: number,
+    body: string,
+  ) => {
+    if (!token) {
+      throw new Error("Sign in with GitHub to reply to review comments.");
+    }
+
+    const { repoOwner, repoName, pullNumber } = resolveRepoContext();
+    const api = new GitHubAPI(token);
+
+    await api.replyToReviewComment(
+      repoOwner,
+      repoName,
+      pullNumber,
+      commentId,
+      body,
+    );
+
+    await loadPRData();
+  };
+
+  const handleThreadResolve = async (threadId: string) => {
+    if (!token) {
+      throw new Error("Sign in with GitHub to resolve review comments.");
+    }
+
+    const { repoOwner, repoName, pullNumber } = resolveRepoContext();
+    const api = new GitHubAPI(token);
+
+    const updated = await api.updateReviewThreadResolution(
+      repoOwner,
+      repoName,
+      pullNumber,
+      threadId,
+      true,
+    );
+
+    setReviewThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === threadId
+          ? {
+            ...thread,
+            state: updated.state,
+          }
+          : thread,
+      ),
+    );
+  };
+
+  const handleApprove = async () => {
+    if (!pr || !token || !owner || !repo || !currentUser) return;
+
+    setIsApproving(true);
+
+    // Optimistically update the PR state immediately
+    const updatedPR = {
+      ...pr,
+      approvalStatus: "approved" as const,
+      approvedBy: [
+        ...(pr.approvedBy || []),
+        { login: currentUser.login, avatar_url: currentUser.avatar_url || "" },
+      ],
+      // Remove from changes requested if present
+      changesRequestedBy:
+        pr.changesRequestedBy?.filter((r) => r.login !== currentUser.login) ||
+        [],
+    };
+    setPR(updatedPR);
+
+    try {
+      const api = new GitHubAPI(token);
+
+      // Create approval review
+      await api.createReview(
+        owner,
+        repo,
+        pr.number,
+        "", // Empty body for simple approval
+        "APPROVE",
+      );
+
+      // Reload PR data to get the actual server state
+      await loadPRData();
+
+      // Update the PR in the global store
+      if (pr) {
+        updatePR(updatedPR);
       }
-    } else {
-      console.log('Checkout not available in dev mode');
+
+      console.log("Successfully approved PR #" + pr.number);
+    } catch (error: any) {
+      console.error("Failed to approve PR:", error);
+
+      // Revert the optimistic update on error
+      setPR(pr);
+
+      // Provide more detailed error message
+      let errorMessage = "Failed to approve pull request.";
+
+      if (error?.response?.status === 422) {
+        errorMessage =
+          "Unable to approve: You may have already reviewed this PR, or you cannot approve your own pull request.";
+      } else if (error?.response?.status === 403) {
+        errorMessage =
+          "You do not have permission to approve this pull request.";
+      } else if (error?.response?.data?.message) {
+        errorMessage = `Failed to approve: ${error.response.data.message}`;
+      } else if (error?.message) {
+        errorMessage = `Failed to approve: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsApproving(false);
     }
   };
 
-  const toggleFileExpanded = (filename: string) => {
-    const newExpanded = new Set(expandedFiles);
-    if (newExpanded.has(filename)) {
-      newExpanded.delete(filename);
-    } else {
-      newExpanded.add(filename);
-    }
-    setExpandedFiles(newExpanded);
+  const handleRequestChanges = async () => {
+    if (!pr || !token || !owner || !repo) return;
+    setShowRequestChangesModal(true);
   };
 
-  const markFileViewed = (filename: string) => {
+  const submitRequestChanges = async () => {
+    if (
+      !pr ||
+      !token ||
+      !owner ||
+      !repo ||
+      !requestChangesFeedback.trim() ||
+      !currentUser
+    ) {
+      return;
+    }
+
+    setIsApproving(true);
+    setShowRequestChangesModal(false);
+
+    // Optimistically update the PR state immediately
+    const updatedPR = {
+      ...pr,
+      approvalStatus: "changes_requested" as const,
+      changesRequestedBy: [
+        ...(pr.changesRequestedBy || []),
+        { login: currentUser.login, avatar_url: currentUser.avatar_url || "" },
+      ],
+      // Remove from approved if present
+      approvedBy:
+        pr.approvedBy?.filter((r) => r.login !== currentUser.login) || [],
+    };
+    setPR(updatedPR);
+
+    try {
+      const api = new GitHubAPI(token);
+
+      // Create review requesting changes
+      await api.createReview(
+        owner,
+        repo,
+        pr.number,
+        requestChangesFeedback,
+        "REQUEST_CHANGES",
+      );
+
+      // Clear the feedback for next time
+      setRequestChangesFeedback("");
+
+      // Reload PR data to get the actual server state
+      await loadPRData();
+
+      // Update the PR in the global store
+      if (pr) {
+        updatePR(updatedPR);
+      }
+
+      console.log("Successfully requested changes for PR #" + pr.number);
+    } catch (error: any) {
+      console.error("Failed to request changes:", error);
+
+      // Revert the optimistic update on error
+      setPR(pr);
+
+      let errorMessage = "Failed to request changes.";
+
+      if (error?.response?.status === 422) {
+        errorMessage =
+          "Unable to request changes: You may have already reviewed this PR, or you cannot review your own pull request.";
+      } else if (error?.response?.status === 403) {
+        errorMessage =
+          "You do not have permission to review this pull request.";
+      } else if (error?.response?.data?.message) {
+        errorMessage = `Failed to request changes: ${error.response.data.message}`;
+      } else if (error?.message) {
+        errorMessage = `Failed to request changes: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleMerge = async () => {
+    if (!pr || !token || !owner || !repo) return;
+
+    setIsMerging(true);
+    try {
+      const api = new GitHubAPI(token);
+      await api.mergePullRequest(
+        owner,
+        repo,
+        pr.number,
+        mergeMethod,
+        pr.title,
+        pr.body || undefined,
+      );
+
+      setShowMergeConfirm(false);
+      // Reload PR data to reflect the merge
+      await loadPRData();
+    } catch (error) {
+      console.error("Failed to merge PR:", error);
+      alert(
+        "Failed to merge pull request. Please check if the PR is mergeable and try again.",
+      );
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const handleToggleDraft = async () => {
+    if (!pr || !token || !owner || !repo || !currentUser) return;
+
+    // Check if user is the PR author
+    if (pr.user.login !== currentUser.login) {
+      alert("Only the pull request author can change the draft status.");
+      return;
+    }
+
+    // Store the current draft state before any changes
+    const currentDraftState = pr.draft;
+    const targetDraftState = !currentDraftState;
+
+    console.log("Toggling draft status:", {
+      current: currentDraftState,
+      target: targetDraftState,
+      prNumber: pr.number
+    });
+
+    setIsTogglingDraft(true);
+
+    // Optimistically update the PR state
+    const updatedPR = {
+      ...pr,
+      draft: targetDraftState,
+    };
+    setPR(updatedPR);
+
+    try {
+      const api = new GitHubAPI(token);
+      const newPR = await api.updatePullRequestDraft(
+        owner,
+        repo,
+        pr.number,
+        targetDraftState,
+      );
+
+      // Update the PR state with the new data from the server
+      setPR(newPR);
+
+      // Update the PR in the global store so the PR list view reflects the change
+      updatePR(newPR);
+
+      console.log(
+        `Successfully ${targetDraftState ? "converted to draft" : "marked as ready for review"} PR #${pr.number}`,
+      );
+      console.log("Updated PR draft status:", {
+        oldDraft: currentDraftState,
+        newDraft: newPR.draft,
+        expectedDraft: targetDraftState
+      });
+    } catch (error: any) {
+      console.error("Failed to toggle draft status:", error);
+
+      // Revert the optimistic update on error
+      setPR(pr);
+
+      let errorMessage = "Failed to update pull request draft status.";
+
+      if (error?.response?.status === 403) {
+        errorMessage =
+          "You do not have permission to change the draft status of this pull request.";
+      } else if (error?.response?.data?.message) {
+        errorMessage = `Failed to update: ${error.response.data.message}`;
+      } else if (error?.message) {
+        errorMessage = `Failed to update: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsTogglingDraft(false);
+    }
+  };
+
+  const toggleFileViewed = (filename: string) => {
     const newViewed = new Set(viewedFiles);
-    newViewed.add(filename);
+    if (newViewed.has(filename)) {
+      newViewed.delete(filename);
+    } else {
+      newViewed.add(filename);
+    }
     setViewedFiles(newViewed);
   };
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const newWidth =
+        e.clientX - (fileListRef.current?.getBoundingClientRect().left || 0);
+      if (newWidth >= 200 && newWidth <= 600) {
+        setFileListWidth(newWidth);
+      }
+    },
+    [isResizing],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className={cn(
-          theme === 'dark' ? "text-gray-400" : "text-gray-600"
-        )}>Loading pull request...</div>
+        <div
+          className={cn(theme === "dark" ? "text-gray-400" : "text-gray-600")}
+        >
+          Loading pull request...
+        </div>
       </div>
     );
   }
@@ -134,9 +575,11 @@ export default function PRDetailView() {
   if (!pr) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className={cn(
-          theme === 'dark' ? "text-gray-400" : "text-gray-600"
-        )}>Pull request not found</div>
+        <div
+          className={cn(theme === "dark" ? "text-gray-400" : "text-gray-600")}
+        >
+          Pull request not found
+        </div>
       </div>
     );
   }
@@ -147,212 +590,121 @@ export default function PRDetailView() {
       deletions: acc.deletions + file.deletions,
       changed: acc.changed + 1,
     }),
-    { additions: 0, deletions: 0, changed: 0 }
+    { additions: 0, deletions: 0, changed: 0 },
   );
+
+  const openReviewThreads = reviewThreads.filter(
+    (thread) => thread.state !== "resolved",
+  );
+  const canReplyToThreads = Boolean(token);
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className={cn(
-        "p-4 border-b",
-        theme === 'dark' 
-          ? "bg-gray-800 border-gray-700" 
-          : "bg-gray-50 border-gray-200"
-      )}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => navigate('/pulls')}
-              className={cn(
-                "p-1 rounded transition-colors",
-                theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
-              )}
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            
-            <div className="flex items-center space-x-2">
-              {pr.draft ? (
-                <div className="w-5 h-5 rounded-full bg-gray-600" title="Draft" />
-              ) : pr.merged ? (
-                <GitMerge className="w-5 h-5 text-purple-400" title="Merged" />
-              ) : pr.state === 'open' ? (
-                <GitPullRequest className="w-5 h-5 text-green-400" title="Open" />
-              ) : (
-                <X className="w-5 h-5 text-red-400" title="Closed" />
-              )}
-              
-              <h1 className="text-lg font-semibold">
-                {pr.title}
-                <span className={cn(
-                  "ml-2 text-sm",
-                  theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                )}>#{pr.number}</span>
-              </h1>
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleCheckout}
-              className="btn btn-secondary text-sm"
-            >
-              <Terminal className="w-4 h-4 mr-1" />
-              Checkout
-            </button>
-            
-            {pr.state === 'open' && !pr.merged && (
-              <>
-                <button className="btn btn-success text-sm">
-                  <Check className="w-4 h-4 mr-1" />
-                  Approve
-                </button>
-                <button className="btn btn-primary text-sm">
-                  <GitMerge className="w-4 h-4 mr-1" />
-                  Merge
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        
-        {/* PR Info */}
-        <div className={cn(
-          "flex items-center space-x-4 text-sm",
-          theme === 'dark' ? "text-gray-400" : "text-gray-600"
-        )}>
-          <div className="flex items-center space-x-2">
-            <img
-              src={pr.user.avatar_url}
-              alt={pr.user.login}
-              className="w-5 h-5 rounded-full"
-            />
-            <span>{pr.user.login}</span>
-          </div>
-          
-          <span>wants to merge {pr.head.ref} into {pr.base.ref}</span>
-          
-          <span>
-            {formatDistanceToNow(new Date(pr.created_at), { addSuffix: true })}
-          </span>
-          
-          <div className="flex items-center space-x-2">
-            <span className="text-green-400">+{fileStats.additions}</span>
-            <span className="text-red-400">-{fileStats.deletions}</span>
-            <span>{fileStats.changed} files</span>
-          </div>
-        </div>
-      </div>
+      <PRHeader
+        pr={pr}
+        theme={theme}
+        fileStats={fileStats}
+        currentUser={currentUser}
+        isApproving={isApproving}
+        onApprove={handleApprove}
+        onRequestChanges={handleRequestChanges}
+        onMerge={() => setShowMergeConfirm(true)}
+        onToggleDraft={handleToggleDraft}
+        isTogglingDraft={isTogglingDraft}
+      />
 
       {/* Tabs */}
-      <div className={cn(
-        "flex border-b",
-        theme === 'dark' ? "border-gray-700" : "border-gray-200"
-      )}>
-        <button
-          onClick={() => setActiveTab('conversation')}
-          className={cn('tab', activeTab === 'conversation' && 'active')}
-        >
-          <MessageSquare className="w-4 h-4 mr-1" />
-          Conversation
-          <span className={cn(
-            "ml-2 px-1.5 py-0.5 rounded text-xs",
-            theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
-          )}>
-            {comments.length + reviews.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('files')}
-          className={cn('tab', activeTab === 'files' && 'active')}
-        >
-          <FileDiff className="w-4 h-4 mr-1" />
-          Files changed
-          <span className={cn(
-            "ml-2 px-1.5 py-0.5 rounded text-xs",
-            theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
-          )}>
-            {files.length}
-          </span>
-        </button>
-      </div>
+      <PRTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        conversationCount={comments.length + reviews.length}
+        filesCount={files.length}
+        openCommentsCount={openReviewThreads.length}
+        theme={theme}
+      />
 
       {/* Tab Content */}
       <div className="flex-1 flex overflow-hidden">
-        {activeTab === 'conversation' ? (
+        {activeTab === "conversation" && (
           <ConversationTab
             pr={pr}
             comments={comments}
             reviews={reviews}
             onCommentSubmit={() => loadPRData()}
           />
-        ) : (
+        )}
+        {activeTab === "files" && (
           <>
             {/* File list */}
-            <div className={cn(
-              "w-80 border-r overflow-y-auto",
-              theme === 'dark'
-                ? "bg-gray-800 border-gray-700"
-                : "bg-gray-50 border-gray-200"
-            )}>
-              <div className={cn(
-                "p-3 border-b",
-                theme === 'dark' ? "border-gray-700" : "border-gray-200"
-              )}>
-                <input
-                  type="text"
-                  placeholder="Filter files..."
-                  className="input w-full text-sm"
-                />
-              </div>
+            <div
+              ref={fileListRef}
+              className={cn(
+                "border-r overflow-y-auto relative",
+                theme === "dark"
+                  ? "bg-gray-800 border-gray-700"
+                  : "bg-gray-50 border-gray-200",
+              )}
+              style={{ width: `${fileListWidth}px` }}
+            >
+              <FileTree
+                files={files}
+                selectedFile={selectedFile}
+                viewedFiles={viewedFiles}
+                onFileSelect={handleFileSelect}
+                theme={theme}
+              />
+            </div>
 
-              <div className={cn(
-                "divide-y",
-                theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
-              )}>
-                {files.map((file) => {
-                  const isSelected = selectedFile?.filename === file.filename;
-                  const isViewed = viewedFiles.has(file.filename);
-
-                  return (
-                    <div
-                      key={file.filename}
-                      className={cn(
-                        'px-3 py-2 cursor-pointer transition-colors',
-                        theme === 'dark'
-                          ? 'hover:bg-gray-700'
-                          : 'hover:bg-gray-100',
-                        isSelected && (theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100')
-                      )}
-                      onClick={() => setSelectedFile(file)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          <FileDiff className={cn(
-                            "w-4 h-4 flex-shrink-0",
-                            theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                          )} />
-                          <span className="text-sm truncate font-mono">
-                            {file.filename}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center space-x-2 ml-2">
-                          {isViewed && (
-                            <Eye className={cn(
-                              "w-3 h-3",
-                              theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                            )} />
-                          )}
-                          <div className="flex items-center space-x-1 text-xs">
-                            <span className="text-green-400">+{file.additions}</span>
-                            <span className="text-red-400">-{file.deletions}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Resize handle */}
+            <div
+              className="relative cursor-col-resize group flex-shrink-0"
+              style={{
+                width: "3px",
+                marginLeft: "-1px",
+                marginRight: "-1px",
+                padding: "0 1px",
+              }}
+              onMouseDown={handleMouseDown}
+            >
+              <div
+                className={cn(
+                  "w-px h-full transition-colors",
+                  isResizing && "bg-blue-500",
+                  theme === "dark" ? "bg-gray-700" : "bg-gray-300",
+                  "group-hover:bg-blue-500",
+                )}
+              />
+              <div
+                className={cn(
+                  "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex space-x-0.5 px-1 py-0.5 rounded",
+                    theme === "dark" ? "bg-gray-700" : "bg-gray-200",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "w-0.5 h-3 rounded-full",
+                      theme === "dark" ? "bg-gray-500" : "bg-gray-400",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "w-0.5 h-3 rounded-full",
+                      theme === "dark" ? "bg-gray-500" : "bg-gray-400",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "w-0.5 h-3 rounded-full",
+                      theme === "dark" ? "bg-gray-500" : "bg-gray-400",
+                    )}
+                  />
+                </div>
               </div>
             </div>
 
@@ -361,14 +713,67 @@ export default function PRDetailView() {
               {selectedFile && (
                 <DiffEditor
                   file={selectedFile}
-                  comments={comments.filter(c => c.path === selectedFile.filename)}
-                  onMarkViewed={() => markFileViewed(selectedFile.filename)}
+                  originalContent={fileContent?.original}
+                  modifiedContent={fileContent?.modified}
+                  comments={reviewComments.filter(
+                    (c) => c.path === selectedFile.filename,
+                  )}
+                  onMarkViewed={() => toggleFileViewed(selectedFile.filename)}
+                  isViewed={viewedFiles.has(selectedFile.filename)}
+                  repoOwner={owner || pr?.base.repo.owner.login || ""}
+                  repoName={repo || pr?.base.repo.name || ""}
+                  pullNumber={pr?.number ?? parseInt(number || "0", 10)}
+                  token={token}
+                  currentUser={currentUser}
+                  onCommentAdded={(newComment) => {
+                    setReviewComments((prev) => [...prev, newComment]);
+                    loadPRData();
+                  }}
                 />
               )}
             </div>
           </>
         )}
+        {activeTab === "comments" && (
+          <CommentsTab
+            threads={reviewThreads}
+            theme={theme}
+            currentUser={currentUser}
+            canReply={canReplyToThreads}
+            onReply={handleThreadReply}
+            onResolve={handleThreadResolve}
+          />
+        )}
       </div>
+
+      {/* Merge Confirmation Dialog */}
+      {showMergeConfirm && (
+        <MergeConfirmDialog
+          pr={pr}
+          theme={theme}
+          mergeMethod={mergeMethod}
+          isMerging={isMerging}
+          onMergeMethodChange={setMergeMethod}
+          onConfirm={handleMerge}
+          onCancel={() => setShowMergeConfirm(false)}
+        />
+      )}
+
+      {/* Request Changes Modal */}
+      {showRequestChangesModal && (
+        <RequestChangesDialog
+          pr={pr}
+          theme={theme}
+          feedback={requestChangesFeedback}
+          isSubmitting={isApproving}
+          onFeedbackChange={setRequestChangesFeedback}
+          onSubmit={submitRequestChanges}
+          onCancel={() => {
+            setShowRequestChangesModal(false);
+            setRequestChangesFeedback("");
+          }}
+        />
+      )}
     </div>
   );
 }

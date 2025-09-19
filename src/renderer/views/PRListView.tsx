@@ -1,386 +1,409 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  GitPullRequest,
-  GitMerge,
-  Check,
-  X,
-  Clock,
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
-  Filter,
-  MoreHorizontal,
-  Bot,
-  User,
-  Tag,
-  UserCheck
-} from 'lucide-react';
-import { usePRStore } from '../stores/prStore';
-import { useUIStore } from '../stores/uiStore';
-import { formatDistanceToNow } from 'date-fns';
-import { cn } from '../utils/cn';
-import WelcomeView from './WelcomeView';
-import { PullRequest } from '../services/github';
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { GitPullRequest } from "lucide-react";
+import { usePRStore } from "../stores/prStore";
+import { useUIStore } from "../stores/uiStore";
+import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { detectAgentName } from "../utils/agentIcons";
+import { cn } from "../utils/cn";
+import WelcomeView from "./WelcomeView";
+import { PullRequest } from "../services/github";
+import { PRTreeView } from "../components/PRTreeView";
+import type { SortByType, PRWithMetadata } from "../types/prList";
 
-const PRItem = React.memo(({ pr, isNested, onPRClick, onCheckboxChange, isSelected, theme }: { 
-  pr: PullRequest; 
-  isNested?: boolean;
-  onPRClick: (pr: PullRequest) => void;
-  onCheckboxChange: (prId: string, checked: boolean) => void;
-  isSelected: boolean;
-  theme: 'light' | 'dark';
-}) => {
-  const prId = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
-  
-  return (
-    <div
-      className={cn(
-        'px-4 py-3 cursor-pointer',
-        theme === 'dark' 
-          ? 'hover:bg-gray-800' 
-          : 'hover:bg-gray-100',
-        isSelected && (theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'),
-        isNested && 'pl-12'
-      )}
-      onClick={() => onPRClick(pr)}
-    >
-      <div className="flex items-start space-x-3">
-        {/* Checkbox */}
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={(e) => {
-            e.stopPropagation();
-            onCheckboxChange(prId, e.target.checked);
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className={cn(
-            "mt-1 rounded focus:ring-blue-500",
-            theme === 'dark'
-              ? "border-gray-600 bg-gray-700 text-blue-500"
-              : "border-gray-300 bg-white text-blue-600"
-          )}
-        />
-        
-        {/* PR Icon/Status */}
-        <div className="flex-shrink-0">
-          {pr.draft ? (
-            <div className="w-5 h-5 rounded-full bg-gray-600" title="Draft" />
-          ) : pr.merged ? (
-            <GitMerge className="w-5 h-5 text-purple-400" title="Merged" />
-          ) : pr.state === 'open' ? (
-            <GitPullRequest className="w-5 h-5 text-green-400" title="Open" />
-          ) : (
-            <X className="w-5 h-5 text-red-400" title="Closed" />
-          )}
-        </div>
-        
-        {/* PR Details */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <h3 className={cn(
-                "text-sm font-medium truncate",
-                theme === 'dark' ? "text-white" : "text-gray-900"
-              )}>
-                {pr.title}
-                {pr.draft && (
-                  <span className={cn(
-                    "ml-2 text-xs px-1.5 py-0.5 rounded",
-                    theme === 'dark' 
-                      ? "bg-gray-700 text-gray-400" 
-                      : "bg-gray-200 text-gray-600"
-                  )}>
-                    Draft
-                  </span>
-                )}
-              </h3>
-              
-              <div className={cn(
-                "flex items-center mt-1 text-xs space-x-3",
-                theme === 'dark' ? "text-gray-400" : "text-gray-600"
-              )}>
-                <span>#{pr.number}</span>
-                <span>by {pr.user.login}</span>
-                <span>
-                  {formatDistanceToNow(new Date(pr.updated_at), { addSuffix: true })}
-                </span>
-                <span className="flex items-center">
-                  <MessageSquare className="w-3 h-3 mr-1" />
-                  12
-                </span>
-              </div>
-              
-              {/* Labels */}
-              {pr.labels.length > 0 && (
-                <div className="flex items-center mt-2 space-x-1">
-                  {pr.labels.slice(0, 3).map((label: any) => (
-                    <span
-                      key={label.name}
-                      className="px-2 py-0.5 text-xs rounded"
-                      style={{
-                        backgroundColor: `#${label.color}30`,
-                        color: `#${label.color}`,
-                      }}
-                    >
-                      {label.name}
-                    </span>
-                  ))}
-                  {pr.labels.length > 3 && (
-                    <span className={cn(
-                      "text-xs",
-                      theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                    )}>
-                      +{pr.labels.length - 3}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            {/* Right side info */}
-            <div className="flex items-center space-x-3 ml-4">
-              {/* Review status */}
-              <div className="flex -space-x-2">
-                {pr.requested_reviewers.slice(0, 3).map((reviewer: any) => (
-                  <img
-                    key={reviewer.login}
-                    src={reviewer.avatar_url}
-                    alt={reviewer.login}
-                    className={cn(
-                      "w-6 h-6 rounded-full border-2",
-                      theme === 'dark' ? "border-gray-800" : "border-white"
-                    )}
-                    title={`Review requested: ${reviewer.login}`}
-                  />
-                ))}
-              </div>
-              
-              {/* CI Status */}
-              <div className="flex items-center space-x-1">
-                <Check className="w-4 h-4 text-green-400" title="Checks passed" />
-              </div>
-              
-              {/* More actions */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Handle more actions
-                }}
-                className={cn(
-                  "p-1 rounded",
-                  theme === 'dark' ? "hover:bg-gray-700" : "hover:bg-gray-100"
-                )}
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
+type StatusType = "open" | "draft" | "merged" | "closed";
+
+const sortOptions: DropdownOption<SortByType>[] = [
+  { value: "updated", label: "Recently updated" },
+  { value: "created", label: "Recently created" },
+];
+
+const statusOptions = [
+  { value: "open" as StatusType, label: "Open" },
+  { value: "draft" as StatusType, label: "Draft" },
+  { value: "merged" as StatusType, label: "Merged" },
+  { value: "closed" as StatusType, label: "Closed" },
+];
 
 export default function PRListView() {
   const navigate = useNavigate();
-  const { 
-    pullRequests, 
-    filters, 
-    loading, 
-    fetchPullRequests, 
-    repositories, 
-    selectedRepo 
+  const {
+    pullRequests,
+    loading,
+    selectedRepo,
+    fetchPRDetails,
+    bulkUpdatePRs,
+    currentRepoKey,
+    pendingRepoKey,
   } = usePRStore();
-  const { selectedPRs, selectPR, deselectPR, clearSelection, theme } = useUIStore();
-  const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated');
-  const [groupBy, setGroupBy] = useState<'none' | 'agent' | 'author' | 'label'>('agent');
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
+    useUIStore();
+  const [sortBy, setSortBy] = useState<SortByType>("updated");
+  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set(["all"]));
+  const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
+  const authorDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<StatusType>>(new Set(["open", "draft"]));
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Close dropdown when clicking outside
   useEffect(() => {
-    if (selectedRepo) {
-      fetchPullRequests(selectedRepo.owner, selectedRepo.name);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
+        setShowAuthorDropdown(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
+    };
+
+    if (showAuthorDropdown || showStatusDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
     }
-  }, [selectedRepo, fetchPullRequests]);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAuthorDropdown, showStatusDropdown]);
+
+  const selectedRepoKey = useMemo(() => {
+    if (!selectedRepo) return null;
+    return `${selectedRepo.owner}/${selectedRepo.name}`;
+  }, [selectedRepo]);
+
+  const dataMatchesSelectedRepo = useMemo(() => {
+    if (!selectedRepoKey) return false;
+    return currentRepoKey === selectedRepoKey;
+  }, [currentRepoKey, selectedRepoKey]);
+
+  const showLoadingPlaceholder =
+    loading && !dataMatchesSelectedRepo && !!selectedRepoKey;
+
+  const showRefreshingIndicator =
+    loading && dataMatchesSelectedRepo && pendingRepoKey === selectedRepoKey;
+
+  // Function to fetch detailed PR data in the background
+  const fetchDetailedPRsInBackground = useCallback(
+    (prs: PullRequest[]) => {
+      if (!selectedRepo) return;
+
+      const detailPromises = prs.map((pr) =>
+        fetchPRDetails(selectedRepo.owner, selectedRepo.name, pr.number, {
+          updateStore: false,
+        }).catch((error) => {
+          console.error(
+            `Failed to fetch details for PR #${pr.number}:`,
+            error,
+          );
+          return null;
+        }),
+      );
+
+      Promise.all(detailPromises).then((results) => {
+        const validPRs = results.filter(
+          (result): result is PullRequest => result !== null,
+        );
+
+        if (validPRs.length > 0) {
+          bulkUpdatePRs(validPRs);
+        }
+
+        console.log(
+          `Successfully fetched details for ${validPRs.length}/${prs.length} sibling PRs`,
+        );
+      });
+    },
+    [selectedRepo, fetchPRDetails, bulkUpdatePRs],
+  );
 
   // Extract agent from PR (e.g., "cursor" from branch name or title)
   const getAgentFromPR = useCallback((pr: PullRequest): string => {
-    // Check if branch name starts with an agent prefix (e.g., "cursor/")
-    const branchName = pr.head?.ref || '';
-    const agentMatch = branchName.match(/^([^/]+)\//);
-    if (agentMatch) {
-      return agentMatch[1];
+    const branchName = pr.head?.ref || "";
+    const labelNames = (pr.labels ?? [])
+      .map((label: any) => label?.name)
+      .filter(Boolean) as string[];
+
+    const detected = detectAgentName(
+      branchName,
+      pr.title,
+      pr.body,
+      pr.user?.login,
+      pr.head?.ref,
+      ...labelNames,
+    );
+
+    if (detected) {
+      return detected;
     }
-    
-    // Check if title contains agent marker
-    const titleLower = pr.title.toLowerCase();
-    if (titleLower.includes('cursor') || branchName.includes('cursor')) {
-      return 'cursor';
-    }
-    
-    // Check for AI-generated label
-    const hasAILabel = pr.labels?.some((label: any) => 
-      label.name.toLowerCase().includes('ai') || 
-      label.name.toLowerCase().includes('cursor')
+
+    const hasAILabel = labelNames.some((labelName) =>
+      labelName.toLowerCase().includes("ai"),
     );
     if (hasAILabel) {
-      return 'cursor';
+      return "ai";
     }
-    
-    return 'manual';
+
+    return "unknown";
+  }, []);
+
+  const authors = useMemo(() => {
+    const authorMap = new Map<string, { login: string; avatar_url: string }>();
+    pullRequests.forEach((pr) => {
+      authorMap.set(pr.user.login, pr.user);
+    });
+    return Array.from(authorMap.values());
+  }, [pullRequests]);
+
+  const handleAuthorToggle = useCallback((authorLogin: string) => {
+    setSelectedAuthors(prev => {
+      const newSet = new Set(prev);
+      if (authorLogin === "all") {
+        if (newSet.has("all")) {
+          // If "all" is selected and clicked, deselect all
+          return new Set();
+        } else {
+          // Select all
+          return new Set(["all", ...authors.map(a => a.login)]);
+        }
+      } else {
+        // Toggle individual author
+        if (newSet.has(authorLogin)) {
+          newSet.delete(authorLogin);
+          newSet.delete("all"); // Remove "all" if deselecting an individual
+        } else {
+          newSet.add(authorLogin);
+          // Check if all authors are now selected
+          if (authors.every(a => newSet.has(a.login))) {
+            newSet.add("all");
+          }
+        }
+      }
+      return newSet;
+    });
+  }, [authors]);
+
+  // Helper function to get PR status
+  const getPRStatus = useCallback((pr: PullRequest): StatusType => {
+    if (pr.draft) return "draft";
+    if (pr.merged) return "merged";
+    if (pr.state === "closed") return "closed";
+    return "open";
+  }, []);
+
+  const handleStatusToggle = useCallback((status: StatusType | "all") => {
+    setSelectedStatuses(prev => {
+      const newSet = new Set(prev);
+      if (status === "all") {
+        if (newSet.size === statusOptions.length) {
+          // If all are selected, deselect all
+          return new Set();
+        } else {
+          // Select all
+          return new Set(statusOptions.map(s => s.value));
+        }
+      } else {
+        // Toggle individual status
+        if (newSet.has(status)) {
+          newSet.delete(status);
+        } else {
+          newSet.add(status);
+        }
+      }
+      return newSet;
+    });
   }, []);
 
   // Extract common prefix from PR title for sub-grouping
   const getTitlePrefix = useCallback((title: string): string => {
     // Remove PR number if present (e.g., "#1234 Title" -> "Title")
-    const withoutNumber = title.replace(/^#?\d+\s*/, '');
-    
+    const withoutNumber = title.replace(/^#?\d+\s*/, "");
+
     // Extract prefix before colon or first few words
     const colonMatch = withoutNumber.match(/^([^:]+):/);
     if (colonMatch) {
       return colonMatch[1].trim();
     }
-    
+
     // Get first 3-4 words as prefix
     const words = withoutNumber.split(/\s+/);
     const prefixWords = words.slice(0, Math.min(3, words.length));
-    return prefixWords.join(' ');
+    return prefixWords.join(" ");
   }, []);
 
   // Cache date parsing in a separate map to avoid modifying objects
   const parsedDates = useMemo(() => {
-    const dateMap = new Map();
+    const dateMap = new Map<string, { updated: number; created: number }>();
+
+    if (!selectedRepo) {
+      return dateMap;
+    }
+
     pullRequests.forEach((pr, key) => {
-      dateMap.set(key, {
-        updated: new Date(pr.updated_at).getTime(),
-        created: new Date(pr.created_at).getTime()
-      });
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+
+      if (baseOwner === selectedRepo.owner && baseName === selectedRepo.name) {
+        dateMap.set(key, {
+          updated: new Date(pr.updated_at).getTime(),
+          created: new Date(pr.created_at).getTime(),
+        });
+      }
     });
+
     return dateMap;
-  }, [pullRequests]);
+  }, [pullRequests, selectedRepo]);
 
   const getFilteredPRs = useMemo(() => {
-    let prs = Array.from(pullRequests.values());
-    
-    // Apply filters
-    if (filters.length > 0) {
-      prs = prs.filter(pr => {
-        if (filters.includes('open') && pr.state === 'open') return true;
-        if (filters.includes('draft') && pr.draft) return true;
-        if (filters.includes('merged') && pr.merged) return true;
-        if (filters.includes('closed') && pr.state === 'closed' && !pr.merged) return true;
-        return false;
-      });
+    if (!selectedRepo) {
+      return [];
     }
-    
+
+    let prs = Array.from(pullRequests.values()).filter((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      return (
+        baseOwner === selectedRepo.owner && baseName === selectedRepo.name
+      );
+    });
+
+    // Apply author filter
+    if (!selectedAuthors.has("all") && selectedAuthors.size > 0) {
+      prs = prs.filter((pr) => selectedAuthors.has(pr.user.login));
+    } else if (selectedAuthors.size === 0) {
+      // No authors selected, show no PRs
+      prs = [];
+    }
+
+    // Apply status filter
+    if (selectedStatuses.size > 0) {
+      prs = prs.filter((pr) => selectedStatuses.has(getPRStatus(pr)));
+    } else {
+      // No statuses selected, show no PRs
+      prs = [];
+    }
+
     // Sort using cached dates from the map
     prs.sort((a, b) => {
       const aKey = `${a.base.repo.owner.login}/${a.base.repo.name}#${a.number}`;
       const bKey = `${b.base.repo.owner.login}/${b.base.repo.name}#${b.number}`;
       const aDates = parsedDates.get(aKey) || { updated: 0, created: 0 };
       const bDates = parsedDates.get(bKey) || { updated: 0, created: 0 };
-      
+
       switch (sortBy) {
-        case 'updated':
+        case "updated":
           return bDates.updated - aDates.updated;
-        case 'created':
+        case "created":
           return bDates.created - aDates.created;
-        case 'title':
-          return a.title.localeCompare(b.title);
         default:
           return 0;
       }
     });
-    
+
     return prs;
-  }, [pullRequests, parsedDates, filters, sortBy]);
+  }, [
+    pullRequests,
+    parsedDates,
+    selectedAuthors,
+    selectedStatuses,
+    sortBy,
+    selectedRepo,
+    getPRStatus,
+  ]);
 
   // Pre-compute PR metadata for grouping
-  const prsWithMetadata = useMemo(() => {
-    return getFilteredPRs.map(pr => ({
+  const prsWithMetadata = useMemo<PRWithMetadata[]>(() => {
+    return getFilteredPRs.map((pr) => ({
       pr,
       agent: getAgentFromPR(pr),
       titlePrefix: getTitlePrefix(pr.title),
-      author: pr.user?.login || 'unknown',
-      labelNames: pr.labels?.map((label: any) => label.name) || []
+      author: pr.user?.login || "unknown",
+      labelNames: pr.labels?.map((label: any) => label.name) || [],
     }));
   }, [getFilteredPRs, getAgentFromPR, getTitlePrefix]);
 
-  // Group PRs by agent and then by title prefix
-  const groupedPRs = useMemo(() => {
-    if (groupBy === 'none') {
-      return { ungrouped: prsWithMetadata.map(item => item.pr) };
-    }
-    
-    const groups: Record<string, Record<string, any[]>> = {};
-    
-    if (groupBy === 'agent') {
-      // Group by agent first
-      prsWithMetadata.forEach(({ pr, agent, titlePrefix }) => {
-        if (!groups[agent]) {
-          groups[agent] = {};
-        }
-        
-        // Sub-group by title prefix within agent
-        if (!groups[agent][titlePrefix]) {
-          groups[agent][titlePrefix] = [];
-        }
-        groups[agent][titlePrefix].push(pr);
-      });
-    } else if (groupBy === 'author') {
-      // Group by author
-      prsWithMetadata.forEach(({ pr, author }) => {
-        if (!groups[author]) {
-          groups[author] = { all: [] };
-        }
-        groups[author].all.push(pr);
-      });
-    } else if (groupBy === 'label') {
-      // Group by labels
-      prsWithMetadata.forEach(({ pr, labelNames }) => {
-        if (labelNames.length > 0) {
-          labelNames.forEach((labelName: string) => {
-            if (!groups[labelName]) {
-              groups[labelName] = { all: [] };
-            }
-            groups[labelName].all.push(pr);
-          });
-        } else {
-          if (!groups['unlabeled']) {
-            groups['unlabeled'] = { all: [] };
-          }
-          groups['unlabeled'].all.push(pr);
-        }
-      });
-    }
-    
-    return groups;
-  }, [prsWithMetadata, groupBy]);
+  const handlePRClick = useCallback(
+    (pr: PullRequest) => {
+      // Find if this PR belongs to a task subgroup and fetch all siblings
+      let navigationState = {};
 
-  const toggleGroup = useCallback((groupKey: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) {
-        next.delete(groupKey);
-      } else {
-        next.add(groupKey);
+      const prMetadata = prsWithMetadata.find((item) => item.pr.id === pr.id);
+      if (prMetadata) {
+        const { titlePrefix } = prMetadata;
+
+        // Find all sibling PRs in the same task group
+        const siblingPRs = prsWithMetadata
+          .filter((item) => item.titlePrefix === titlePrefix)
+          .map((item) => item.pr);
+
+        if (siblingPRs.length > 1) {
+          console.log(
+            `Fetching detailed data for ${siblingPRs.length} sibling PRs in task: ${titlePrefix}`,
+          );
+
+          // Fetch detailed data for all siblings in the background
+          fetchDetailedPRsInBackground(siblingPRs);
+
+          // Pass sibling PRs to the detail view via navigation state
+          navigationState = {
+            siblingPRs: siblingPRs.map((p) => ({
+              id: p.id,
+              number: p.number,
+              title: p.title,
+              state: p.state,
+              draft: p.draft,
+              merged: p.merged,
+              user: p.user,
+              created_at: p.created_at,
+              updated_at: p.updated_at,
+              approvalStatus: p.approvalStatus,
+              additions: p.additions,
+              deletions: p.deletions,
+              changed_files: p.changed_files,
+            })),
+            currentTaskGroup: titlePrefix,
+          };
+        }
       }
-      return next;
-    });
-  }, []);
 
-  const handlePRClick = useCallback((pr: PullRequest) => {
-    navigate(`/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`);
-  }, [navigate]);
+      navigate(
+        `/pulls/${pr.base.repo.owner.login}/${pr.base.repo.name}/${pr.number}`,
+        { state: navigationState },
+      );
+    },
+    [navigate, prsWithMetadata, fetchDetailedPRsInBackground],
+  );
 
-  const handleCheckboxChange = useCallback((prId: string, checked: boolean) => {
-    if (checked) {
-      selectPR(prId);
-    } else {
-      deselectPR(prId);
-    }
-  }, [selectPR, deselectPR]);
+  const handleCheckboxChange = useCallback(
+    (prId: string, checked: boolean) => {
+      if (checked) {
+        selectPR(prId);
+      } else {
+        deselectPR(prId);
+      }
+    },
+    [selectPR, deselectPR],
+  );
+
+  const handleGroupSelection = useCallback(
+    (prIds: string[], checked: boolean) => {
+      if (checked) {
+        prIds.forEach((id) => selectPR(id));
+      } else {
+        prIds.forEach((id) => deselectPR(id));
+      }
+    },
+    [selectPR, deselectPR],
+  );
+
+  const handleMergeSelected = useCallback(() => {
+    // TODO: Implement merge functionality
+    console.log("Merging PRs:", Array.from(selectedPRs));
+  }, [selectedPRs]);
+
+  const handleCloseSelected = useCallback(() => {
+    // TODO: Implement close functionality
+    console.log("Closing PRs:", Array.from(selectedPRs));
+  }, [selectedPRs]);
 
   const hasSelection = selectedPRs.size > 0;
 
@@ -392,277 +415,393 @@ export default function PRListView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className={cn(
-        "p-4 border-b",
-        theme === 'dark' 
-          ? "bg-gray-800 border-gray-700" 
-          : "bg-gray-50 border-gray-200"
-      )}>
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-semibold flex items-center">
-            <GitPullRequest className="w-5 h-5 mr-2" />
-            Pull Requests
-            {selectedRepo && (
-              <span className={cn(
-                "ml-2 text-sm",
-                theme === 'dark' ? "text-gray-400" : "text-gray-600"
-              )}>in {selectedRepo.name}</span>
-            )}
-            <span className={cn(
-              "ml-2 text-sm",
-              theme === 'dark' ? "text-gray-500" : "text-gray-600"
-            )}>({getFilteredPRs.length})</span>
-          </h1>
-          
-          <div className="flex items-center space-x-2">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className={cn(
-                "text-sm px-4 py-1.5 rounded-lg transition-colors border",
-                theme === 'dark'
-                  ? "bg-gray-700 border-gray-500/70 text-white"
-                  : "bg-white border-gray-200 text-gray-900"
-              )}
-            >
-              <option value="updated">Recently updated</option>
-              <option value="created">Recently created</option>
-              <option value="title">Title</option>
-            </select>
-            
-            <select
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value as any)}
-              className={cn(
-                "text-sm px-4 py-1.5 rounded-lg transition-colors border",
-                theme === 'dark'
-                  ? "bg-gray-700 border-gray-500/70 text-white"
-                  : "bg-white border-gray-200 text-gray-900"
-              )}
-            >
-              <option value="none">No grouping</option>
-              <option value="agent">By agent</option>
-              <option value="author">By author</option>
-              <option value="label">By label</option>
-            </select>
-            
-            <button className="btn btn-ghost p-2">
-              <Filter className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Bulk actions bar */}
-        {hasSelection && (
-          <div className={cn(
-            "-mx-4 -mb-4 px-4 py-2 flex items-center justify-between animate-slide-in",
-            theme === 'dark' ? "bg-gray-700" : "bg-gray-200"
-          )}>
-            <div className="flex items-center space-x-2">
-              <span className={cn(
-                "text-sm",
-                theme === 'dark' ? "text-gray-300" : "text-gray-700"
-              )}>
-                {selectedPRs.size} selected
-              </span>
-              <button
-                onClick={clearSelection}
+      <div
+        className={cn(
+          "p-4 border-b",
+          theme === "dark"
+            ? "bg-gray-800 border-gray-700"
+            : "bg-gray-50 border-gray-200",
+        )}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <h1 className="text-xl font-semibold flex items-center">
+              <GitPullRequest className="w-5 h-5 mr-2" />
+              Pull Requests
+              <span
                 className={cn(
-                  "text-sm",
-                  theme === 'dark' 
-                    ? "text-blue-400 hover:text-blue-300" 
-                    : "text-blue-600 hover:text-blue-500"
+                  "ml-2 text-sm",
+                  theme === "dark" ? "text-gray-500" : "text-gray-600",
                 )}
               >
-                Clear
-              </button>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <button className="btn btn-secondary text-sm">
-                <GitMerge className="w-3 h-3 mr-1" />
-                Merge
-              </button>
-              <button className="btn btn-secondary text-sm">
-                <X className="w-3 h-3 mr-1" />
-                Close
-              </button>
-              <button className="btn btn-secondary text-sm">
-                <Tag className="w-3 h-3 mr-1" />
-                Add Label
-              </button>
-              <button className="btn btn-secondary text-sm">
-                <UserCheck className="w-3 h-3 mr-1" />
-                Request Review
-              </button>
-            </div>
+                ({getFilteredPRs.length})
+              </span>
+              {showRefreshingIndicator && (
+                <span
+                  className={cn(
+                    "ml-2 text-xs",
+                    theme === "dark" ? "text-gray-400" : "text-gray-500",
+                  )}
+                >
+                  Refreshing…
+                </span>
+              )}
+            </h1>
+            {/* Selection help text or bulk actions */}
+            {hasSelection ? (
+              <div className="ml-4 flex items-center space-x-3">
+                <span
+                  className={cn(
+                    "text-sm",
+                    theme === "dark" ? "text-gray-300" : "text-gray-600",
+                  )}
+                >
+                  {selectedPRs.size} selected
+                </span>
+
+                <button
+                  onClick={handleMergeSelected}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    theme === "dark"
+                      ? "text-green-400 hover:text-green-300 hover:bg-green-900/20"
+                      : "text-green-600 hover:text-green-700 hover:bg-green-50",
+                  )}
+                >
+                  Merge
+                </button>
+
+                <button
+                  onClick={handleCloseSelected}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    theme === "dark"
+                      ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                      : "text-red-600 hover:text-red-700 hover:bg-red-50",
+                  )}
+                >
+                  Close
+                </button>
+
+                <button
+                  onClick={clearSelection}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    theme === "dark"
+                      ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                      : "text-gray-600 hover:text-gray-700 hover:bg-gray-100",
+                  )}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <span
+                className={cn(
+                  "ml-4 text-xs",
+                  theme === "dark" ? "text-gray-500" : "text-gray-600",
+                )}
+              >
+                ⌘/Ctrl+Click to multi-select
+              </span>
+            )}
           </div>
-        )}
+
+          {!hasSelection && (
+            <div className="flex items-center space-x-2">
+              <Dropdown<SortByType>
+                options={sortOptions}
+                value={sortBy}
+                onChange={setSortBy}
+                labelPrefix="Sort by: "
+              />
+
+              {/* Status filter dropdown */}
+              <div className="relative" ref={statusDropdownRef}>
+                <button
+                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[120px]",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                >
+                  <span>Status:</span>
+                  <span className={cn(
+                    "truncate",
+                    theme === "dark" ? "text-gray-300" : "text-gray-700"
+                  )}>
+                    {selectedStatuses.size === 0
+                      ? "None"
+                      : selectedStatuses.size === statusOptions.length
+                        ? "All"
+                        : `${selectedStatuses.size} selected`}
+                  </span>
+                </button>
+
+                {showStatusDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[150px] rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2">
+                      {/* Select All option */}
+                      <label
+                        className={cn(
+                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                          theme === "dark"
+                            ? "hover:bg-gray-700"
+                            : "hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStatuses.size === statusOptions.length}
+                          onChange={() => handleStatusToggle("all")}
+                          className="rounded"
+                        />
+                        <span className="text-sm font-medium">All Statuses</span>
+                      </label>
+
+                      <div className={cn(
+                        "my-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )} />
+
+                      {/* Individual status options */}
+                      {statusOptions.map(status => (
+                        <label
+                          key={status.value}
+                          className={cn(
+                            "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                            theme === "dark"
+                              ? "hover:bg-gray-700"
+                              : "hover:bg-gray-50"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedStatuses.has(status.value)}
+                            onChange={() => handleStatusToggle(status.value)}
+                            className="rounded"
+                          />
+                          <span className="text-sm">{status.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Author filter with checkbox list */}
+              <div className="relative" ref={authorDropdownRef}>
+                <button
+                  onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[150px] max-w-[250px]",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                >
+                  {selectedAuthors.size === 1 && !selectedAuthors.has("all") ? (
+                    <>
+                      {(() => {
+                        const authorLogin = Array.from(selectedAuthors)[0];
+                        const author = authors.find(a => a.login === authorLogin);
+                        return author ? (
+                          <>
+                            <img
+                              src={author.avatar_url}
+                              alt={author.login}
+                              className="w-4 h-4 rounded-full flex-shrink-0"
+                            />
+                            <span className={cn(
+                              "truncate",
+                              theme === "dark" ? "text-gray-300" : "text-gray-700"
+                            )}>
+                              {author.login}
+                            </span>
+                          </>
+                        ) : (
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {authorLogin}
+                          </span>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      {selectedAuthors.size > 1 && !selectedAuthors.has("all") ? (
+                        <>
+                          <div className="flex -space-x-2">
+                            {Array.from(selectedAuthors)
+                              .slice(0, 3)
+                              .map(authorLogin => {
+                                const author = authors.find(a => a.login === authorLogin);
+                                return author ? (
+                                  <img
+                                    key={author.login}
+                                    src={author.avatar_url}
+                                    alt={author.login}
+                                    className="w-4 h-4 rounded-full border border-gray-800"
+                                    style={{
+                                      borderColor: theme === "dark" ? "#1f2937" : "#ffffff"
+                                    }}
+                                  />
+                                ) : null;
+                              })}
+                            {selectedAuthors.size > 3 && (
+                              <div className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-medium border",
+                                theme === "dark"
+                                  ? "bg-gray-700 text-gray-300 border-gray-800"
+                                  : "bg-gray-200 text-gray-700 border-white"
+                              )}>
+                                +{selectedAuthors.size - 3}
+                              </div>
+                            )}
+                          </div>
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {selectedAuthors.size} selected
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Authors:</span>
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {selectedAuthors.has("all")
+                              ? "All"
+                              : selectedAuthors.size === 0
+                                ? "None"
+                                : `${selectedAuthors.size} selected`}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </button>
+
+                {showAuthorDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[200px] rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2 max-h-64 overflow-y-auto">
+                      {/* All Authors option */}
+                      <label
+                        className={cn(
+                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                          theme === "dark"
+                            ? "hover:bg-gray-700"
+                            : "hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAuthors.has("all")}
+                          onChange={() => handleAuthorToggle("all")}
+                          className="rounded"
+                        />
+                        <span className="text-sm font-medium">All Authors</span>
+                      </label>
+
+                      <div className={cn(
+                        "my-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )} />
+
+                      {/* Individual authors */}
+                      {authors.map(author => (
+                        <label
+                          key={author.login}
+                          className={cn(
+                            "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                            theme === "dark"
+                              ? "hover:bg-gray-700"
+                              : "hover:bg-gray-50"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAuthors.has(author.login)}
+                            onChange={() => handleAuthorToggle(author.login)}
+                            className="rounded"
+                          />
+                          <img
+                            src={author.avatar_url}
+                            alt={author.login}
+                            className="w-5 h-5 rounded-full"
+                          />
+                          <span className="text-sm">{author.login}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* PR List */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
+        {showLoadingPlaceholder ? (
           <div className="flex items-center justify-center h-64">
-            <div className={cn(
-              theme === 'dark' ? "text-gray-400" : "text-gray-600"
-            )}>Loading pull requests...</div>
+            <div
+              className={cn(
+                theme === "dark" ? "text-gray-400" : "text-gray-600",
+              )}
+            >
+              Loading pull requests...
+            </div>
           </div>
         ) : getFilteredPRs.length === 0 ? (
-          <div className={cn(
-            "flex flex-col items-center justify-center h-64",
-            theme === 'dark' ? "text-gray-400" : "text-gray-600"
-          )}>
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center h-64",
+              theme === "dark" ? "text-gray-400" : "text-gray-600",
+            )}
+          >
             <GitPullRequest className="w-12 h-12 mb-4 opacity-50" />
             <p className="text-lg font-medium">No pull requests found</p>
             {selectedRepo ? (
               <p className="text-sm mt-2">No PRs in {selectedRepo.full_name}</p>
             ) : (
-              <p className="text-sm mt-2">Select a repository to view pull requests</p>
+              <p className="text-sm mt-2">
+                Select a repository to view pull requests
+              </p>
             )}
           </div>
-        ) : groupBy === 'none' || Object.keys(groupedPRs).includes('ungrouped') ? (
-          // No grouping - flat list
-          <div className={cn(
-            "divide-y",
-            theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
-          )}>
-            {(groupedPRs.ungrouped || getFilteredPRs).map((pr: PullRequest) => (
-              <PRItem 
-                key={pr.id} 
-                pr={pr} 
-                onPRClick={handlePRClick}
-                onCheckboxChange={handleCheckboxChange}
-                isSelected={selectedPRs.has(`${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`)}
-                theme={theme}
-              />
-            ))}
-          </div>
         ) : (
-          // Grouped display
-          <div className={cn(
-            "divide-y",
-            theme === 'dark' ? "divide-gray-700" : "divide-gray-200"
-          )}>
-            {Object.entries(groupedPRs).map(([agentName, subGroups]) => {
-              const agentKey = `agent-${agentName}`;
-              const isAgentCollapsed = collapsedGroups.has(agentKey);
-              const totalPRs = Object.values(subGroups).reduce((sum, prs: any) => sum + prs.length, 0);
-              
-              return (
-                <div key={agentName}>
-                  {/* Agent Group Header */}
-                  <div
-                    className={cn(
-                      "px-4 py-2 cursor-pointer flex items-center justify-between",
-                      theme === 'dark' 
-                        ? "bg-gray-750 hover:bg-gray-700" 
-                        : "bg-gray-100 hover:bg-gray-200"
-                    )}
-                    onClick={() => toggleGroup(agentKey)}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <button className="p-0.5 hover:bg-gray-600 rounded">
-                        {isAgentCollapsed ? (
-                          <ChevronRight className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-                      {agentName === 'cursor' ? (
-                        <Bot className="w-4 h-4 text-purple-400" />
-                      ) : (
-                        <User className="w-4 h-4 text-blue-400" />
-                      )}
-                      <span className="font-medium text-sm">
-                        {agentName === 'cursor' ? 'AI Generated' : agentName === 'manual' ? 'Manual PRs' : agentName}
-                      </span>
-                      <span className={cn(
-                        "text-xs",
-                        theme === 'dark' ? "text-gray-400" : "text-gray-600"
-                      )}>({totalPRs})</span>
-                    </div>
-                  </div>
-                  
-                  {/* Agent Group Content */}
-                  {!isAgentCollapsed && (
-                    <div>
-                      {Object.entries(subGroups).map(([prefix, prefixPRs]) => {
-                        const prefixKey = `${agentKey}-${prefix}`;
-                        const isPrefixCollapsed = collapsedGroups.has(prefixKey);
-                        const hasMultiplePRs = (prefixPRs as any[]).length > 1;
-                        
-                        if (!hasMultiplePRs || prefix === 'all') {
-                          // Single PR or no sub-grouping needed
-                          return (prefixPRs as any[]).map((pr: any) => (
-                            <PRItem 
-                              key={pr.id} 
-                              pr={pr} 
-                              isNested={groupBy === 'agent'} 
-                              onPRClick={handlePRClick}
-                              onCheckboxChange={handleCheckboxChange}
-                              isSelected={selectedPRs.has(`${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`)}
-                              theme={theme}
-                            />
-                          ));
-                        }
-                        
-                        return (
-                          <div key={prefix}>
-                            {/* Prefix Sub-group Header */}
-                            <div
-                              className={cn(
-                                "pl-8 pr-4 py-2 cursor-pointer flex items-center justify-between border-l-2",
-                                theme === 'dark' 
-                                  ? "bg-gray-800 hover:bg-gray-750 border-gray-600" 
-                                  : "bg-gray-50 hover:bg-gray-100 border-gray-300"
-                              )}
-                              onClick={() => toggleGroup(prefixKey)}
-                            >
-                              <div className="flex items-center space-x-2">
-                                <button className="p-0.5 hover:bg-gray-600 rounded">
-                                  {isPrefixCollapsed ? (
-                                    <ChevronRight className="w-3 h-3" />
-                                  ) : (
-                                    <ChevronDown className="w-3 h-3" />
-                                  )}
-                                </button>
-                                <span className={cn(
-                                  "text-sm",
-                                  theme === 'dark' ? "text-gray-300" : "text-gray-700"
-                                )}>{prefix}</span>
-                                <span className={cn(
-                                  "text-xs",
-                                  theme === 'dark' ? "text-gray-500" : "text-gray-600"
-                                )}>({(prefixPRs as any[]).length})</span>
-                              </div>
-                            </div>
-                            
-                            {/* Prefix Sub-group PRs */}
-                            {!isPrefixCollapsed && (
-                              <div>
-                                {(prefixPRs as any[]).map((pr: any) => (
-                                  <PRItem 
-                                    key={pr.id} 
-                                    pr={pr} 
-                                    isNested 
-                                    onPRClick={handlePRClick}
-                                    onCheckboxChange={handleCheckboxChange}
-                                    isSelected={selectedPRs.has(`${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`)}
-                                    theme={theme}
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <PRTreeView
+            theme={theme}
+            prsWithMetadata={prsWithMetadata}
+            selectedPRs={selectedPRs}
+            sortBy={sortBy}
+            onTogglePRSelection={handleCheckboxChange}
+            onToggleGroupSelection={handleGroupSelection}
+            onPRClick={handlePRClick}
+          />
         )}
       </div>
     </div>

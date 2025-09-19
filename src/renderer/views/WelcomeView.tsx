@@ -1,5 +1,5 @@
-import React from 'react';
-import { GitPullRequest, GitBranch, Zap, Users } from 'lucide-react';
+import React from "react";
+import { GitPullRequest, GitBranch, Zap, Users } from "lucide-react";
 
 export default function WelcomeView() {
   return (
@@ -24,27 +24,33 @@ export default function WelcomeView() {
             <div className="flex justify-center mb-3">
               <Zap className="w-8 h-8 text-yellow-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Lightning Fast</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Lightning Fast
+            </h3>
             <p className="text-sm text-gray-400">
               Near-instant navigation and diff rendering
             </p>
           </div>
-          
+
           <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
             <div className="flex justify-center mb-3">
               <GitBranch className="w-8 h-8 text-green-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Smart Management</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Smart Management
+            </h3>
             <p className="text-sm text-gray-400">
               Bulk actions and intelligent PR grouping
             </p>
           </div>
-          
+
           <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
             <div className="flex justify-center mb-3">
               <Users className="w-8 h-8 text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Team Focused</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Team Focused
+            </h3>
             <p className="text-sm text-gray-400">
               Optimized for collaborative workflows
             </p>
@@ -54,7 +60,8 @@ export default function WelcomeView() {
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h3 className="text-lg font-semibold text-white mb-3">Get Started</h3>
           <p className="text-gray-400 mb-4">
-            Select a repository from the dropdown above to view and manage your pull requests.
+            Select a repository from the dropdown above to view and manage your
+            pull requests.
           </p>
           <div className="flex justify-center">
             <div className="inline-flex items-center px-4 py-2 bg-gray-700 rounded-lg text-sm text-gray-300">

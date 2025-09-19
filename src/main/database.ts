@@ -1,22 +1,22 @@
-import * as sqlite3 from 'sqlite3';
-import path from 'path';
-import { app } from 'electron';
-import fs from 'fs';
+import * as sqlite3 from "sqlite3";
+import path from "path";
+import { app } from "electron";
+import fs from "fs";
 
 export class Database {
   private db: sqlite3.Database | null = null;
   private dbPath: string;
 
   constructor() {
-    const userDataPath = app.getPath('userData');
-    const dbDir = path.join(userDataPath, 'data');
-    
+    const userDataPath = app.getPath("userData");
+    const dbDir = path.join(userDataPath, "data");
+
     // Ensure directory exists
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
-    
-    this.dbPath = path.join(dbDir, 'bottleneck.db');
+
+    this.dbPath = path.join(dbDir, "bottleneck.db");
   }
 
   async initialize(): Promise<void> {
@@ -26,14 +26,14 @@ export class Database {
           reject(err);
         } else {
           // Enable foreign keys
-          this.db!.run('PRAGMA foreign_keys = ON');
-          
+          this.db!.run("PRAGMA foreign_keys = ON");
+
           // Create tables
           this.createTables();
-          
+
           // Create indexes
           this.createIndexes();
-          
+
           resolve();
         }
       });
@@ -41,7 +41,7 @@ export class Database {
   }
 
   private createTables(): void {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error("Database not initialized");
 
     // Repositories table
     this.db.run(`
@@ -221,7 +221,7 @@ export class Database {
   }
 
   private createIndexes(): void {
-    if (!this.db) throw new Error('Database not initialized');
+    if (!this.db) throw new Error("Database not initialized");
 
     // Indexes for performance
     this.db.run(`
@@ -241,10 +241,10 @@ export class Database {
   async query(sql: string, params?: any[]): Promise<any[]> {
     return new Promise((resolve, reject) => {
       if (!this.db) {
-        reject(new Error('Database not initialized'));
+        reject(new Error("Database not initialized"));
         return;
       }
-      
+
       this.db.all(sql, params || [], (err, rows) => {
         if (err) {
           reject(err);
@@ -258,11 +258,11 @@ export class Database {
   async execute(sql: string, params?: any[]): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.db) {
-        reject(new Error('Database not initialized'));
+        reject(new Error("Database not initialized"));
         return;
       }
-      
-      this.db.run(sql, params || [], function(err) {
+
+      this.db.run(sql, params || [], function (err) {
         if (err) {
           reject(err);
         } else {
@@ -275,29 +275,29 @@ export class Database {
   async transaction(fn: () => void): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) {
-        reject(new Error('Database not initialized'));
+        reject(new Error("Database not initialized"));
         return;
       }
-      
+
       this.db.serialize(() => {
-        this.db!.run('BEGIN TRANSACTION', (err) => {
+        this.db!.run("BEGIN TRANSACTION", (err) => {
           if (err) {
             reject(err);
             return;
           }
-          
+
           try {
             fn();
-            this.db!.run('COMMIT', (err) => {
+            this.db!.run("COMMIT", (err) => {
               if (err) {
-                this.db!.run('ROLLBACK');
+                this.db!.run("ROLLBACK");
                 reject(err);
               } else {
                 resolve();
               }
             });
           } catch (error) {
-            this.db!.run('ROLLBACK');
+            this.db!.run("ROLLBACK");
             reject(error);
           }
         });

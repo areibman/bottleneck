@@ -3,11 +3,13 @@
 ## Quick Start
 
 1. **Install dependencies:**
+
 ```bash
 npm install
 ```
 
 2. **Create GitHub OAuth App:**
+
    - Go to https://github.com/settings/developers
    - Click "New OAuth App"
    - Fill in:
@@ -18,6 +20,7 @@ npm install
 
 3. **Configure environment:**
    Create a `.env` file in the project root:
+
 ```env
 GITHUB_CLIENT_ID=your_client_id_here
 GITHUB_CLIENT_SECRET=your_client_secret_here
@@ -25,11 +28,13 @@ NODE_ENV=development
 ```
 
 4. **Run in development mode:**
+
 ```bash
 npm run dev
 ```
 
 5. **Build for production:**
+
 ```bash
 npm run build
 npm run dist
@@ -72,6 +77,7 @@ bottleneck/
 ## Features Implemented
 
 ### Core Features
+
 - ✅ GitHub OAuth authentication
 - ✅ SQLite database for local caching
 - ✅ PR list view with filtering and search
@@ -84,6 +90,7 @@ bottleneck/
 - ✅ Prefix-based PR grouping
 
 ### UI Components
+
 - ✅ Sidebar navigation
 - ✅ Top bar with sync status
 - ✅ Right panel for PR details
@@ -91,6 +98,7 @@ bottleneck/
 - ✅ Dark theme with Tailwind CSS
 
 ### Performance Optimizations
+
 - ✅ Virtualized lists
 - ✅ Incremental data syncing
 - ✅ Local caching with SQLite
@@ -107,17 +115,20 @@ bottleneck/
 ## Troubleshooting
 
 ### Build Issues
+
 - If you encounter SQLite build errors, ensure you have build tools installed:
   - macOS: Install Xcode Command Line Tools
   - Windows: Install windows-build-tools
   - Linux: Install build-essential
 
 ### Authentication Issues
+
 - Ensure your GitHub OAuth app is properly configured
 - Check that the callback URL matches exactly
 - Verify the required scopes are granted
 
 ### Performance Issues
+
 - Clear the cache in Settings > Advanced > Clear Cache
 - Reduce sync frequency in Settings > General
 - Close unused PR tabs

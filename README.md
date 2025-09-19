@@ -33,22 +33,26 @@ Fast GitHub PR review and branch management - A native Electron app that reprodu
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/yourusername/bottleneck.git
 cd bottleneck
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Run in development mode:
+
 ```bash
 npm run dev
 ```
 
 4. Build for production:
+
 ```bash
 npm run build
 npm run dist
@@ -84,15 +88,40 @@ bottleneck/
 - `npm run dist` - Package the app for distribution
 - `npm run electron` - Run the built app
 
+### React DevTools Profiler
+
+If the React DevTools Profiler tab is missing inside Electron DevTools, walk through the following steps:
+
+1. **Update the installer call** – In `src/main/index.ts` make sure the React DevTools installation includes `allowFileAccess` (and optionally `forceDownload` to refresh stale caches):
+
+   ```ts
+   await installExtension(REACT_DEVELOPER_TOOLS, {
+     loadExtensionOptions: { allowFileAccess: true },
+     forceDownload: true,
+   });
+   ```
+
+2. **Clear the cached extension** – Remove the `fmkadmapgofadopljbjfkapdkoienihi` folder so Electron downloads the updated bundle on the next run.
+
+   - macOS: `~/Library/Application Support/Electron/extensions/`
+   - Windows: `%APPDATA%\Electron\extensions\`
+   - Linux: `~/.config/Electron/extensions/`
+
+   Delete only the React DevTools folder (keep other extensions if you rely on them).
+
+3. **Restart the dev environment** – Run `npm run dev`, open the window, and press `Cmd/Ctrl + Option + I` to open DevTools. You should now see both **⚛️ Components** and **⚛️ Profiler** tabs.
+
 ## Keyboard Shortcuts
 
 ### Global
+
 - `Cmd/Ctrl + B` - Toggle sidebar
 - `Cmd/Ctrl + Shift + B` - Toggle right panel
 - `Cmd/Ctrl + Shift + P` - Command palette
 - `Cmd/Ctrl + /` - Show keyboard shortcuts
 
 ### Navigation
+
 - `Cmd/Ctrl + P` - Go to PR
 - `Cmd/Ctrl + T` - Go to file
 - `Cmd/Ctrl + [` - Previous PR
@@ -101,6 +130,7 @@ bottleneck/
 - `Alt + Down` - Next file
 
 ### Review
+
 - `Cmd/Ctrl + Enter` - Submit comment
 - `Cmd/Ctrl + Shift + A` - Approve PR
 - `Cmd/Ctrl + Shift + R` - Request changes
@@ -111,12 +141,14 @@ bottleneck/
 ## Performance
 
 ### Targets
+
 - PR list render: <300ms from cache, <1.5s cold fetch
 - First diff paint: <150ms for typical files
 - Handle 1k+ files / 50k+ changed lines smoothly
 - 60 FPS scrolling in all views
 
 ### Optimizations
+
 - Virtualized lists and diff rendering
 - Web workers for diff computation
 - Incremental syntax highlighting
