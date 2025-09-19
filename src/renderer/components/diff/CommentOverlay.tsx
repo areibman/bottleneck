@@ -127,7 +127,14 @@ export const CommentOverlay: FC<CommentOverlayProps> = ({
                     alt={comment.user.login}
                     className="w-4 h-4 rounded-full"
                   />
-                  <span className="text-xs font-medium">{comment.user.login}</span>
+                  <span
+                    className={cn(
+                      "text-xs font-semibold",
+                      isDark ? "text-gray-100" : "text-gray-800",
+                    )}
+                  >
+                    {comment.user.login}
+                  </span>
                   <span className={cn("text-[10px]", isDark ? "text-gray-400" : "text-gray-500")}
                   >
                     {formatDistanceToNow(new Date(comment.created_at), {

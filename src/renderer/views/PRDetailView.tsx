@@ -9,6 +9,7 @@ import {
   File,
   Comment,
   Review,
+  ReviewThread,
 } from "../services/github";
 import { cn } from "../utils/cn";
 import {
@@ -17,6 +18,7 @@ import {
   mockComments,
   mockReviews,
   mockReviewComments,
+  mockReviewThreads,
 } from "../mockData";
 import { useUIStore } from "../stores/uiStore";
 
@@ -24,6 +26,7 @@ import { useUIStore } from "../stores/uiStore";
 import {
   PRHeader,
   PRTabs,
+  CommentsTab,
   FileTree,
   MergeConfirmDialog,
   RequestChangesDialog,
@@ -46,11 +49,14 @@ export default function PRDetailView() {
     number,
   );
 
-  const [activeTab, setActiveTab] = useState<"conversation" | "files">("files");
+  const [activeTab, setActiveTab] = useState<"conversation" | "files" | "comments">(
+    "files",
+  );
   const [pr, setPR] = useState<PullRequest | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [reviewComments, setReviewComments] = useState<Comment[]>([]);
+  const [reviewThreads, setReviewThreads] = useState<ReviewThread[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,6 +147,7 @@ export default function PRDetailView() {
         setComments(mockComments as any);
         setReviews(mockReviews as any);
         setReviewComments(mockReviewComments as any);
+        setReviewThreads(mockReviewThreads as any);
 
         if (mockFiles.length > 0) {
           setSelectedFile(mockFiles[0] as any);
@@ -155,6 +162,7 @@ export default function PRDetailView() {
           commentsData,
           reviewsData,
           reviewCommentsData,
+          reviewThreadsData,
         ] =
           await Promise.all([
             api.getPullRequest(owner, repo, prNumber),
@@ -162,6 +170,7 @@ export default function PRDetailView() {
             api.getPullRequestConversationComments(owner, repo, prNumber),
             api.getPullRequestReviews(owner, repo, prNumber),
             api.getPullRequestReviewComments(owner, repo, prNumber),
+            api.getPullRequestReviewThreads(owner, repo, prNumber),
           ]);
 
         setPR(prData);
@@ -169,6 +178,7 @@ export default function PRDetailView() {
         setComments(commentsData);
         setReviews(reviewsData);
         setReviewComments(reviewCommentsData);
+        setReviewThreads(reviewThreadsData);
 
         // If we don't have navigation state yet, try to fetch sibling PRs
         if (!navigationState?.siblingPRs) {
@@ -180,6 +190,60 @@ export default function PRDetailView() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resolveRepoContext = () => {
+    const repoOwner = owner || pr?.base.repo.owner.login;
+    const repoName = repo || pr?.base.repo.name;
+    const pullNumber = pr?.number ?? parseInt(number || "0", 10);
+
+    if (!repoOwner || !repoName || !pullNumber) {
+      throw new Error("Missing pull request context");
+    }
+
+    return { repoOwner, repoName, pullNumber };
+  };
+
+  const handleThreadReply = async (
+    _threadId: string,
+    commentId: number,
+    body: string,
+  ) => {
+    if (!token) {
+      throw new Error("Sign in with GitHub to reply to review comments.");
+    }
+
+    const { repoOwner, repoName, pullNumber } = resolveRepoContext();
+    const api = new GitHubAPI(token);
+
+    await api.replyToReviewComment(
+      repoOwner,
+      repoName,
+      pullNumber,
+      commentId,
+      body,
+    );
+
+    await loadPRData();
+  };
+
+  const handleThreadResolve = async (threadId: string) => {
+    if (!token) {
+      throw new Error("Sign in with GitHub to resolve review comments.");
+    }
+
+    const { repoOwner, repoName, pullNumber } = resolveRepoContext();
+    const api = new GitHubAPI(token);
+
+    await api.updateReviewThreadResolution(
+      repoOwner,
+      repoName,
+      pullNumber,
+      threadId,
+      true,
+    );
+
+    await loadPRData();
   };
 
   const handleApprove = async () => {
@@ -433,6 +497,11 @@ export default function PRDetailView() {
     { additions: 0, deletions: 0, changed: 0 },
   );
 
+  const openReviewThreads = reviewThreads.filter(
+    (thread) => thread.state !== "resolved",
+  );
+  const canReplyToThreads = Boolean(token);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -451,21 +520,23 @@ export default function PRDetailView() {
       <PRTabs
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        commentsCount={comments.length + reviews.length}
+        conversationCount={comments.length + reviews.length}
         filesCount={files.length}
+        openCommentsCount={openReviewThreads.length}
         theme={theme}
       />
 
       {/* Tab Content */}
       <div className="flex-1 flex overflow-hidden">
-        {activeTab === "conversation" ? (
+        {activeTab === "conversation" && (
           <ConversationTab
             pr={pr}
             comments={comments}
             reviews={reviews}
             onCommentSubmit={() => loadPRData()}
           />
-        ) : (
+        )}
+        {activeTab === "files" && (
           <>
             {/* File list */}
             <div
@@ -529,6 +600,12 @@ export default function PRDetailView() {
                       theme === "dark" ? "bg-gray-500" : "bg-gray-400",
                     )}
                   />
+                  <div
+                    className={cn(
+                      "w-0.5 h-3 rounded-full",
+                      theme === "dark" ? "bg-gray-500" : "bg-gray-400",
+                    )}
+                  />
                 </div>
               </div>
             </div>
@@ -552,11 +629,22 @@ export default function PRDetailView() {
                   currentUser={currentUser}
                   onCommentAdded={(newComment) => {
                     setReviewComments((prev) => [...prev, newComment]);
+                    loadPRData();
                   }}
                 />
               )}
             </div>
           </>
+        )}
+        {activeTab === "comments" && (
+          <CommentsTab
+            threads={openReviewThreads}
+            theme={theme}
+            currentUser={currentUser}
+            canReply={canReplyToThreads}
+            onReply={handleThreadReply}
+            onResolve={handleThreadResolve}
+          />
         )}
       </div>
 

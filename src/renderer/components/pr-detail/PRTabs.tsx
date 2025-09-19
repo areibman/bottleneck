@@ -1,19 +1,21 @@
-import { MessageSquare, FileDiff } from "lucide-react";
+import { MessageSquare, FileDiff, MessageCircle } from "lucide-react";
 import { cn } from "../../utils/cn";
 
 interface PRTabsProps {
-  activeTab: "conversation" | "files";
-  onTabChange: (tab: "conversation" | "files") => void;
-  commentsCount: number;
+  activeTab: "conversation" | "files" | "comments";
+  onTabChange: (tab: "conversation" | "files" | "comments") => void;
+  conversationCount: number;
   filesCount: number;
+  openCommentsCount: number;
   theme: "dark" | "light";
 }
 
 export function PRTabs({
   activeTab,
   onTabChange,
-  commentsCount,
+  conversationCount,
   filesCount,
+  openCommentsCount,
   theme,
 }: PRTabsProps) {
   return (
@@ -38,7 +40,7 @@ export function PRTabs({
             theme === "dark" ? "bg-gray-700" : "bg-gray-200",
           )}
         >
-          {commentsCount}
+          {conversationCount}
         </span>
       </div>
       <div
@@ -57,6 +59,24 @@ export function PRTabs({
           )}
         >
           {filesCount}
+        </span>
+      </div>
+      <div
+        onClick={() => onTabChange("comments")}
+        className={cn(
+          "tab flex items-center",
+          activeTab === "comments" && "active",
+        )}
+      >
+        <MessageCircle className="w-3 h-3 mr-1" />
+        <span className="text-xs">Comments</span>
+        <span
+          className={cn(
+            "ml-2 px-1 py-0.5 rounded text-xs",
+            theme === "dark" ? "bg-gray-700" : "bg-gray-200",
+          )}
+        >
+          {openCommentsCount}
         </span>
       </div>
     </div>

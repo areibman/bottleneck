@@ -515,6 +515,18 @@ export const mockReviewComments = [
   },
 ];
 
+export const mockReviewThreads = [
+  {
+    id: "PRRT_mock_thread_201",
+    state: "pending" as const,
+    path: "src/components/Button.tsx",
+    start_line: 42,
+    line: 42,
+    side: "RIGHT" as const,
+    comments: mockReviewComments.map((comment) => ({ ...comment })),
+  },
+];
+
 export const mockIssues = [
   {
     id: 1,

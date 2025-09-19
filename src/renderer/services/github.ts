@@ -139,6 +139,17 @@ export interface Comment {
   in_reply_to_id?: number;
 }
 
+export interface ReviewThread {
+  id: string;
+  path?: string | null;
+  line?: number | null;
+  original_line?: number | null;
+  start_line?: number | null;
+  original_start_line?: number | null;
+  state: "pending" | "resolved";
+  comments: Comment[];
+}
+
 export interface Review {
   id: number;
   user: {
@@ -600,6 +611,184 @@ export class GitHubAPI {
     });
 
     return data as Comment[];
+  }
+
+  async getPullRequestReviewThreads(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ): Promise<ReviewThread[]> {
+    const threads: ReviewThread[] = [];
+    let hasNextPage = true;
+    let after: string | null = null;
+
+    const query = `
+      query ($owner: String!, $name: String!, $number: Int!, $after: String) {
+        repository(owner: $owner, name: $name) {
+          pullRequest(number: $number) {
+            reviewThreads(first: 50, after: $after) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                isResolved
+                path
+                line
+                originalLine
+                startLine
+                originalStartLine
+                comments(first: 100) {
+                  nodes {
+                    databaseId
+                    body
+                    createdAt
+                    updatedAt
+                    url
+                    diffHunk
+                    path
+                    line
+                    originalLine
+                    startLine
+                    originalStartLine
+                    author {
+                      login
+                      avatarUrl
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    while (hasNextPage) {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        name: repo,
+        number: pullNumber,
+        after,
+      });
+
+      const threadData =
+        response?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+
+      threadData.forEach((thread: any) => {
+        if (!thread) return;
+
+        const comments: Comment[] = (thread.comments?.nodes ?? [])
+          .filter((node: any) => node && node.databaseId)
+          .map((node: any) => {
+            const side = node.originalLine && !node.line ? "LEFT" : "RIGHT";
+
+            return {
+              id: node.databaseId,
+              body: node.body || "",
+              user: {
+                login: node.author?.login || "ghost",
+                avatar_url: node.author?.avatarUrl || "",
+              },
+              created_at: node.createdAt,
+              updated_at: node.updatedAt,
+              html_url: node.url || "",
+              path: node.path || undefined,
+              diff_hunk: node.diffHunk || undefined,
+              line: node.line,
+              original_line: node.originalLine,
+              start_line: node.startLine,
+              original_start_line: node.originalStartLine,
+              side,
+              start_side: undefined,
+              position: null,
+              original_position: null,
+              commit_id: undefined,
+              original_commit_id: undefined,
+              pull_request_review_id: undefined,
+              in_reply_to_id: undefined,
+            };
+          });
+
+        threads.push({
+          id: thread.id,
+          path: thread.path,
+          line: thread.line,
+          original_line: thread.originalLine,
+          start_line: thread.startLine,
+          original_start_line: thread.originalStartLine,
+          state: thread.isResolved ? "resolved" : "pending",
+          comments,
+        });
+      });
+
+      const pageInfo =
+        response?.repository?.pullRequest?.reviewThreads?.pageInfo;
+      hasNextPage = Boolean(pageInfo?.hasNextPage);
+      after = pageInfo?.endCursor ?? null;
+    }
+
+    return threads;
+  }
+
+  async updateReviewThreadResolution(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    threadId: string,
+    resolved: boolean,
+  ): Promise<ReviewThread> {
+    const mutation = resolved
+      ? `mutation ($threadId: ID!) {
+          resolveReviewThread(input: { threadId: $threadId }) {
+            thread {
+              id
+              isResolved
+              path
+              line
+              originalLine
+              startLine
+              originalStartLine
+            }
+          }
+        }`
+      : `mutation ($threadId: ID!) {
+          unresolveReviewThread(input: { threadId: $threadId }) {
+            thread {
+              id
+              isResolved
+              path
+              line
+              originalLine
+              startLine
+              originalStartLine
+            }
+          }
+        }`;
+
+    const response: any = await this.octokit.graphql(mutation, {
+      threadId,
+    });
+
+    const thread =
+      response?.resolveReviewThread?.thread ||
+      response?.unresolveReviewThread?.thread;
+
+    if (!thread) {
+      throw new Error("Failed to update review thread resolution");
+    }
+
+    return {
+      id: thread.id,
+      path: thread.path,
+      line: thread.line,
+      original_line: thread.originalLine,
+      start_line: thread.startLine,
+      original_start_line: thread.originalStartLine,
+      state: thread.isResolved ? "resolved" : "pending",
+      comments: [],
+    };
   }
 
   async getPullRequestReviews(owner: string, repo: string, pullNumber: number) {
