@@ -235,6 +235,7 @@ export class GitHubAPI {
             }
             nodes {
               id
+              databaseId
               number
               title
               body
@@ -404,7 +405,7 @@ export class GitHubAPI {
             })) || [];
 
           pullRequests.push({
-            id: pr.number, // Using number as ID for compatibility
+            id: pr.databaseId ?? pr.number,
             number: pr.number,
             title: pr.title,
             body: pr.body,
