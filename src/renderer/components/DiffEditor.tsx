@@ -864,11 +864,13 @@ export function DiffEditor({
           mapEditorLineToFileLine(startLine, side) ?? startLine;
         const endLineForApi =
           mapEditorLineToFileLine(endLine, side) ?? endLine;
+        const isMultiLineSelection = startLine !== endLine;
+        const isMultiLineApi = startLineForApi !== endLineForApi;
 
         // Try to use position-based API first (more reliable for patch view)
         const position = getDiffPositionForEditorLine(endLine, side);
 
-        if (position !== undefined) {
+        if (!isMultiLineSelection && !isMultiLineApi && position !== undefined) {
           // Use position-based API
           console.log('Creating comment with position:', {
             path: file.filename,
@@ -887,7 +889,6 @@ export function DiffEditor({
             undefined, // no side for position-based
             undefined, // no startLine for position-based
             undefined, // no startSide for position-based
-            undefined, // no diffHunk needed for position-based
             position,
           );
 
@@ -904,7 +905,7 @@ export function DiffEditor({
           });
           setCommentDraft("");
         } else {
-          // Fallback to line-based API with diff hunk
+          // Fallback to line-based API when position not available (multi-line)
           const diffHunk = getDiffHunkForLine(endLineForApi, side);
 
           if (!diffHunk) {
@@ -914,12 +915,12 @@ export function DiffEditor({
             return;
           }
 
-          console.log('Creating comment with line/hunk:', {
+          console.log('Creating comment with line range:', {
             path: file.filename,
             line: endLineForApi,
             side,
             startLine: startLineForApi !== endLineForApi ? startLineForApi : undefined,
-            diffHunk: diffHunk.substring(0, 100) + '...'
+            hasDiffHunk: Boolean(diffHunk),
           });
 
           const newComment = await api.createComment(
@@ -932,7 +933,7 @@ export function DiffEditor({
             side,
             startLineForApi !== endLineForApi ? startLineForApi : undefined,
             startLineForApi !== endLineForApi ? side : undefined,
-            diffHunk,
+            undefined,
           );
 
           onCommentAdded?.(newComment);

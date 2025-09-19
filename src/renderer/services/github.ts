@@ -675,7 +675,6 @@ export class GitHubAPI {
     side?: "LEFT" | "RIGHT",
     startLine?: number,
     startSide?: "LEFT" | "RIGHT",
-    diffHunk?: string,
     position?: number,
   ) {
     if (path && (line || position !== undefined)) {
@@ -691,24 +690,14 @@ export class GitHubAPI {
       // Use position-based API when position is provided
       if (position !== undefined) {
         params.position = position;
-        if (diffHunk) {
-          params.diff_hunk = diffHunk;
-        }
-      } else if (diffHunk && line) {
-        // Use line-based API with diff hunk
-        params.diff_hunk = diffHunk;
+      } else if (line) {
+        // Use line-based positioning for multi-line comments
         params.line = line;
         params.side = side || "RIGHT";
         if (startLine && startLine !== line) {
           params.start_line = startLine;
           params.start_side = startSide || side || "RIGHT";
         }
-      } else if (line) {
-        // Fallback to the old API (might fail for some diffs)
-        params.line = line;
-        params.side = side;
-        params.start_line = startLine;
-        params.start_side = startSide;
       }
 
       const { data } = await this.octokit.pulls.createReviewComment(params);
