@@ -1,6 +1,8 @@
 # Bottleneck
 
-Fast GitHub PR review and branch management - A native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for power-review workflows.
+Vim for Code Review. 
+
+A native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for power-review workflows. Fast GitHub PR and branch management optimized for teams building code with AI agents like Claude Code, Cursor, Devin, and Codex.
 
 ## Features
 
@@ -32,11 +34,17 @@ Fast GitHub PR review and branch management - A native Electron app that reprodu
 
 ### Installation
 
-1. Clone the repository:
+1. Fork (and star) the repository:
 
 ```bash
-git clone https://github.com/yourusername/bottleneck.git
+gh repo fork areibman/bottleneck --clone
+git remote add upstream https://github.com/areibman/bottleneck.git
 cd bottleneck
+```
+
+To fetch updates, run
+```bash
+git fetch upstream
 ```
 
 2. Install dependencies:
@@ -44,6 +52,8 @@ cd bottleneck
 ```bash
 npm install
 ```
+
+Important: You must use npm. Bun is known not to work.
 
 3. Run in development mode:
 
