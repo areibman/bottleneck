@@ -222,6 +222,17 @@ export class GitHubAPI {
     repo: string,
     state: "open" | "closed" | "all" = "open",
   ): Promise<PullRequest[]> {
+    // Use lightweight GraphQL query for better performance
+    // Only fetch essential fields, not nested reviews/comments
+    return this.getPullRequestsGraphQLLight(owner, repo, state);
+  }
+
+  // GraphQL implementation (kept for reference but not used)
+  private async getPullRequestsGraphQL(
+    owner: string,
+    repo: string,
+    state: "open" | "closed" | "all" = "open",
+  ): Promise<PullRequest[]> {
     // Use GraphQL to fetch all PR data in a single request
     const stateFilter = state === "all" ? "" : `, states: [${state.toUpperCase()}]`;
 
@@ -466,74 +477,309 @@ export class GitHubAPI {
         if (pullRequests.length >= 100) break;
       } catch (error) {
         console.error("Failed to fetch pull requests via GraphQL:", error);
-        // Fallback to REST API with minimal data if GraphQL fails
-        return this.getPullRequestsREST(owner, repo, state);
+        throw error;
       }
     }
 
     return pullRequests;
   }
 
-  // Fallback REST implementation with minimal API calls
+  // Lightweight GraphQL query - only essential fields for list view
+  private async getPullRequestsGraphQLLight(
+    owner: string,
+    repo: string,
+    state: "open" | "closed" | "all" = "open",
+  ): Promise<PullRequest[]> {
+    const stateFilter = state === "all" ? "" : `, states: [${state.toUpperCase()}]`;
+
+    // Much simpler query - no nested reviews, minimal nested objects
+    const query = `
+      query ($owner: String!, $name: String!, $after: String) {
+        repository(owner: $owner, name: $name) {
+          pullRequests(first: 100, after: $after${stateFilter}, orderBy: {field: UPDATED_AT, direction: DESC}) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              databaseId
+              number
+              title
+              body
+              state
+              isDraft
+              merged
+              mergeable
+              mergeCommit {
+                oid
+              }
+              headRefName
+              baseRefName
+              author {
+                login
+                avatarUrl
+              }
+              assignees(first: 5) {
+                nodes {
+                  login
+                  avatarUrl
+                }
+              }
+              labels(first: 10) {
+                nodes {
+                  name
+                  color
+                }
+              }
+              createdAt
+              updatedAt
+              closedAt
+              mergedAt
+              changedFiles
+              additions
+              deletions
+            }
+          }
+        }
+      }
+    `;
+
+    const pullRequests: PullRequest[] = [];
+    let hasNextPage = true;
+    let after: string | null = null;
+    let totalFetched = 0;
+
+    try {
+      while (hasNextPage && totalFetched < 300) {
+        const response: any = await this.octokit.graphql(query, {
+          owner,
+          name: repo,
+          after,
+        });
+
+        const prData = response?.repository?.pullRequests;
+        if (!prData) break;
+
+        hasNextPage = prData.pageInfo.hasNextPage;
+        after = prData.pageInfo.endCursor;
+
+        for (const pr of prData.nodes) {
+          if (!pr) continue;
+
+          pullRequests.push({
+            id: pr.databaseId ?? pr.number,
+            number: pr.number,
+            title: pr.title,
+            body: pr.body || "",
+            state: pr.state.toLowerCase() as "open" | "closed",
+            draft: pr.isDraft || false,
+            merged: pr.merged || false,
+            mergeable: pr.mergeable === "MERGEABLE" ? true : pr.mergeable === "CONFLICTING" ? false : null,
+            merge_commit_sha: pr.mergeCommit?.oid || null,
+            head: {
+              ref: pr.headRefName || "",
+              sha: "", // Not needed for list view
+              repo: {
+                name: repo,
+                owner: {
+                  login: owner,
+                },
+              },
+            },
+            base: {
+              ref: pr.baseRefName || "",
+              sha: "", // Not needed for list view
+              repo: {
+                name: repo,
+                owner: {
+                  login: owner,
+                },
+              },
+            },
+            user: {
+              login: pr.author?.login || "ghost",
+              avatar_url: pr.author?.avatarUrl || "",
+            },
+            assignees: pr.assignees?.nodes?.map((a: any) => ({
+              login: a.login,
+              avatar_url: a.avatarUrl,
+            })) || [],
+            requested_reviewers: [], // Will fetch if needed in detail view
+            labels: pr.labels?.nodes?.map((l: any) => ({
+              name: l.name,
+              color: l.color,
+            })) || [],
+            comments: 0, // Will fetch if needed in detail view
+            created_at: pr.createdAt,
+            updated_at: pr.updatedAt,
+            closed_at: pr.closedAt,
+            merged_at: pr.mergedAt,
+            // These are now included in the lightweight query!
+            changed_files: pr.changedFiles ?? 0,
+            additions: pr.additions ?? 0,
+            deletions: pr.deletions ?? 0,
+            approvalStatus: "none" as const, // Will fetch if needed
+            approvedBy: [],
+            changesRequestedBy: [],
+          });
+        }
+
+        totalFetched += prData.nodes.length;
+
+        // Continue fetching until we have enough PRs or no more pages
+        // Most repos don't need more than 300 PRs in the list view
+      }
+    } catch (error) {
+      console.error("GraphQL query failed, falling back to REST:", error);
+      // Fallback to REST if GraphQL fails
+      return this.getPullRequestsREST(owner, repo, state);
+    }
+
+    console.log(`Fetched ${pullRequests.length} PRs via lightweight GraphQL`);
+    return pullRequests;
+  }
+
+  // REST implementation optimized for performance
   private async getPullRequestsREST(
     owner: string,
     repo: string,
     state: "open" | "closed" | "all" = "open",
   ): Promise<PullRequest[]> {
-    const { data } = await this.octokit.pulls.list({
-      owner,
-      repo,
-      state,
-      per_page: 500,
-    });
+    const pullRequests: PullRequest[] = [];
+    let page = 1;
+    const perPage = 100; // GitHub's max per page
 
-    // Return basic PR data without additional API calls
-    // Additional details can be fetched when the user opens a specific PR
-    return data.map(pr => ({
-      id: pr.id,
-      number: pr.number,
-      title: pr.title,
-      body: pr.body,
-      state: pr.state as "open" | "closed",
-      draft: pr.draft,
-      merged: false, // Will be fetched on detail view
-      mergeable: null,
-      merge_commit_sha: pr.merge_commit_sha,
-      head: pr.head,
-      base: pr.base,
-      user: pr.user ? {
-        login: pr.user.login,
-        avatar_url: pr.user.avatar_url,
-      } : {
-        login: "ghost",
-        avatar_url: "",
-      },
-      assignees: pr.assignees?.map(a => ({
-        login: a.login,
-        avatar_url: a.avatar_url,
-      })) || [],
-      requested_reviewers: Array.isArray(pr.requested_reviewers)
-        ? pr.requested_reviewers.filter((r: any) => r.login).map((r: any) => ({
-          login: r.login,
-          avatar_url: r.avatar_url,
-        }))
-        : [],
-      labels: pr.labels.map(l => ({
-        name: l.name,
-        color: l.color,
-      })),
-      comments: 0, // Will be fetched on detail view
-      created_at: pr.created_at,
-      updated_at: pr.updated_at,
-      closed_at: pr.closed_at,
-      merged_at: pr.merged_at,
-      changed_files: undefined,
-      additions: undefined,
-      deletions: undefined,
-      approvalStatus: "none" as const,
-      approvedBy: [],
-      changesRequestedBy: [],
-    }));
+    try {
+      while (true) {
+        const { data } = await this.octokit.pulls.list({
+          owner,
+          repo,
+          state,
+          sort: "updated",
+          direction: "desc",
+          per_page: perPage,
+          page,
+        });
+
+        if (data.length === 0) break;
+
+        // Map PR data - REST API provides most fields we need
+        for (const pr of data) {
+          pullRequests.push({
+            id: pr.id,
+            number: pr.number,
+            title: pr.title,
+            body: pr.body || "",
+            state: pr.state as "open" | "closed",
+            draft: pr.draft || false,
+            merged: pr.merged_at !== null,
+            mergeable: pr.mergeable || null,
+            merge_commit_sha: pr.merge_commit_sha || null,
+            head: pr.head,
+            base: pr.base,
+            user: pr.user ? {
+              login: pr.user.login,
+              avatar_url: pr.user.avatar_url,
+            } : {
+              login: "ghost",
+              avatar_url: "",
+            },
+            assignees: pr.assignees?.map(a => ({
+              login: a.login,
+              avatar_url: a.avatar_url,
+            })) || [],
+            requested_reviewers: Array.isArray(pr.requested_reviewers)
+              ? pr.requested_reviewers.filter((r: any) => r.login).map((r: any) => ({
+                login: r.login,
+                avatar_url: r.avatar_url,
+              }))
+              : [],
+            labels: pr.labels?.map(l => ({
+              name: l.name,
+              color: l.color,
+            })) || [],
+            comments: pr.comments || 0,
+            created_at: pr.created_at,
+            updated_at: pr.updated_at,
+            closed_at: pr.closed_at,
+            merged_at: pr.merged_at,
+            // REST API list endpoint doesn't provide these fields
+            // We'll fetch them separately for visible PRs
+            changed_files: undefined,
+            additions: undefined,
+            deletions: undefined,
+            // Review status will be fetched on-demand for detail view
+            approvalStatus: "none" as const,
+            approvedBy: [],
+            changesRequestedBy: [],
+          });
+        }
+
+        // Stop if we got less than a full page
+        if (data.length < perPage) break;
+
+        // Limit total PRs to avoid excessive API calls
+        // Frontend will handle filtering, so we don't need all PRs
+        if (pullRequests.length >= 300) {
+          console.log(`Fetched ${pullRequests.length} PRs, stopping pagination for performance`);
+          break;
+        }
+
+        page++;
+      }
+    } catch (error) {
+      console.error("Failed to fetch pull requests via REST API:", error);
+      throw error;
+    }
+
+    console.log(`Fetched ${pullRequests.length} pull requests via REST API`);
+    return pullRequests;
+  }
+
+  // Fetch statistics for multiple PRs efficiently
+  async fetchPRStatistics(
+    owner: string,
+    repo: string,
+    prNumbers: number[]
+  ): Promise<Map<number, { additions: number; deletions: number; changed_files: number }>> {
+    const stats = new Map();
+
+    // Fetch in parallel with rate limiting
+    const batchSize = 10; // Process 10 at a time to avoid rate limits
+    for (let i = 0; i < prNumbers.length; i += batchSize) {
+      const batch = prNumbers.slice(i, i + batchSize);
+      const promises = batch.map(async (prNumber) => {
+        try {
+          const { data } = await this.octokit.pulls.get({
+            owner,
+            repo,
+            pull_number: prNumber,
+          });
+          return {
+            number: prNumber,
+            additions: data.additions || 0,
+            deletions: data.deletions || 0,
+            changed_files: data.changed_files || 0,
+          };
+        } catch (error) {
+          console.error(`Failed to fetch stats for PR #${prNumber}:`, error);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(promises);
+      results.forEach((result) => {
+        if (result) {
+          stats.set(result.number, {
+            additions: result.additions,
+            deletions: result.deletions,
+            changed_files: result.changed_files,
+          });
+        }
+      });
+    }
+
+    return stats;
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {

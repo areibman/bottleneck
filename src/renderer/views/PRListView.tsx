@@ -66,6 +66,9 @@ export default function PRListView() {
     };
   }, [showAuthorDropdown, showStatusDropdown]);
 
+  // Removed automatic stats fetching - was causing performance issues
+  // Stats will be included in the optimized GraphQL query instead
+
   const selectedRepoKey = useMemo(() => {
     if (!selectedRepo) return null;
     return `${selectedRepo.owner}/${selectedRepo.name}`;

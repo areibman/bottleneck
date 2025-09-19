@@ -63,6 +63,7 @@ interface PRState {
   groupPRsByPrefix: () => void;
   updatePR: (pr: PullRequest) => void;
   bulkUpdatePRs: (prs: PullRequest[]) => void;
+  fetchPRStats: (owner: string, repo: string, prNumbers: number[]) => Promise<void>;
   storePRsInDB: (
     prs: PullRequest[],
     owner: string,
@@ -461,10 +462,10 @@ export const usePRStore = create<PRState>((set, get) => {
         ...(repo
           ? {}
           : {
-              pullRequests: new Map(),
-              currentRepoKey: null,
-              pendingRepoKey: null,
-            }),
+            pullRequests: new Map(),
+            currentRepoKey: null,
+            pendingRepoKey: null,
+          }),
       }));
 
       // Save to electron store
@@ -632,6 +633,46 @@ export const usePRStore = create<PRState>((set, get) => {
 
       // Re-group after bulk update
       get().groupPRsByPrefix();
+    },
+
+    fetchPRStats: async (owner: string, repo: string, prNumbers: number[]) => {
+      try {
+        let token: string | null = null;
+
+        // Check if we're using electron or dev mode
+        if (window.electron) {
+          token = await window.electron.auth.getToken();
+        } else {
+          // In dev mode, get token from auth store
+          const authStore = require("./authStore").useAuthStore.getState();
+          token = authStore.token;
+        }
+
+        if (!token || token === "dev-token") return;
+
+        const api = new GitHubAPI(token);
+        const stats = await api.fetchPRStatistics(owner, repo, prNumbers);
+
+        // Update the PRs with the fetched stats
+        set((state) => {
+          const newPRs = new Map(state.pullRequests);
+          stats.forEach((stat, prNumber) => {
+            const prKey = `${owner}/${repo}#${prNumber}`;
+            const pr = newPRs.get(prKey);
+            if (pr) {
+              newPRs.set(prKey, {
+                ...pr,
+                additions: stat.additions,
+                deletions: stat.deletions,
+                changed_files: stat.changed_files,
+              });
+            }
+          });
+          return { pullRequests: newPRs };
+        });
+      } catch (error) {
+        console.error("Failed to fetch PR stats:", error);
+      }
     },
 
     // Database operations
