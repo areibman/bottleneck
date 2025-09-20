@@ -490,6 +490,7 @@ export class GitHubAPI {
     repo: string,
     state: "open" | "closed" | "all" = "open",
   ): Promise<PullRequest[]> {
+    console.time(`GraphQL fetch for ${owner}/${repo}`);
     const stateFilter = state === "all" ? "" : `, states: [${state.toUpperCase()}]`;
 
     // Much simpler query - no nested reviews, minimal nested objects
@@ -547,10 +548,11 @@ export class GitHubAPI {
     const pullRequests: PullRequest[] = [];
     let hasNextPage = true;
     let after: string | null = null;
-    let totalFetched = 0;
+    let pageCount = 0;
+    const maxPages = 1; // Only fetch first page initially for fast load
 
     try {
-      while (hasNextPage && totalFetched < 300) {
+      while (hasNextPage && pageCount < maxPages) {
         const response: any = await this.octokit.graphql(query, {
           owner,
           name: repo,
@@ -624,18 +626,21 @@ export class GitHubAPI {
           });
         }
 
-        totalFetched += prData.nodes.length;
+        pageCount++;
 
-        // Continue fetching until we have enough PRs or no more pages
-        // Most repos don't need more than 300 PRs in the list view
+        // Only fetch first 100 PRs initially for fast load
+        // Users rarely need to see more than the most recent 100 PRs
+        // Additional pages can be fetched on-demand if needed
       }
     } catch (error) {
       console.error("GraphQL query failed, falling back to REST:", error);
+      console.timeEnd(`GraphQL fetch for ${owner}/${repo}`);
       // Fallback to REST if GraphQL fails
       return this.getPullRequestsREST(owner, repo, state);
     }
 
     console.log(`Fetched ${pullRequests.length} PRs via lightweight GraphQL`);
+    console.timeEnd(`GraphQL fetch for ${owner}/${repo}`);
     return pullRequests;
   }
 

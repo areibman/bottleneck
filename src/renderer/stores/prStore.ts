@@ -144,11 +144,8 @@ export const usePRStore = create<PRState>((set, get) => {
       if (Object.keys(updates).length > 0) {
         set(updates);
 
-        // Auto-fetch PRs for the selected repo
-        const repoToLoad = updates.selectedRepo;
-        if (repoToLoad) {
-          get().fetchPullRequests(repoToLoad.owner, repoToLoad.name);
-        }
+        // Don't auto-fetch here - let the sync store handle initial fetch
+        // This prevents duplicate fetches on hard refresh
       }
     },
   );
@@ -179,6 +176,14 @@ export const usePRStore = create<PRState>((set, get) => {
       const repoFullName = `${owner}/${repo}`;
       const { replaceStore = true } = options;
       const { loading, pendingRepoKey, currentRepoKey } = get();
+
+      console.log(`[PRStore] fetchPullRequests called for ${repoFullName}`, {
+        force,
+        replaceStore,
+        loading,
+        currentRepoKey,
+        pendingRepoKey,
+      });
 
       if (replaceStore) {
         if (loading) {
