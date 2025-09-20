@@ -39,10 +39,10 @@ export default function PRListView() {
   const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
     useUIStore();
   const [sortBy, setSortBy] = useState<SortByType>("updated");
-  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set(["all"]));
+  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set());
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<StatusType>>(new Set(["open", "draft"]));
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<StatusType>>(new Set());
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +65,7 @@ export default function PRListView() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showAuthorDropdown, showStatusDropdown]);
+
 
   // Removed automatic stats fetching - was causing performance issues
   // Stats will be included in the optimized GraphQL query instead
@@ -161,12 +162,13 @@ export default function PRListView() {
     setSelectedAuthors(prev => {
       const newSet = new Set(prev);
       if (authorLogin === "all") {
-        if (newSet.has("all")) {
-          // If "all" is selected and clicked, deselect all
-          return new Set();
-        } else {
+        // Toggle between all selected and none selected
+        if (newSet.size === 0 || !newSet.has("all")) {
           // Select all
           return new Set(["all", ...authors.map(a => a.login)]);
+        } else {
+          // Deselect all
+          return new Set();
         }
       } else {
         // Toggle individual author
@@ -195,24 +197,27 @@ export default function PRListView() {
 
   const handleStatusToggle = useCallback((status: StatusType | "all") => {
     setSelectedStatuses(prev => {
-      const newSet = new Set(prev);
       if (status === "all") {
-        if (newSet.size === statusOptions.length) {
-          // If all are selected, deselect all
-          return new Set();
-        } else {
+        // Toggle between all selected and none selected
+        if (prev.size === 0 || prev.size < statusOptions.length) {
           // Select all
           return new Set(statusOptions.map(s => s.value));
+        } else {
+          // Deselect all (which means show all in our logic)
+          return new Set();
         }
       } else {
-        // Toggle individual status
-        if (newSet.has(status)) {
-          newSet.delete(status);
+        // Toggle individual status - create a new Set to ensure React detects the change
+        const prevArray = Array.from(prev);
+        if (prev.has(status)) {
+          // Remove the status
+          const newArray = prevArray.filter(s => s !== status);
+          return new Set(newArray);
         } else {
-          newSet.add(status);
+          // Add the status
+          return new Set([...prevArray, status]);
         }
       }
-      return newSet;
     });
   }, []);
 
@@ -233,79 +238,50 @@ export default function PRListView() {
     return prefixWords.join(" ");
   }, []);
 
-  // Cache date parsing in a separate map to avoid modifying objects
-  const parsedDates = useMemo(() => {
-    const dateMap = new Map<string, { updated: number; created: number }>();
-
-    if (!selectedRepo) {
-      return dateMap;
-    }
-
-    pullRequests.forEach((pr, key) => {
-      const baseOwner = pr.base?.repo?.owner?.login;
-      const baseName = pr.base?.repo?.name;
-
-      if (baseOwner === selectedRepo.owner && baseName === selectedRepo.name) {
-        dateMap.set(key, {
-          updated: new Date(pr.updated_at).getTime(),
-          created: new Date(pr.created_at).getTime(),
-        });
-      }
-    });
-
-    return dateMap;
-  }, [pullRequests, selectedRepo]);
-
+  // Simplified filtering logic - cleaner and more maintainable
   const getFilteredPRs = useMemo(() => {
     if (!selectedRepo) {
       return [];
     }
 
-    let prs = Array.from(pullRequests.values()).filter((pr) => {
+    // Step 1: Filter PRs by repository
+    const repoFilteredPRs = Array.from(pullRequests.values()).filter((pr) => {
       const baseOwner = pr.base?.repo?.owner?.login;
       const baseName = pr.base?.repo?.name;
-      return (
-        baseOwner === selectedRepo.owner && baseName === selectedRepo.name
-      );
+      return baseOwner === selectedRepo.owner && baseName === selectedRepo.name;
     });
 
-    // Apply author filter
-    if (!selectedAuthors.has("all") && selectedAuthors.size > 0) {
-      prs = prs.filter((pr) => selectedAuthors.has(pr.user.login));
-    } else if (selectedAuthors.size === 0) {
-      // No authors selected, show no PRs
-      prs = [];
-    }
+    // Step 2: Apply filters
+    const filteredPRs = repoFilteredPRs.filter((pr) => {
+      // Author filter
+      const authorMatches = selectedAuthors.size === 0 ||
+        selectedAuthors.has("all") ||
+        selectedAuthors.has(pr.user.login);
 
-    // Apply status filter
-    if (selectedStatuses.size > 0) {
-      prs = prs.filter((pr) => selectedStatuses.has(getPRStatus(pr)));
-    } else {
-      // No statuses selected, show no PRs
-      prs = [];
-    }
+      // Status filter
+      const prStatus = getPRStatus(pr);
+      const statusMatches = selectedStatuses.size === 0 ||
+        selectedStatuses.has(prStatus);
 
-    // Sort using cached dates from the map
-    prs.sort((a, b) => {
-      const aKey = `${a.base.repo.owner.login}/${a.base.repo.name}#${a.number}`;
-      const bKey = `${b.base.repo.owner.login}/${b.base.repo.name}#${b.number}`;
-      const aDates = parsedDates.get(aKey) || { updated: 0, created: 0 };
-      const bDates = parsedDates.get(bKey) || { updated: 0, created: 0 };
-
-      switch (sortBy) {
-        case "updated":
-          return bDates.updated - aDates.updated;
-        case "created":
-          return bDates.created - aDates.created;
-        default:
-          return 0;
-      }
+      // Both filters must pass
+      return authorMatches && statusMatches;
     });
 
-    return prs;
+    // Step 3: Sort PRs
+    const sortedPRs = [...filteredPRs].sort((a, b) => {
+      const aDate = sortBy === "updated"
+        ? new Date(a.updated_at).getTime()
+        : new Date(a.created_at).getTime();
+      const bDate = sortBy === "updated"
+        ? new Date(b.updated_at).getTime()
+        : new Date(b.created_at).getTime();
+
+      return bDate - aDate; // Descending order (newest first)
+    });
+
+    return sortedPRs;
   }, [
     pullRequests,
-    parsedDates,
     selectedAuthors,
     selectedStatuses,
     sortBy,
@@ -536,7 +512,7 @@ export default function PRListView() {
                     theme === "dark" ? "text-gray-300" : "text-gray-700"
                   )}>
                     {selectedStatuses.size === 0
-                      ? "None"
+                      ? "All"
                       : selectedStatuses.size === statusOptions.length
                         ? "All"
                         : `${selectedStatuses.size} selected`}
@@ -564,7 +540,7 @@ export default function PRListView() {
                       >
                         <input
                           type="checkbox"
-                          checked={selectedStatuses.size === statusOptions.length}
+                          checked={selectedStatuses.size === 0 || selectedStatuses.size === statusOptions.length}
                           onChange={() => handleStatusToggle("all")}
                           className="rounded"
                         />
@@ -687,11 +663,9 @@ export default function PRListView() {
                             "truncate",
                             theme === "dark" ? "text-gray-300" : "text-gray-700"
                           )}>
-                            {selectedAuthors.has("all")
+                            {selectedAuthors.size === 0 || selectedAuthors.has("all")
                               ? "All"
-                              : selectedAuthors.size === 0
-                                ? "None"
-                                : `${selectedAuthors.size} selected`}
+                              : `${selectedAuthors.size} selected`}
                           </span>
                         </>
                       )}
@@ -720,7 +694,7 @@ export default function PRListView() {
                       >
                         <input
                           type="checkbox"
-                          checked={selectedAuthors.has("all")}
+                          checked={selectedAuthors.size === 0 || selectedAuthors.has("all")}
                           onChange={() => handleAuthorToggle("all")}
                           className="rounded"
                         />
@@ -797,6 +771,7 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
