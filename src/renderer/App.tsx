@@ -52,11 +52,13 @@ function App() {
 
         // Auto-sync if never synced or last sync was more than 5 minutes ago
         if (!lastSync || now.getTime() - lastSync.getTime() > 5 * 60 * 1000) {
-          console.log("Triggering initial sync...");
+          console.log(`[App] Triggering initial sync (lastSync: ${lastSync ? lastSync.toISOString() : 'never'})`);
           // Small delay to let the UI settle
           setTimeout(() => {
             syncStore.syncAll();
           }, 1000);
+        } else {
+          console.log(`[App] Skipping initial sync (last sync was ${Math.round((now.getTime() - lastSync.getTime()) / 1000)}s ago)`);
         }
       });
     }

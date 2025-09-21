@@ -54,12 +54,12 @@ function createWindow() {
             ...details.responseHeaders,
             "Content-Security-Policy": [
               "default-src 'self' https://api.github.com; " +
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-                "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; " +
-                "font-src 'self' data:; " +
-                "connect-src 'self' https://api.github.com https://github.com http://localhost:* ws://localhost:*; " +
-                "worker-src 'self' blob:;",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+              "style-src 'self' 'unsafe-inline'; " +
+              "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; " +
+              "font-src 'self' data:; " +
+              "connect-src 'self' https://api.github.com https://github.com http://localhost:* ws://localhost:*; " +
+              "worker-src 'self' blob:;",
             ],
           },
         });
@@ -395,6 +395,15 @@ ipcMain.handle("settings:get", async (_, key?: string) => {
 ipcMain.handle("settings:set", async (_, key: string, value: any) => {
   try {
     store.set(key, value);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("settings:clear", async () => {
+  try {
+    store.clear();
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };

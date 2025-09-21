@@ -64,6 +64,7 @@ const electronAPI = {
     get: (key?: string) => ipcRenderer.invoke("settings:get", key),
     set: (key: string, value: any) =>
       ipcRenderer.invoke("settings:set", key, value),
+    clear: () => ipcRenderer.invoke("settings:clear"),
   },
 
   // IPC event listeners

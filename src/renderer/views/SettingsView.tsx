@@ -1,17 +1,15 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Settings,
-  User,
   Bell,
   Code,
   Palette,
-  Key,
   Database,
-  Info,
   LogOut,
   Save,
   RefreshCw,
   FolderOpen,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -20,11 +18,13 @@ import { cn } from "../utils/cn";
 
 export default function SettingsView() {
   const { user, logout } = useAuthStore();
-  const { settings, updateSettings, saveSettings } = useSettingsStore();
+  const { settings, updateSettings, saveSettings, resetSettings } = useSettingsStore();
   const { theme } = useUIStore();
   const [activeTab, setActiveTab] = useState<
     "general" | "appearance" | "notifications" | "advanced"
   >("general");
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const handleSave = async () => {
     await saveSettings();
@@ -35,6 +35,85 @@ export default function SettingsView() {
     // Clear local database cache
     await window.electron.db.execute("DELETE FROM pull_requests");
     await window.electron.db.execute("DELETE FROM repositories");
+  };
+
+  const handleResetToDefaults = async () => {
+    setIsResetting(true);
+    try {
+      // 1. Clear all database tables
+      const tables = [
+        "comments",
+        "reviews",
+        "files",
+        "draft_reviews",
+        "pull_requests",
+        "branches",
+        "pr_groups",
+        "saved_filters",
+        "preferences",
+        "repositories",
+      ];
+
+      for (const table of tables) {
+        await window.electron.db.execute(`DELETE FROM ${table}`);
+      }
+
+      // 2. Clear electron-store settings
+      if (window.electron.settings.clear) {
+        await window.electron.settings.clear();
+      } else {
+        // Fallback: clear individual settings by resetting to defaults
+        const defaultSettings = {
+          autoSync: true,
+          syncInterval: 5,
+          defaultBranch: "main",
+          cloneLocation: "~/repos",
+          theme: "dark",
+          fontSize: 13,
+          fontFamily: "SF Mono",
+          terminalFontSize: 13,
+          terminalFontFamily: "SF Mono",
+          showWhitespace: false,
+          wordWrap: false,
+          showDesktopNotifications: true,
+          notifyOnPRUpdate: true,
+          notifyOnReview: true,
+          notifyOnMention: true,
+          notifyOnMerge: true,
+          maxConcurrentRequests: 10,
+          cacheSize: 500,
+          enableDebugMode: false,
+          enableTelemetry: false,
+        };
+
+        for (const [key, value] of Object.entries(defaultSettings)) {
+          await window.electron.settings.set(key, value);
+        }
+      }
+
+      // 3. Logout from GitHub
+      await logout();
+
+      // 4. Clear localStorage
+      localStorage.clear();
+
+      // 5. Clear sessionStorage
+      sessionStorage.clear();
+
+      // 6. Reset all Zustand stores to their initial states
+      resetSettings(); // Settings store
+
+      // 7. Reload the application to ensure clean state
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (error) {
+      console.error("Failed to reset to defaults:", error);
+      alert("Failed to reset application. Please try again.");
+    } finally {
+      setIsResetting(false);
+      setShowResetDialog(false);
+    }
   };
 
   const tabs = [
@@ -309,7 +388,7 @@ export default function SettingsView() {
                     <select
                       value={settings.theme}
                       onChange={(e) =>
-                        updateSettings({ theme: e.target.value })
+                        updateSettings({ theme: e.target.value as "dark" | "light" | "auto" })
                       }
                       className={cn(
                         "input w-48",
@@ -787,9 +866,13 @@ export default function SettingsView() {
                         Clear Cache
                       </button>
 
-                      <button className="btn btn-danger w-fit">
+                      <button
+                        onClick={() => setShowResetDialog(true)}
+                        className="btn btn-danger w-fit"
+                        disabled={isResetting}
+                      >
                         <RefreshCw className="w-4 h-4 mr-2" />
-                        Reset to Defaults
+                        {isResetting ? "Resetting..." : "Reset to Defaults"}
                       </button>
                     </div>
                   </div>
@@ -812,6 +895,84 @@ export default function SettingsView() {
           </div>
         </div>
       </div>
+
+      {/* Reset Confirmation Dialog */}
+      {showResetDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div
+            className={cn(
+              "bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4",
+              "shadow-xl border",
+              theme === "dark" ? "border-gray-700" : "border-gray-200",
+            )}
+          >
+            <div className="flex items-start mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3
+                  className={cn(
+                    "text-lg font-semibold mb-2",
+                    theme === "dark" ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  Reset to Defaults
+                </h3>
+                <p
+                  className={cn(
+                    "text-sm",
+                    theme === "dark" ? "text-gray-300" : "text-gray-600",
+                  )}
+                >
+                  This action will:
+                </p>
+                <ul
+                  className={cn(
+                    "text-sm mt-2 space-y-1 list-disc list-inside",
+                    theme === "dark" ? "text-gray-300" : "text-gray-600",
+                  )}
+                >
+                  <li>Delete all cached pull requests and repositories</li>
+                  <li>Clear all saved preferences and settings</li>
+                  <li>Sign you out from GitHub</li>
+                  <li>Remove all local storage data</li>
+                  <li>Reset the application to its initial state</li>
+                </ul>
+                <p
+                  className={cn(
+                    "text-sm mt-3 font-semibold",
+                    theme === "dark" ? "text-red-400" : "text-red-600",
+                  )}
+                >
+                  This action cannot be undone!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowResetDialog(false)}
+                className={cn(
+                  "px-4 py-2 rounded-md text-sm font-medium",
+                  "border",
+                  theme === "dark"
+                    ? "border-gray-600 text-gray-300 hover:bg-gray-700"
+                    : "border-gray-300 text-gray-700 hover:bg-gray-50",
+                )}
+                disabled={isResetting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetToDefaults}
+                className="btn btn-danger"
+                disabled={isResetting}
+              >
+                {isResetting ? "Resetting..." : "Reset Everything"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

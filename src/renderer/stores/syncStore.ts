@@ -108,6 +108,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
           });
 
           try {
+            console.log(`[SyncStore] Syncing ${repo.full_name} (replaceStore: ${shouldReplaceStore})`);
             await prStore.fetchPullRequests(repo.owner, repo.name, true, {
               replaceStore: shouldReplaceStore,
             }); // Force refresh

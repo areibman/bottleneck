@@ -86,6 +86,7 @@ declare global {
           key: string,
           value: any,
         ) => Promise<{ success: boolean; error?: string }>;
+        clear: () => Promise<{ success: boolean; error?: string }>;
       };
 
       on: (
@@ -104,4 +105,4 @@ declare global {
   }
 }
 
-export {};
+export { };
