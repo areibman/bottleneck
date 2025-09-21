@@ -113,6 +113,65 @@ export interface Issue {
   };
 }
 
+// Simple status descriptor for a branch's latest GitHub Actions run
+export type BranchCheckStatus =
+  | {
+      state: "success" | "failure";
+      url: string;
+      updated_at: string;
+    }
+  | {
+      state: "running" | "queued";
+      url: string;
+      updated_at: string;
+    }
+  | { state: "none" };
+
+/**
+ * Get the latest workflow run status for a branch.
+ * Returns a lightweight object suitable for UI badges.
+ * We intentionally keep the payload minimal to avoid unnecessary data transfer.
+ */
+async getBranchCheckStatus(
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<BranchCheckStatus> {
+  try {
+    const { data } = await this.octokit.actions.listWorkflowRunsForRepo({
+      owner,
+      repo,
+      branch,
+      per_page: 1,
+    });
+
+    if (data.total_count === 0 || data.workflow_runs.length === 0) {
+      return { state: "none" };
+    }
+
+    const run = data.workflow_runs[0];
+    const status = run.status;
+    const conclusion = run.conclusion;
+
+    if (status === "completed") {
+      return {
+        state: conclusion === "success" ? "success" : "failure",
+        url: run.html_url,
+        updated_at: run.updated_at || run.created_at,
+      };
+    }
+
+    return {
+      state: status === "queued" ? "queued" : "running",
+      url: run.html_url,
+      updated_at: run.updated_at || run.created_at,
+    };
+  } catch (error) {
+    console.error("Failed to fetch branch check status", error);
+    return { state: "none" };
+  }
+}
+
 export interface Comment {
   id: number;
   body: string;
