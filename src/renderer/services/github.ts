@@ -83,6 +83,60 @@ export interface Repository {
   open_issues_count: number;
 }
 
+export interface CheckRun {
+  id: number;
+  name: string;
+  status: "queued" | "in_progress" | "completed";
+  conclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null;
+  started_at: string | null;
+  completed_at: string | null;
+  html_url: string;
+  details_url: string | null;
+  app: {
+    name: string;
+    slug: string;
+  } | null;
+}
+
+export interface CheckSuite {
+  id: number;
+  status: "queued" | "in_progress" | "completed";
+  conclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | "stale" | null;
+  created_at: string;
+  updated_at: string;
+  head_sha: string;
+  head_branch: string;
+  check_runs_url: string;
+  app: {
+    name: string;
+    slug: string;
+  } | null;
+}
+
+export interface WorkflowRun {
+  id: number;
+  name: string;
+  status: "queued" | "in_progress" | "completed";
+  conclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | "stale" | null;
+  workflow_id: number;
+  run_number: number;
+  event: string;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  head_sha: string;
+  head_branch: string;
+}
+
+export interface BranchCheckStatus {
+  branch: string;
+  sha: string;
+  overallStatus: "success" | "failure" | "pending" | "none";
+  checkRuns: CheckRun[];
+  workflowRuns: WorkflowRun[];
+  lastUpdated: string;
+}
+
 export interface Issue {
   id: number;
   number: number;
@@ -1629,5 +1683,155 @@ export class GitHubAPI {
       ...currentPR,
       draft: isDraft !== undefined ? isDraft : draft,
     };
+  }
+
+  // GitHub Actions Check Status Methods
+  async getCheckRunsForRef(
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<CheckRun[]> {
+    try {
+      const { data } = await this.octokit.checks.listForRef({
+        owner,
+        repo,
+        ref,
+        per_page: 100,
+      });
+
+      return data.check_runs.map((run) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status as CheckRun["status"],
+        conclusion: run.conclusion as CheckRun["conclusion"],
+        started_at: run.started_at,
+        completed_at: run.completed_at,
+        html_url: run.html_url,
+        details_url: run.details_url,
+        app: run.app ? {
+          name: run.app.name,
+          slug: run.app.slug,
+        } : null,
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch check runs for ${ref}:`, error);
+      return [];
+    }
+  }
+
+  async getWorkflowRunsForBranch(
+    owner: string,
+    repo: string,
+    branch: string,
+  ): Promise<WorkflowRun[]> {
+    try {
+      const { data } = await this.octokit.actions.listWorkflowRunsForRepo({
+        owner,
+        repo,
+        branch,
+        per_page: 10, // Get only recent runs
+      });
+
+      return data.workflow_runs.map((run) => ({
+        id: run.id,
+        name: run.name || "Unnamed Workflow",
+        status: run.status as WorkflowRun["status"],
+        conclusion: run.conclusion as WorkflowRun["conclusion"],
+        workflow_id: run.workflow_id,
+        run_number: run.run_number,
+        event: run.event,
+        created_at: run.created_at,
+        updated_at: run.updated_at,
+        html_url: run.html_url,
+        head_sha: run.head_sha,
+        head_branch: run.head_branch || branch,
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch workflow runs for branch ${branch}:`, error);
+      return [];
+    }
+  }
+
+  async getBranchCheckStatus(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<BranchCheckStatus> {
+    try {
+      // Fetch both check runs and workflow runs in parallel
+      const [checkRuns, workflowRuns] = await Promise.all([
+        this.getCheckRunsForRef(owner, repo, sha),
+        this.getWorkflowRunsForBranch(owner, repo, branch),
+      ]);
+
+      // Filter workflow runs to only include the latest for the given SHA
+      const relevantWorkflowRuns = workflowRuns.filter(run => run.head_sha === sha);
+
+      // Determine overall status
+      let overallStatus: BranchCheckStatus["overallStatus"] = "none";
+      
+      if (checkRuns.length > 0 || relevantWorkflowRuns.length > 0) {
+        const allRuns = [
+          ...checkRuns.map(r => ({ status: r.status, conclusion: r.conclusion })),
+          ...relevantWorkflowRuns.map(r => ({ status: r.status, conclusion: r.conclusion })),
+        ];
+
+        if (allRuns.some(r => r.status === "in_progress" || r.status === "queued")) {
+          overallStatus = "pending";
+        } else if (allRuns.every(r => r.status === "completed")) {
+          if (allRuns.every(r => r.conclusion === "success" || r.conclusion === "skipped" || r.conclusion === "neutral")) {
+            overallStatus = "success";
+          } else if (allRuns.some(r => r.conclusion === "failure" || r.conclusion === "timed_out" || r.conclusion === "action_required")) {
+            overallStatus = "failure";
+          } else {
+            overallStatus = "success"; // Default to success for other completed states
+          }
+        }
+      }
+
+      return {
+        branch,
+        sha,
+        overallStatus,
+        checkRuns,
+        workflowRuns: relevantWorkflowRuns,
+        lastUpdated: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error(`Failed to fetch check status for branch ${branch}:`, error);
+      return {
+        branch,
+        sha,
+        overallStatus: "none",
+        checkRuns: [],
+        workflowRuns: [],
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+  }
+
+  async getBatchBranchCheckStatuses(
+    owner: string,
+    repo: string,
+    branches: Array<{ name: string; sha: string }>,
+  ): Promise<Map<string, BranchCheckStatus>> {
+    const statuses = new Map<string, BranchCheckStatus>();
+    
+    // Process in batches to avoid rate limiting
+    const batchSize = 5;
+    for (let i = 0; i < branches.length; i += batchSize) {
+      const batch = branches.slice(i, i + batchSize);
+      const promises = batch.map(branch => 
+        this.getBranchCheckStatus(owner, repo, branch.name, branch.sha)
+      );
+      
+      const results = await Promise.all(promises);
+      results.forEach((status, index) => {
+        statuses.set(batch[index].name, status);
+      });
+    }
+    
+    return statuses;
   }
 }

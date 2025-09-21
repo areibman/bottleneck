@@ -13,6 +13,8 @@ import {
   Shield,
   GitPullRequest,
   X,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useUIStore } from "../stores/uiStore";
@@ -25,6 +27,8 @@ import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { AgentIcon } from "../components/AgentIcon";
 import { PRTag } from "../components/PRTag";
 import { detectAgentName } from "../utils/agentIcons";
+import { CheckStatusBadge } from "../components/CheckStatusBadge";
+import { CheckStatusDetails } from "../components/CheckStatusDetails";
 
 // Re-export Branch type from store for use in component
 interface Branch {
@@ -40,14 +44,16 @@ interface Branch {
   ahead: number;
   behind: number;
   current?: boolean;
+  checkStatus?: import("../services/github").BranchCheckStatus;
 }
 
-type SortByType = "updated" | "name" | "ahead-behind";
+type SortByType = "updated" | "name" | "ahead-behind" | "check-status";
 
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
   { value: "name", label: "Name" },
   { value: "ahead-behind", label: "Ahead/Behind" },
+  { value: "check-status", label: "Check status" },
 ];
 
 export default function BranchesView() {
@@ -55,7 +61,13 @@ export default function BranchesView() {
   const { theme } = useUIStore();
   const { selectedRepo, pullRequests } = usePRStore();
   const { token } = useAuthStore();
-  const { branches: branchesMap, loading, fetchBranches } = useBranchStore();
+  const { 
+    branches: branchesMap, 
+    loading, 
+    fetchBranches,
+    fetchBranchCheckStatuses,
+    checkStatusLoading 
+  } = useBranchStore();
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(
     new Set(),
   );
@@ -74,6 +86,10 @@ export default function BranchesView() {
   const [isDraft, setIsDraft] = useState(false);
   const [isCreatingPR, setIsCreatingPR] = useState(false);
   const [createPRError, setCreatePRError] = useState<string | null>(null);
+  const [expandedBranch, setExpandedBranch] = useState<string | null>(null);
+  const [showCheckStatus, setShowCheckStatus] = useState(true);
+  const [checkStatusFilter, setCheckStatusFilter] = useState<"all" | "success" | "failure" | "pending" | "none">("all");
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(0); // 0 = disabled, otherwise in seconds
 
   // Get branches for current repo from the store
   const branches = useMemo(() => {
@@ -109,9 +125,37 @@ export default function BranchesView() {
         selectedRepo.name,
         token,
         selectedRepo.default_branch,
-      );
+      ).then(() => {
+        // After branches are loaded, fetch check statuses
+        if (showCheckStatus) {
+          fetchBranchCheckStatuses(
+            selectedRepo.owner,
+            selectedRepo.name,
+            token,
+          );
+        }
+      });
     }
-  }, [selectedRepo, token, fetchBranches]);
+  }, [selectedRepo, token, fetchBranches, fetchBranchCheckStatuses, showCheckStatus]);
+
+  // Auto-refresh effect for check status
+  useEffect(() => {
+    if (!autoRefreshInterval || !selectedRepo || !token || !showCheckStatus) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      console.log(`Auto-refreshing check status (interval: ${autoRefreshInterval}s)`);
+      fetchBranchCheckStatuses(
+        selectedRepo.owner,
+        selectedRepo.name,
+        token,
+        true // Force refresh
+      );
+    }, autoRefreshInterval * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [autoRefreshInterval, selectedRepo, token, showCheckStatus, fetchBranchCheckStatuses]);
 
   const handleRefresh = useCallback(() => {
     if (selectedRepo && token) {
@@ -122,9 +166,19 @@ export default function BranchesView() {
         token,
         selectedRepo.default_branch,
         true,
-      );
+      ).then(() => {
+        // Also refresh check statuses if enabled
+        if (showCheckStatus) {
+          fetchBranchCheckStatuses(
+            selectedRepo.owner,
+            selectedRepo.name,
+            token,
+            true,
+          );
+        }
+      });
     }
-  }, [selectedRepo, token, fetchBranches]);
+  }, [selectedRepo, token, fetchBranches, fetchBranchCheckStatuses, showCheckStatus]);
 
   // Helper functions for grouping
   const getBranchStatus = useCallback((branch: Branch): string => {
@@ -371,7 +425,15 @@ export default function BranchesView() {
           .toLowerCase()
           .includes(searchQuery.toLowerCase()) ||
         branch.commit.author.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSearch;
+      
+      // Apply check status filter
+      let matchesCheckStatus = true;
+      if (checkStatusFilter !== "all" && showCheckStatus) {
+        const branchCheckStatus = branch.checkStatus?.overallStatus || "none";
+        matchesCheckStatus = branchCheckStatus === checkStatusFilter;
+      }
+      
+      return matchesSearch && matchesCheckStatus;
     });
 
     // Sort branches
@@ -388,6 +450,20 @@ export default function BranchesView() {
           const aScore = a.ahead - a.behind;
           const bScore = b.ahead - b.behind;
           return bScore - aScore;
+        case "check-status":
+          // Sort by check status priority: failure > pending > none > success
+          const statusPriority = (status?: string) => {
+            switch (status) {
+              case "failure": return 0;
+              case "pending": return 1;
+              case "none": return 2;
+              case "success": return 3;
+              default: return 4;
+            }
+          };
+          const aPriority = statusPriority(a.checkStatus?.overallStatus);
+          const bPriority = statusPriority(b.checkStatus?.overallStatus);
+          return aPriority - bPriority;
         default:
           return 0;
       }
@@ -486,16 +562,17 @@ export default function BranchesView() {
     };
 
     return (
-      <div
-        className={cn(
-          "px-3 py-2 flex items-center justify-between cursor-pointer transition-colors",
-          theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100",
-          isSelected && (theme === "dark" ? "bg-gray-700" : "bg-gray-100"),
-          branch.current && "border-l-2 border-blue-500",
-          isNested && "pl-10",
-        )}
-        onClick={handleBranchClick}
-      >
+      <div>
+        <div
+          className={cn(
+            "px-3 py-2 flex items-center justify-between cursor-pointer transition-colors",
+            theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100",
+            isSelected && (theme === "dark" ? "bg-gray-700" : "bg-gray-100"),
+            branch.current && "border-l-2 border-blue-500",
+            isNested && "pl-10",
+          )}
+          onClick={handleBranchClick}
+        >
         <div className="flex items-center space-x-2 flex-1 min-w-0">
           {/* Checkbox */}
           <input
@@ -538,27 +615,38 @@ export default function BranchesView() {
             )}
           </div>
 
-          {/* Branch Details */}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="flex items-center space-x-2 overflow-hidden">
-              <span
-                className={cn(
-                  "font-mono text-xs truncate block",
-                  theme === "dark" ? "text-white" : "text-gray-900",
-                )}
-              >
-                {branch.name}
+        {/* Branch Details */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center space-x-2 overflow-hidden">
+            <span
+              className={cn(
+                "font-mono text-xs truncate block",
+                theme === "dark" ? "text-white" : "text-gray-900",
+              )}
+            >
+              {branch.name}
+            </span>
+            {/* Check Status Badge */}
+            {showCheckStatus && branch.checkStatus && (
+              <CheckStatusBadge 
+                status={branch.checkStatus}
+                size="sm"
+                showLabel={false}
+                onClick={() => {
+                  setExpandedBranch(expandedBranch === branch.name ? null : branch.name);
+                }}
+              />
+            )}
+            {branch.current && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-blue-900 text-blue-300 rounded flex-shrink-0">
+                Default
               </span>
-              {branch.current && (
-                <span className="text-[10px] px-1.5 py-0.5 bg-blue-900 text-blue-300 rounded flex-shrink-0">
-                  Default
-                </span>
-              )}
-              {branch.protected && (
-                <span className="text-[10px] px-1.5 py-0.5 bg-yellow-900 text-yellow-300 rounded flex-shrink-0">
-                  Protected
-                </span>
-              )}
+            )}
+            {branch.protected && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-yellow-900 text-yellow-300 rounded flex-shrink-0">
+                Protected
+              </span>
+            )}
               {existingPR && existingPR.merged && (
                 <PRTag
                   prNumber={existingPR.number}
@@ -662,8 +750,29 @@ export default function BranchesView() {
           )}
         </div>
       </div>
-    );
-  };
+      
+      {/* Expandable Check Status Details */}
+      {expandedBranch === branch.name && branch.checkStatus && showCheckStatus && (
+        <div className="px-4 py-3 border-t border-gray-700">
+          <CheckStatusDetails
+            status={branch.checkStatus}
+            branchName={branch.name}
+            onRefresh={() => {
+              if (selectedRepo && token) {
+                fetchBranchCheckStatuses(
+                  selectedRepo.owner,
+                  selectedRepo.name,
+                  token,
+                  true
+                );
+              }
+            }}
+            isRefreshing={checkStatusLoading}
+          />
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -803,6 +912,63 @@ export default function BranchesView() {
             <div className="flex items-center space-x-2">
               {selectedRepo ? (
                 <>
+                  {/* Check Status Toggle */}
+                  <button
+                    onClick={() => setShowCheckStatus(!showCheckStatus)}
+                    className={cn(
+                      "flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors border",
+                      theme === "dark"
+                        ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                        : "bg-white border-gray-200 text-gray-900 hover:bg-gray-50",
+                      showCheckStatus && (theme === "dark" ? "bg-blue-900/30 border-blue-700" : "bg-blue-50 border-blue-200")
+                    )}
+                    title={showCheckStatus ? "Hide check status" : "Show check status"}
+                  >
+                    <Info className="w-3 h-3" />
+                    Checks
+                  </button>
+
+                  {/* Check Status Filter */}
+                  {showCheckStatus && (
+                    <>
+                      <select
+                        value={checkStatusFilter}
+                        onChange={(e) => setCheckStatusFilter(e.target.value as any)}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-lg transition-colors border",
+                          theme === "dark"
+                            ? "bg-gray-700 border-gray-600 text-white"
+                            : "bg-white border-gray-200 text-gray-900",
+                        )}
+                      >
+                        <option value="all">All checks</option>
+                        <option value="success">✓ Passed</option>
+                        <option value="failure">✗ Failed</option>
+                        <option value="pending">⟳ Running</option>
+                        <option value="none">- No checks</option>
+                      </select>
+                      
+                      {/* Auto-refresh interval */}
+                      <select
+                        value={autoRefreshInterval}
+                        onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-lg transition-colors border",
+                          theme === "dark"
+                            ? "bg-gray-700 border-gray-600 text-white"
+                            : "bg-white border-gray-200 text-gray-900",
+                        )}
+                        title="Auto-refresh interval for check status"
+                      >
+                        <option value="0">No auto-refresh</option>
+                        <option value="30">Refresh every 30s</option>
+                        <option value="60">Refresh every 1m</option>
+                        <option value="120">Refresh every 2m</option>
+                        <option value="300">Refresh every 5m</option>
+                      </select>
+                    </>
+                  )}
+
                   {/* Sort and Group dropdowns */}
                   <Dropdown<SortByType>
                     options={sortOptions}
@@ -828,6 +994,25 @@ export default function BranchesView() {
                     <option value="prefix">By prefix</option>
                     <option value="protected">By protection</option>
                   </select>
+
+                  {/* Refresh button */}
+                  <button
+                    onClick={handleRefresh}
+                    disabled={loading || checkStatusLoading}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors",
+                      theme === "dark"
+                        ? "hover:bg-gray-700 text-gray-400"
+                        : "hover:bg-gray-100 text-gray-600",
+                      (loading || checkStatusLoading) && "opacity-50 cursor-not-allowed"
+                    )}
+                    title="Refresh branches and check status"
+                  >
+                    <RefreshCw className={cn(
+                      "w-4 h-4",
+                      (loading || checkStatusLoading) && "animate-spin"
+                    )} />
+                  </button>
                 </>
               ) : null}
             </div>

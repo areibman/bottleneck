@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { GitHubAPI } from "../services/github";
+import { GitHubAPI, BranchCheckStatus } from "../services/github";
 
 interface Branch {
   name: string;
@@ -14,6 +14,7 @@ interface Branch {
   ahead: number;
   behind: number;
   current?: boolean;
+  checkStatus?: BranchCheckStatus;
 }
 
 interface BranchState {
@@ -22,12 +23,20 @@ interface BranchState {
   loading: boolean;
   error: string | null;
   lastFetch: Map<string, number>; // Track last fetch time per repo
+  checkStatusLoading: boolean;
+  checkStatusLastFetch: Map<string, number>; // Track check status fetch time per repo
 
   fetchBranches: (
     owner: string,
     repo: string,
     token: string,
     defaultBranch?: string,
+    force?: boolean,
+  ) => Promise<void>;
+  fetchBranchCheckStatuses: (
+    owner: string,
+    repo: string,
+    token: string,
     force?: boolean,
   ) => Promise<void>;
   clearBranches: (owner: string, repo: string) => void;
@@ -165,6 +174,8 @@ export const useBranchStore = create<BranchState>((set, get) => ({
   loading: false,
   error: null,
   lastFetch: new Map(),
+  checkStatusLoading: false,
+  checkStatusLastFetch: new Map(),
 
   fetchBranches: async (
     owner: string,
@@ -285,6 +296,69 @@ export const useBranchStore = create<BranchState>((set, get) => ({
         error:
           error instanceof Error ? error.message : "Failed to fetch branches",
       });
+    }
+  },
+
+  fetchBranchCheckStatuses: async (
+    owner: string,
+    repo: string,
+    token: string,
+    force = false,
+  ) => {
+    const repoKey = `${owner}/${repo}`;
+    const state = get();
+    const branches = state.branches.get(repoKey);
+    
+    if (!branches || branches.length === 0) {
+      console.log(`No branches to fetch check status for ${repoKey}`);
+      return;
+    }
+
+    const lastCheckFetch = state.checkStatusLastFetch.get(repoKey);
+    const now = Date.now();
+    const CHECK_STATUS_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache for check status
+    
+    if (!force && lastCheckFetch && now - lastCheckFetch < CHECK_STATUS_CACHE_DURATION) {
+      console.log(`Using cached check statuses for ${repoKey}`);
+      return;
+    }
+
+    set({ checkStatusLoading: true });
+
+    try {
+      console.log(`Fetching check statuses for ${branches.length} branches in ${repoKey}`);
+      const api = new GitHubAPI(token);
+      
+      // Prepare branch data for batch fetch
+      const branchData = branches.map(b => ({ name: b.name, sha: b.commit.sha }));
+      
+      // Fetch check statuses in batches
+      const checkStatuses = await api.getBatchBranchCheckStatuses(owner, repo, branchData);
+      
+      // Update branches with check statuses
+      set((state) => {
+        const newBranches = new Map(state.branches);
+        const updatedBranches = branches.map(branch => ({
+          ...branch,
+          checkStatus: checkStatuses.get(branch.name),
+        }));
+        
+        newBranches.set(repoKey, updatedBranches);
+        
+        const newCheckStatusLastFetch = new Map(state.checkStatusLastFetch);
+        newCheckStatusLastFetch.set(repoKey, now);
+        
+        return {
+          branches: newBranches,
+          checkStatusLoading: false,
+          checkStatusLastFetch: newCheckStatusLastFetch,
+        };
+      });
+      
+      console.log(`Successfully fetched check statuses for ${repoKey}`);
+    } catch (error) {
+      console.error(`Failed to fetch check statuses for ${repoKey}:`, error);
+      set({ checkStatusLoading: false });
     }
   },
 
