@@ -1,4 +1,5 @@
 import { Octokit } from "@octokit/rest";
+import { GitHubCheckRun, CheckStatus } from "../types/githubActions";
 
 //
 export interface PullRequest {
@@ -1629,5 +1630,202 @@ export class GitHubAPI {
       ...currentPR,
       draft: isDraft !== undefined ? isDraft : draft,
     };
+  }
+
+  // GitHub Actions API methods
+  async getCheckRunsForRef(
+    owner: string,
+    repo: string,
+    ref: string,
+    status?: "queued" | "in_progress" | "completed",
+    filter?: "latest" | "all"
+  ): Promise<GitHubCheckRun[]> {
+    try {
+      const { data } = await this.octokit.checks.listForRef({
+        owner,
+        repo,
+        ref,
+        status,
+        filter,
+        per_page: 100,
+      });
+
+      return data.check_runs.map((run) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status as "queued" | "in_progress" | "completed",
+        conclusion: run.conclusion as "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null,
+        started_at: run.started_at,
+        completed_at: run.completed_at,
+        html_url: run.html_url,
+        details_url: run.details_url,
+        check_suite: {
+          id: run.check_suite.id,
+          status: run.check_suite.status as "queued" | "in_progress" | "completed",
+          conclusion: run.check_suite.conclusion as "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null,
+          created_at: run.check_suite.created_at,
+          updated_at: run.check_suite.updated_at,
+          head_sha: run.check_suite.head_sha,
+          head_branch: run.check_suite.head_branch,
+          pull_requests: run.check_suite.pull_requests?.map(pr => ({
+            number: pr.number,
+            head: {
+              ref: pr.head.ref,
+              sha: pr.head.sha,
+            },
+            base: {
+              ref: pr.base.ref,
+              sha: pr.base.sha,
+            },
+          })) || [],
+        },
+        app: {
+          id: run.app.id,
+          name: run.app.name,
+          owner: {
+            login: run.app.owner.login,
+          },
+        },
+        output: {
+          title: run.output.title,
+          summary: run.output.summary,
+          text: run.output.text,
+        },
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch check runs for ${owner}/${repo}@${ref}:`, error);
+      throw error;
+    }
+  }
+
+  async getCheckRunsForMultipleRefs(
+    owner: string,
+    repo: string,
+    refs: string[]
+  ): Promise<Map<string, GitHubCheckRun[]>> {
+    const results = new Map<string, GitHubCheckRun[]>();
+    
+    // Process in batches to avoid rate limits
+    const batchSize = 5;
+    for (let i = 0; i < refs.length; i += batchSize) {
+      const batch = refs.slice(i, i + batchSize);
+      const promises = batch.map(async (ref) => {
+        try {
+          const checkRuns = await this.getCheckRunsForRef(owner, repo, ref);
+          return { ref, checkRuns };
+        } catch (error) {
+          console.error(`Failed to fetch check runs for ${ref}:`, error);
+          return { ref, checkRuns: [] };
+        }
+      });
+
+      const batchResults = await Promise.all(promises);
+      batchResults.forEach(({ ref, checkRuns }) => {
+        results.set(ref, checkRuns);
+      });
+    }
+
+    return results;
+  }
+
+  async getCheckStatusForBranch(
+    owner: string,
+    repo: string,
+    branchName: string,
+    ref: string
+  ): Promise<CheckStatus> {
+    try {
+      const checkRuns = await this.getCheckRunsForRef(owner, repo, ref);
+      
+      const summary = {
+        total: checkRuns.length,
+        success: checkRuns.filter(run => run.conclusion === "success").length,
+        failure: checkRuns.filter(run => run.conclusion === "failure").length,
+        pending: checkRuns.filter(run => run.status === "in_progress" || run.status === "queued").length,
+        skipped: checkRuns.filter(run => run.conclusion === "skipped").length,
+      };
+
+      let overallStatus: "success" | "failure" | "pending" | "no-checks" = "no-checks";
+      
+      if (checkRuns.length === 0) {
+        overallStatus = "no-checks";
+      } else if (summary.pending > 0) {
+        overallStatus = "pending";
+      } else if (summary.failure > 0) {
+        overallStatus = "failure";
+      } else if (summary.success > 0) {
+        overallStatus = "success";
+      }
+
+      return {
+        branch: branchName,
+        checkRuns,
+        lastUpdated: Date.now(),
+        overallStatus,
+        summary,
+      };
+    } catch (error) {
+      console.error(`Failed to get check status for branch ${branchName}:`, error);
+      return {
+        branch: branchName,
+        checkRuns: [],
+        lastUpdated: Date.now(),
+        overallStatus: "no-checks",
+        summary: {
+          total: 0,
+          success: 0,
+          failure: 0,
+          pending: 0,
+          skipped: 0,
+        },
+      };
+    }
+  }
+
+  async getCheckStatusForBranches(
+    owner: string,
+    repo: string,
+    branches: Array<{ name: string; commit: { sha: string } }>
+  ): Promise<Map<string, CheckStatus>> {
+    const results = new Map<string, CheckStatus>();
+    
+    // Get all refs for batch processing
+    const refs = branches.map(branch => branch.commit.sha);
+    const checkRunsMap = await this.getCheckRunsForMultipleRefs(owner, repo, refs);
+    
+    // Process each branch
+    for (const branch of branches) {
+      const checkRuns = checkRunsMap.get(branch.commit.sha) || [];
+      
+      const summary = {
+        total: checkRuns.length,
+        success: checkRuns.filter(run => run.conclusion === "success").length,
+        failure: checkRuns.filter(run => run.conclusion === "failure").length,
+        pending: checkRuns.filter(run => run.status === "in_progress" || run.status === "queued").length,
+        skipped: checkRuns.filter(run => run.conclusion === "skipped").length,
+      };
+
+      let overallStatus: "success" | "failure" | "pending" | "no-checks" = "no-checks";
+      
+      if (checkRuns.length === 0) {
+        overallStatus = "no-checks";
+      } else if (summary.pending > 0) {
+        overallStatus = "pending";
+      } else if (summary.failure > 0) {
+        overallStatus = "failure";
+      } else if (summary.success > 0) {
+        overallStatus = "success";
+      }
+
+      results.set(branch.name, {
+        branch: branch.name,
+        checkRuns,
+        lastUpdated: Date.now(),
+        overallStatus,
+        summary,
+      });
+    }
+
+    return results;
   }
 }

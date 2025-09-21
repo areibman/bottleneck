@@ -13,17 +13,22 @@ import {
   Shield,
   GitPullRequest,
   X,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useUIStore } from "../stores/uiStore";
 import { usePRStore } from "../stores/prStore";
 import { useAuthStore } from "../stores/authStore";
 import { useBranchStore } from "../stores/branchStore";
+import { useCheckStatusStore } from "../stores/checkStatusStore";
 import { formatDistanceToNow } from "date-fns";
 import { GitHubAPI } from "../services/github";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { AgentIcon } from "../components/AgentIcon";
 import { PRTag } from "../components/PRTag";
+import { CheckStatus } from "../components/CheckStatus";
 import { detectAgentName } from "../utils/agentIcons";
 
 // Re-export Branch type from store for use in component
@@ -42,12 +47,13 @@ interface Branch {
   current?: boolean;
 }
 
-type SortByType = "updated" | "name" | "ahead-behind";
+type SortByType = "updated" | "name" | "ahead-behind" | "check-status";
 
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
   { value: "name", label: "Name" },
   { value: "ahead-behind", label: "Ahead/Behind" },
+  { value: "check-status", label: "Check Status" },
 ];
 
 export default function BranchesView() {
@@ -56,13 +62,20 @@ export default function BranchesView() {
   const { selectedRepo, pullRequests } = usePRStore();
   const { token } = useAuthStore();
   const { branches: branchesMap, loading, fetchBranches } = useBranchStore();
+  const { 
+    checkStatuses, 
+    loading: checkStatusLoading, 
+    fetchCheckStatuses, 
+    getCheckStatus,
+    fetchCheckStatusForBranch 
+  } = useCheckStatusStore();
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(
     new Set(),
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortByType>("updated");
   const [groupBy, setGroupBy] = useState<
-    "none" | "author" | "status" | "prefix" | "protected"
+    "none" | "author" | "status" | "prefix" | "protected" | "check-status"
   >("author");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
@@ -113,6 +126,18 @@ export default function BranchesView() {
     }
   }, [selectedRepo, token, fetchBranches]);
 
+  // Fetch check statuses when branches are loaded
+  useEffect(() => {
+    if (selectedRepo && token && branches.length > 0) {
+      fetchCheckStatuses(
+        selectedRepo.owner,
+        selectedRepo.name,
+        branches,
+        token,
+      );
+    }
+  }, [selectedRepo, token, branches, fetchCheckStatuses]);
+
   const handleRefresh = useCallback(() => {
     if (selectedRepo && token) {
       // Force refresh (bypass cache)
@@ -123,8 +148,18 @@ export default function BranchesView() {
         selectedRepo.default_branch,
         true,
       );
+      // Also refresh check statuses
+      if (branches.length > 0) {
+        fetchCheckStatuses(
+          selectedRepo.owner,
+          selectedRepo.name,
+          branches,
+          token,
+          true,
+        );
+      }
     }
-  }, [selectedRepo, token, fetchBranches]);
+  }, [selectedRepo, token, fetchBranches, branches, fetchCheckStatuses]);
 
   // Helper functions for grouping
   const getBranchStatus = useCallback((branch: Branch): string => {
@@ -158,6 +193,12 @@ export default function BranchesView() {
     }
     return "other";
   }, []);
+
+  const getCheckStatusForBranch = useCallback((branch: Branch) => {
+    if (!selectedRepo) return null;
+    const repoKey = `${selectedRepo.owner}/${selectedRepo.name}`;
+    return getCheckStatus(selectedRepo.owner, selectedRepo.name, branch.name);
+  }, [selectedRepo, getCheckStatus]);
 
   // Determine if a branch is AI-generated based on patterns
   const isAIGenerated = useCallback((branch: Branch): boolean => {
@@ -388,6 +429,27 @@ export default function BranchesView() {
           const aScore = a.ahead - a.behind;
           const bScore = b.ahead - b.behind;
           return bScore - aScore;
+        case "check-status":
+          const aCheckStatus = getCheckStatusForBranch(a);
+          const bCheckStatus = getCheckStatusForBranch(b);
+          
+          // Define status priority (lower number = higher priority)
+          const statusPriority = {
+            "failure": 0,
+            "pending": 1,
+            "success": 2,
+            "no-checks": 3,
+          };
+          
+          const aPriority = statusPriority[aCheckStatus?.overallStatus || "no-checks"];
+          const bPriority = statusPriority[bCheckStatus?.overallStatus || "no-checks"];
+          
+          if (aPriority !== bPriority) {
+            return aPriority - bPriority;
+          }
+          
+          // If same status, sort by name
+          return a.name.localeCompare(b.name);
         default:
           return 0;
       }
@@ -443,6 +505,10 @@ export default function BranchesView() {
         case "protected":
           groupKey = branch.protected ? "protected" : "unprotected";
           break;
+        case "check-status":
+          const checkStatus = getCheckStatusForBranch(branch);
+          groupKey = checkStatus?.overallStatus || "no-checks";
+          break;
         default:
           groupKey = "other";
       }
@@ -460,6 +526,7 @@ export default function BranchesView() {
     getBranchStatus,
     getBranchPrefix,
     getFeatureFromBranch,
+    getCheckStatusForBranch,
     isAIGenerated,
   ]);
 
@@ -474,6 +541,7 @@ export default function BranchesView() {
     const isSelected = selectedBranches.has(branch.name);
     const status = getBranchStatus(branch);
     const existingPR = branchToPRMap.get(branch.name);
+    const checkStatus = getCheckStatusForBranch(branch);
 
     const handleBranchClick = () => {
       // If branch has a PR, navigate to PR details
@@ -484,6 +552,18 @@ export default function BranchesView() {
         handleBranchSelect(branch.name, !isSelected);
       }
     };
+
+    const handleRefreshCheckStatus = useCallback(() => {
+      if (selectedRepo && token) {
+        fetchCheckStatusForBranch(
+          selectedRepo.owner,
+          selectedRepo.name,
+          branch.name,
+          branch.commit.sha,
+          token
+        );
+      }
+    }, [selectedRepo, token, branch.name, branch.commit.sha, fetchCheckStatusForBranch]);
 
     return (
       <div
@@ -634,6 +714,17 @@ export default function BranchesView() {
             >
               <GitCommit className="w-3 h-3 inline mr-0.5 flex-shrink-0" />
               {branch.commit.message}
+            </div>
+
+            {/* Check Status */}
+            <div className="mt-1">
+              <CheckStatus
+                checkStatus={checkStatus}
+                loading={checkStatusLoading}
+                onRefresh={handleRefreshCheckStatus}
+                showDetails={false}
+                compact={true}
+              />
             </div>
           </div>
         </div>
@@ -827,6 +918,7 @@ export default function BranchesView() {
                     <option value="status">By status</option>
                     <option value="prefix">By prefix</option>
                     <option value="protected">By protection</option>
+                    <option value="check-status">By check status</option>
                   </select>
                 </>
               ) : null}
@@ -1204,6 +1296,20 @@ export default function BranchesView() {
                           <GitBranch className="w-4 h-4 text-gray-400" />
                         );
                       }
+                      if (groupBy === "check-status") {
+                        switch (groupName) {
+                          case "success":
+                            return <CheckCircle className="w-4 h-4 text-green-400" />;
+                          case "failure":
+                            return <XCircle className="w-4 h-4 text-red-400" />;
+                          case "pending":
+                            return <Clock className="w-4 h-4 text-yellow-400" />;
+                          case "no-checks":
+                            return <AlertCircle className="w-4 h-4 text-gray-400" />;
+                          default:
+                            return <AlertCircle className="w-4 h-4 text-gray-400" />;
+                        }
+                      }
                       return <GitBranch className="w-4 h-4 text-gray-400" />;
                     };
 
@@ -1213,6 +1319,20 @@ export default function BranchesView() {
                           groupName.charAt(0).toUpperCase() +
                           groupName.slice(1).replace("-", " ")
                         );
+                      }
+                      if (groupBy === "check-status") {
+                        switch (groupName) {
+                          case "success":
+                            return "All checks passed";
+                          case "failure":
+                            return "Some checks failed";
+                          case "pending":
+                            return "Checks running";
+                          case "no-checks":
+                            return "No checks";
+                          default:
+                            return groupName;
+                        }
                       }
                       return groupName;
                     };
