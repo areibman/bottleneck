@@ -167,6 +167,44 @@ export interface Review {
   commit_id: string;
 }
 
+export interface CheckRun {
+  id: number;
+  name: string;
+  status: "queued" | "in_progress" | "completed";
+  conclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null;
+  started_at: string | null;
+  completed_at: string | null;
+  html_url: string;
+  details_url: string | null;
+  head_sha: string;
+  app: {
+    name: string;
+    slug: string;
+  };
+}
+
+export interface WorkflowRun {
+  id: number;
+  name: string | null;
+  status: "queued" | "in_progress" | "completed";
+  conclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  head_sha: string;
+  head_branch: string;
+  workflow_id: number;
+  run_number: number;
+}
+
+export interface BranchCheckStatus {
+  state: "success" | "failure" | "pending" | "error" | "neutral" | "none";
+  total_count: number;
+  check_runs: CheckRun[];
+  workflow_runs: WorkflowRun[];
+  updated_at: string;
+}
+
 export interface File {
   filename: string;
   status:
@@ -1629,5 +1667,248 @@ export class GitHubAPI {
       ...currentPR,
       draft: isDraft !== undefined ? isDraft : draft,
     };
+  }
+
+  // GitHub Actions API methods
+  async getBranchCheckStatus(
+    owner: string,
+    repo: string,
+    branch: string
+  ): Promise<BranchCheckStatus> {
+    try {
+      // Get the latest commit SHA for the branch
+      const { data: branchData } = await this.octokit.repos.getBranch({
+        owner,
+        repo,
+        branch,
+      });
+      
+      const commitSha = branchData.commit.sha;
+
+      // Fetch check runs and workflow runs in parallel
+      const [checkRunsResponse, workflowRunsResponse] = await Promise.all([
+        this.octokit.checks.listForRef({
+          owner,
+          repo,
+          ref: commitSha,
+          per_page: 100,
+        }),
+        this.octokit.actions.listWorkflowRunsForRepo({
+          owner,
+          repo,
+          head_sha: commitSha,
+          per_page: 100,
+        }),
+      ]);
+
+      const checkRuns: CheckRun[] = checkRunsResponse.data.check_runs.map((run) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status as any,
+        conclusion: run.conclusion as any,
+        started_at: run.started_at,
+        completed_at: run.completed_at,
+        html_url: run.html_url,
+        details_url: run.details_url,
+        head_sha: run.head_sha,
+        app: {
+          name: run.app.name,
+          slug: run.app.slug,
+        },
+      }));
+
+      const workflowRuns: WorkflowRun[] = workflowRunsResponse.data.workflow_runs.map((run) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status as any,
+        conclusion: run.conclusion as any,
+        created_at: run.created_at,
+        updated_at: run.updated_at,
+        html_url: run.html_url,
+        head_sha: run.head_sha,
+        head_branch: run.head_branch,
+        workflow_id: run.workflow_id,
+        run_number: run.run_number,
+      }));
+
+      // Determine overall state
+      const allChecks = [...checkRuns, ...workflowRuns];
+      let state: BranchCheckStatus["state"] = "none";
+      
+      if (allChecks.length > 0) {
+        const hasRunning = allChecks.some(check => check.status === "in_progress" || check.status === "queued");
+        const hasFailure = allChecks.some(check => check.conclusion === "failure" || check.conclusion === "timed_out" || check.conclusion === "action_required");
+        const hasSuccess = allChecks.some(check => check.conclusion === "success");
+        const allCompleted = allChecks.every(check => check.status === "completed");
+        
+        if (hasRunning) {
+          state = "pending";
+        } else if (hasFailure) {
+          state = "failure";
+        } else if (allCompleted && hasSuccess) {
+          state = "success";
+        } else if (allCompleted) {
+          state = "neutral";
+        } else {
+          state = "pending";
+        }
+      }
+
+      return {
+        state,
+        total_count: allChecks.length,
+        check_runs: checkRuns,
+        workflow_runs: workflowRuns,
+        updated_at: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error(`Failed to fetch check status for ${owner}/${repo}:${branch}`, error);
+      return {
+        state: "error",
+        total_count: 0,
+        check_runs: [],
+        workflow_runs: [],
+        updated_at: new Date().toISOString(),
+      };
+    }
+  }
+
+  async getCommitCheckStatus(
+    owner: string,
+    repo: string,
+    sha: string
+  ): Promise<BranchCheckStatus> {
+    try {
+      // Fetch check runs and workflow runs for specific commit
+      const [checkRunsResponse, workflowRunsResponse] = await Promise.all([
+        this.octokit.checks.listForRef({
+          owner,
+          repo,
+          ref: sha,
+          per_page: 100,
+        }),
+        this.octokit.actions.listWorkflowRunsForRepo({
+          owner,
+          repo,
+          head_sha: sha,
+          per_page: 100,
+        }),
+      ]);
+
+      const checkRuns: CheckRun[] = checkRunsResponse.data.check_runs.map((run) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status as any,
+        conclusion: run.conclusion as any,
+        started_at: run.started_at,
+        completed_at: run.completed_at,
+        html_url: run.html_url,
+        details_url: run.details_url,
+        head_sha: run.head_sha,
+        app: {
+          name: run.app.name,
+          slug: run.app.slug,
+        },
+      }));
+
+      const workflowRuns: WorkflowRun[] = workflowRunsResponse.data.workflow_runs.map((run) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status as any,
+        conclusion: run.conclusion as any,
+        created_at: run.created_at,
+        updated_at: run.updated_at,
+        html_url: run.html_url,
+        head_sha: run.head_sha,
+        head_branch: run.head_branch,
+        workflow_id: run.workflow_id,
+        run_number: run.run_number,
+      }));
+
+      // Determine overall state
+      const allChecks = [...checkRuns, ...workflowRuns];
+      let state: BranchCheckStatus["state"] = "none";
+      
+      if (allChecks.length > 0) {
+        const hasRunning = allChecks.some(check => check.status === "in_progress" || check.status === "queued");
+        const hasFailure = allChecks.some(check => check.conclusion === "failure" || check.conclusion === "timed_out" || check.conclusion === "action_required");
+        const hasSuccess = allChecks.some(check => check.conclusion === "success");
+        const allCompleted = allChecks.every(check => check.status === "completed");
+        
+        if (hasRunning) {
+          state = "pending";
+        } else if (hasFailure) {
+          state = "failure";
+        } else if (allCompleted && hasSuccess) {
+          state = "success";
+        } else if (allCompleted) {
+          state = "neutral";
+        } else {
+          state = "pending";
+        }
+      }
+
+      return {
+        state,
+        total_count: allChecks.length,
+        check_runs: checkRuns,
+        workflow_runs: workflowRuns,
+        updated_at: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error(`Failed to fetch check status for commit ${sha}`, error);
+      return {
+        state: "error",
+        total_count: 0,
+        check_runs: [],
+        workflow_runs: [],
+        updated_at: new Date().toISOString(),
+      };
+    }
+  }
+
+  async getBulkBranchCheckStatus(
+    owner: string,
+    repo: string,
+    branches: Array<{ name: string; sha: string }>
+  ): Promise<Map<string, BranchCheckStatus>> {
+    const results = new Map<string, BranchCheckStatus>();
+    
+    // Process in batches to avoid rate limits
+    const batchSize = 5;
+    for (let i = 0; i < branches.length; i += batchSize) {
+      const batch = branches.slice(i, i + batchSize);
+      
+      const promises = batch.map(async (branch) => {
+        try {
+          const status = await this.getCommitCheckStatus(owner, repo, branch.sha);
+          return { name: branch.name, status };
+        } catch (error) {
+          console.error(`Failed to fetch check status for branch ${branch.name}:`, error);
+          return {
+            name: branch.name,
+            status: {
+              state: "error" as const,
+              total_count: 0,
+              check_runs: [],
+              workflow_runs: [],
+              updated_at: new Date().toISOString(),
+            }
+          };
+        }
+      });
+
+      const batchResults = await Promise.all(promises);
+      batchResults.forEach(({ name, status }) => {
+        results.set(name, status);
+      });
+
+      // Small delay between batches to be nice to the API
+      if (i + batchSize < branches.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    return results;
   }
 }

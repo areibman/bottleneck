@@ -10,6 +10,7 @@ import {
   RefreshCw,
   FolderOpen,
   AlertTriangle,
+  GitBranch,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -21,7 +22,7 @@ export default function SettingsView() {
   const { settings, updateSettings, saveSettings, resetSettings } = useSettingsStore();
   const { theme } = useUIStore();
   const [activeTab, setActiveTab] = useState<
-    "general" | "appearance" | "notifications" | "advanced"
+    "general" | "appearance" | "notifications" | "github-actions" | "advanced"
   >("general");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -80,6 +81,9 @@ export default function SettingsView() {
           notifyOnReview: true,
           notifyOnMention: true,
           notifyOnMerge: true,
+          notifyOnCheckStatusChange: true,
+          autoRefreshChecks: true,
+          checkRefreshInterval: 30,
           maxConcurrentRequests: 10,
           cacheSize: 500,
           enableDebugMode: false,
@@ -120,6 +124,7 @@ export default function SettingsView() {
     { id: "general", label: "General", icon: Settings },
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "github-actions", label: "GitHub Actions", icon: GitBranch },
     { id: "advanced", label: "Advanced", icon: Code },
   ];
 
@@ -721,6 +726,163 @@ export default function SettingsView() {
                       >
                         PR merged
                       </span>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        checked={settings.notifyOnCheckStatusChange}
+                        onChange={(e) =>
+                          updateSettings({ notifyOnCheckStatusChange: e.target.checked })
+                        }
+                        disabled={!settings.showDesktopNotifications}
+                        className={cn(
+                          "rounded focus:ring-blue-500 disabled:opacity-50",
+                          theme === "dark"
+                            ? "border-gray-600 bg-gray-700 text-blue-500"
+                            : "border-gray-300 bg-white text-blue-600",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "text-sm",
+                          theme === "dark" ? "text-gray-400" : "text-gray-600",
+                        )}
+                      >
+                        GitHub Actions check status changes
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "github-actions" && (
+            <div className="space-y-6">
+              <div>
+                <h2
+                  className={cn(
+                    "text-lg font-semibold mb-4",
+                    theme === "dark" ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  GitHub Actions
+                </h2>
+
+                <div className="space-y-6">
+                  {/* Auto-refresh settings */}
+                  <div className="space-y-4">
+                    <h3
+                      className={cn(
+                        "text-sm font-medium",
+                        theme === "dark" ? "text-gray-300" : "text-gray-700",
+                      )}
+                    >
+                      Auto-refresh
+                    </h3>
+
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        checked={settings.autoRefreshChecks}
+                        onChange={(e) =>
+                          updateSettings({ autoRefreshChecks: e.target.checked })
+                        }
+                        className={cn(
+                          "rounded focus:ring-blue-500",
+                          theme === "dark"
+                            ? "border-gray-600 bg-gray-700 text-blue-500"
+                            : "border-gray-300 bg-white text-blue-600",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "text-sm",
+                          theme === "dark" ? "text-white" : "text-gray-900",
+                        )}
+                      >
+                        Automatically refresh check status
+                      </span>
+                    </div>
+
+                    <div className="ml-6">
+                      <label
+                        className={cn(
+                          "block text-sm font-medium mb-2",
+                          theme === "dark" ? "text-gray-300" : "text-gray-700",
+                        )}
+                      >
+                        Refresh interval (seconds)
+                      </label>
+                      <input
+                        type="number"
+                        min="10"
+                        max="300"
+                        step="5"
+                        value={settings.checkRefreshInterval}
+                        onChange={(e) =>
+                          updateSettings({
+                            checkRefreshInterval: parseInt(e.target.value) || 30,
+                          })
+                        }
+                        disabled={!settings.autoRefreshChecks}
+                        className={cn(
+                          "w-24 px-3 py-1 text-sm border rounded-md disabled:opacity-50",
+                          theme === "dark"
+                            ? "border-gray-600 bg-gray-700 text-white"
+                            : "border-gray-300 bg-white text-gray-900",
+                        )}
+                      />
+                      <p
+                        className={cn(
+                          "text-xs mt-1",
+                          theme === "dark" ? "text-gray-500" : "text-gray-600",
+                        )}
+                      >
+                        How often to check for status updates (10-300 seconds)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status display settings */}
+                  <div className="space-y-4">
+                    <h3
+                      className={cn(
+                        "text-sm font-medium",
+                        theme === "dark" ? "text-gray-300" : "text-gray-700",
+                      )}
+                    >
+                      Display Options
+                    </h3>
+
+                    <div className="space-y-2 text-sm">
+                      <div
+                        className={cn(
+                          "p-3 rounded-lg",
+                          theme === "dark" ? "bg-gray-800" : "bg-gray-50",
+                        )}
+                      >
+                        <p className="font-medium mb-2">Status Indicators:</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span>Passed</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <span>Failed</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <span>Running</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                            <span>No checks</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
