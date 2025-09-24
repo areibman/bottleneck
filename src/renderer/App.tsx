@@ -12,7 +12,6 @@ import PRListView from "./views/PRListView";
 import PRDetailView from "./views/PRDetailView";
 import BranchesView from "./views/BranchesView";
 import SettingsView from "./views/SettingsView";
-// import TerminalView from './views/TerminalView'; // TODO: Re-enable terminal tab when ready
 import AuthView from "./views/AuthView";
 import IssuesView from "./views/IssuesView";
 import IssueDetailView from "./views/IssueDetailView";
@@ -115,8 +114,6 @@ function App() {
               element={<IssueDetailView />}
             />
             <Route path="/settings" element={<SettingsView />} />
-            {/* TODO: Re-enable terminal tab when ready */}
-            {/* <Route path="/terminal" element={<TerminalView />} /> */}
           </Routes>
         </main>
 

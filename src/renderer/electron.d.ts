@@ -53,26 +53,6 @@ declare global {
         fromBase64: (data: string) => Promise<string>;
       };
 
-      terminal: {
-        spawn: (cwd?: string) => Promise<{ success: boolean; error?: string }>;
-        write: (data: string) => Promise<{ success: boolean; error?: string }>;
-        kill: () => Promise<{ success: boolean; error?: string }>;
-        resize: (
-          cols: number,
-          rows: number,
-        ) => Promise<{ success: boolean; error?: string }>;
-        restart: (
-          cwd?: string,
-        ) => Promise<{ success: boolean; error?: string }>;
-        health: () => Promise<{
-          success: boolean;
-          healthy?: boolean;
-          error?: string;
-        }>;
-        onData: (callback: (data: string) => void) => void;
-        offData: () => void;
-      };
-
       settings: {
         get: (
           key?: string,

@@ -6,7 +6,6 @@ dotenv.config();
 import { Database } from "./database";
 import { GitHubAuth } from "./auth";
 import { GitOperations } from "./git";
-import { TerminalManager } from "./terminal";
 import { createMenu } from "./menu";
 import Store from "electron-store";
 import installExtension, {
@@ -20,7 +19,6 @@ let mainWindow: BrowserWindow | null = null;
 let database: Database;
 let githubAuth: GitHubAuth;
 let gitOps: GitOperations;
-let terminal: TerminalManager;
 
 function createWindow() {
   const preloadPath = path.resolve(path.join(__dirname, "../preload/index.js"));
@@ -152,9 +150,6 @@ app.whenReady().then(async () => {
 
   // Initialize Git operations
   gitOps = new GitOperations();
-
-  // Initialize Terminal
-  terminal = new TerminalManager();
 
   // Set default settings if they don't exist
   if (!store.has("cloneLocation")) {
@@ -290,91 +285,6 @@ ipcMain.handle("app:select-directory", async () => {
 
 ipcMain.handle("app:get-version", () => {
   return app.getVersion();
-});
-
-// Terminal IPC handlers
-ipcMain.handle("terminal:spawn", async (_event, cwd?: string) => {
-  try {
-    let workingDirectory = cwd;
-
-    // If no specific directory provided, use settings clone location
-    if (!workingDirectory) {
-      const cloneLocation = store.get("cloneLocation", "~/repos") as string;
-      workingDirectory = cloneLocation.replace("~", require("os").homedir());
-      console.log(
-        `[Terminal] Using clone location from settings: ${cloneLocation} -> ${workingDirectory}`,
-      );
-    }
-
-    terminal.spawn(workingDirectory);
-
-    // Set up data callback to send to renderer
-    terminal.onData((data) => {
-      mainWindow?.webContents.send("terminal:data", data);
-    });
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-});
-
-// Fire-and-forget write for performance
-ipcMain.on("terminal:write", (_event, data: string) => {
-  try {
-    terminal.write(data);
-  } catch (error) {
-    console.error("[Terminal] write error:", error);
-  }
-});
-
-// Keep old handler for compatibility if anything invokes it
-ipcMain.handle("terminal:write", async (_event, data: string) => {
-  try {
-    terminal.write(data);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-});
-
-ipcMain.handle("terminal:kill", async () => {
-  try {
-    terminal.kill();
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-});
-
-ipcMain.handle(
-  "terminal:resize",
-  async (_event, cols: number, rows: number) => {
-    try {
-      terminal.resize(cols, rows);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-);
-
-ipcMain.handle("terminal:restart", async (_event, cwd?: string) => {
-  try {
-    terminal.restart(cwd);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-});
-
-ipcMain.handle("terminal:health", async () => {
-  try {
-    const healthy = terminal.isHealthy();
-    return { success: true, healthy };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
 });
 
 // Settings IPC handlers

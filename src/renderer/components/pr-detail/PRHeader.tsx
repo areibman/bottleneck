@@ -7,7 +7,7 @@ import {
   GitMerge,
   X,
   Check,
-  Terminal,
+  GitBranch,
   ChevronDown,
   CheckCircle2,
   XCircle,
@@ -132,7 +132,7 @@ export function PRHeader({
               onClick={() => setShowCheckoutDropdown(!showCheckoutDropdown)}
               className="btn btn-secondary text-xs flex items-center"
             >
-              <Terminal className="w-3 h-3 mr-1" />
+              <GitBranch className="w-3 h-3 mr-1" />
               Checkout
               <ChevronDown className="w-3 h-3 ml-1" />
             </button>

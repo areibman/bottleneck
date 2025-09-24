@@ -71,8 +71,6 @@ export default function SettingsView() {
           theme: "dark",
           fontSize: 13,
           fontFamily: "SF Mono",
-          terminalFontSize: 13,
-          terminalFontFamily: "SF Mono",
           showWhitespace: false,
           wordWrap: false,
           showDesktopNotifications: true,
@@ -442,63 +440,6 @@ export default function SettingsView() {
                       value={settings.fontFamily}
                       onChange={(e) =>
                         updateSettings({ fontFamily: e.target.value })
-                      }
-                      className={cn(
-                        "input w-64",
-                        theme === "dark"
-                          ? "bg-gray-800 border-gray-600 text-white"
-                          : "bg-white border-gray-300 text-gray-900",
-                      )}
-                    >
-                      <option value="SF Mono">SF Mono</option>
-                      <option value="Monaco">Monaco</option>
-                      <option value="Consolas">Consolas</option>
-                      <option value="Courier New">Courier New</option>
-                      <option value="Fira Code">Fira Code</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      className={cn(
-                        "label",
-                        theme === "dark" ? "text-gray-300" : "text-gray-700",
-                      )}
-                    >
-                      Terminal Font Size
-                    </label>
-                    <input
-                      type="number"
-                      value={settings.terminalFontSize}
-                      onChange={(e) =>
-                        updateSettings({
-                          terminalFontSize: parseInt(e.target.value),
-                        })
-                      }
-                      className={cn(
-                        "input w-24",
-                        theme === "dark"
-                          ? "bg-gray-800 border-gray-600 text-white"
-                          : "bg-white border-gray-300 text-gray-900",
-                      )}
-                      min="10"
-                      max="24"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      className={cn(
-                        "label",
-                        theme === "dark" ? "text-gray-300" : "text-gray-700",
-                      )}
-                    >
-                      Terminal Font Family
-                    </label>
-                    <select
-                      value={settings.terminalFontFamily}
-                      onChange={(e) =>
-                        updateSettings({ terminalFontFamily: e.target.value })
                       }
                       className={cn(
                         "input w-64",

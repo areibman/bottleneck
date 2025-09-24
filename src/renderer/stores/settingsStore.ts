@@ -11,8 +11,6 @@ interface Settings {
   theme: "dark" | "light" | "auto";
   fontSize: number;
   fontFamily: string;
-  terminalFontSize: number;
-  terminalFontFamily: string;
   showWhitespace: boolean;
   wordWrap: boolean;
 
@@ -49,8 +47,6 @@ const defaultSettings: Settings = {
   theme: "dark",
   fontSize: 13,
   fontFamily: "SF Mono",
-  terminalFontSize: 13,
-  terminalFontFamily: "SF Mono",
   showWhitespace: false,
   wordWrap: false,
 
@@ -96,7 +92,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       // Save to electron store
       if (window.electron?.settings) {
         const settings = get().settings;
-        // Save each setting individually to match how the terminal reads them
         for (const [key, value] of Object.entries(settings)) {
           await window.electron.settings.set(key, value);
         }

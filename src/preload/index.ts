@@ -42,23 +42,6 @@ const electronAPI = {
     fromBase64: (data: string) => ipcRenderer.invoke("utils:fromBase64", data),
   },
 
-  // Terminal operations
-  terminal: {
-    spawn: (cwd?: string) => ipcRenderer.invoke("terminal:spawn", cwd),
-    write: (data: string) => ipcRenderer.send("terminal:write", data),
-    kill: () => ipcRenderer.invoke("terminal:kill"),
-    resize: (cols: number, rows: number) =>
-      ipcRenderer.invoke("terminal:resize", cols, rows),
-    restart: (cwd?: string) => ipcRenderer.invoke("terminal:restart", cwd),
-    health: () => ipcRenderer.invoke("terminal:health"),
-    onData: (callback: (data: string) => void) => {
-      ipcRenderer.on("terminal:data", (_event, data) => callback(data));
-    },
-    offData: () => {
-      ipcRenderer.removeAllListeners("terminal:data");
-    },
-  },
-
   // Settings operations
   settings: {
     get: (key?: string) => ipcRenderer.invoke("settings:get", key),
