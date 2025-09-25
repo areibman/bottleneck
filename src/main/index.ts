@@ -37,6 +37,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true, // Enable web security
+      webviewTag: true, // Enable webview tag
     },
     backgroundColor: "#1e1e1e",
     show: false,
@@ -51,11 +52,12 @@ function createWindow() {
           responseHeaders: {
             ...details.responseHeaders,
             "Content-Security-Policy": [
-              "default-src 'self' https://api.github.com; " +
+              "default-src 'self' https://api.github.com https://cursor.com https://devin.ai https://chatgpt.com; " +
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
               "style-src 'self' 'unsafe-inline'; " +
               "img-src 'self' data: https://avatars.githubusercontent.com https://github.com https://*.githubusercontent.com; " +
               "font-src 'self' data:; " +
+              "frame-src https://cursor.com https://devin.ai https://chatgpt.com https://*.cursor.com https://*.devin.ai https://*.chatgpt.com; " +
               "connect-src 'self' https://api.github.com https://github.com http://localhost:* ws://localhost:*; " +
               "worker-src 'self' blob:;",
             ],
@@ -285,6 +287,15 @@ ipcMain.handle("app:select-directory", async () => {
 
 ipcMain.handle("app:get-version", () => {
   return app.getVersion();
+});
+
+ipcMain.handle("app:open-external", async (_, url: string) => {
+  try {
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
 });
 
 // Settings IPC handlers
