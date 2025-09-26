@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { PRStatusFilter, SortByType } from "../types/prList";
 
 interface UIState {
   sidebarOpen: boolean;
@@ -13,6 +14,12 @@ interface UIState {
   showWhitespace: boolean;
   wordWrap: boolean;
   theme: "light" | "dark";
+
+  prListFilters: {
+    sortBy: SortByType;
+    authors: string[];
+    statuses: PRStatusFilter[];
+  };
 
   // PR navigation state for sidebar
   prNavigationState: {
@@ -36,6 +43,15 @@ interface UIState {
   clearSelection: () => void;
   setActiveView: (view: "list" | "detail") => void;
   setPRNavigationState: (state: UIState["prNavigationState"]) => void;
+  setPRListSortBy: (sortBy: SortByType) => void;
+  setPRListSelectedAuthors: (
+    updater: string[] | ((authors: string[]) => string[]),
+  ) => void;
+  setPRListSelectedStatuses: (
+    updater:
+      | PRStatusFilter[]
+      | ((statuses: PRStatusFilter[]) => PRStatusFilter[]),
+  ) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -52,6 +68,11 @@ export const useUIStore = create<UIState>()(
       showWhitespace: false,
       wordWrap: false,
       theme: "dark",
+      prListFilters: {
+        sortBy: "updated",
+        authors: [],
+        statuses: [],
+      },
       prNavigationState: null,
 
       toggleSidebar: () =>
@@ -94,6 +115,41 @@ export const useUIStore = create<UIState>()(
       clearSelection: () => set({ selectedPRs: new Set() }),
       setActiveView: (view) => set({ activeView: view }),
       setPRNavigationState: (state) => set({ prNavigationState: state }),
+      setPRListSortBy: (sortBy) =>
+        set((state) => ({
+          prListFilters: {
+            ...state.prListFilters,
+            sortBy,
+          },
+        })),
+      setPRListSelectedAuthors: (updater) =>
+        set((state) => {
+          const authors =
+            typeof updater === "function"
+              ? updater(state.prListFilters.authors)
+              : updater;
+
+          return {
+            prListFilters: {
+              ...state.prListFilters,
+              authors,
+            },
+          };
+        }),
+      setPRListSelectedStatuses: (updater) =>
+        set((state) => {
+          const statuses =
+            typeof updater === "function"
+              ? updater(state.prListFilters.statuses)
+              : updater;
+
+          return {
+            prListFilters: {
+              ...state.prListFilters,
+              statuses,
+            },
+          };
+        }),
     }),
     {
       name: "ui-storage",
@@ -101,7 +157,8 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         sidebarWidth: state.sidebarWidth,
         sidebarOpen: state.sidebarOpen,
-      }), // Persist theme, sidebar width and open state
+        prListFilters: state.prListFilters,
+      }), // Persist theme, sidebar settings, and PR list filters
     },
   ),
 );
