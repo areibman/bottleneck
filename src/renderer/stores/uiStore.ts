@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { PRStatusFilter, SortByType } from "../types/prList";
+
 interface UIState {
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -13,6 +15,12 @@ interface UIState {
   showWhitespace: boolean;
   wordWrap: boolean;
   theme: "light" | "dark";
+
+  prListFilters: {
+    sortBy: SortByType;
+    selectedAuthors: Set<string>;
+    selectedStatuses: Set<PRStatusFilter>;
+  };
 
   // PR navigation state for sidebar
   prNavigationState: {
@@ -36,6 +44,14 @@ interface UIState {
   clearSelection: () => void;
   setActiveView: (view: "list" | "detail") => void;
   setPRNavigationState: (state: UIState["prNavigationState"]) => void;
+  setPRListSortBy: (sortBy: SortByType) => void;
+  setPRListSelectedAuthors: (
+    updater: (current: Set<string>) => Set<string>,
+  ) => void;
+  setPRListSelectedStatuses: (
+    updater: (current: Set<PRStatusFilter>) => Set<PRStatusFilter>,
+  ) => void;
+  resetPRListFilters: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -52,6 +68,11 @@ export const useUIStore = create<UIState>()(
       showWhitespace: false,
       wordWrap: false,
       theme: "dark",
+      prListFilters: {
+        sortBy: "updated",
+        selectedAuthors: new Set(),
+        selectedStatuses: new Set(),
+      },
       prNavigationState: null,
 
       toggleSidebar: () =>
@@ -94,6 +115,40 @@ export const useUIStore = create<UIState>()(
       clearSelection: () => set({ selectedPRs: new Set() }),
       setActiveView: (view) => set({ activeView: view }),
       setPRNavigationState: (state) => set({ prNavigationState: state }),
+      setPRListSortBy: (sortBy) =>
+        set((state) => ({
+          prListFilters: {
+            ...state.prListFilters,
+            sortBy,
+          },
+        })),
+      setPRListSelectedAuthors: (updater) =>
+        set((state) => ({
+          prListFilters: {
+            ...state.prListFilters,
+            selectedAuthors: updater(
+              new Set(state.prListFilters.selectedAuthors),
+            ),
+          },
+        })),
+      setPRListSelectedStatuses: (updater) =>
+        set((state) => ({
+          prListFilters: {
+            ...state.prListFilters,
+            selectedStatuses: updater(
+              new Set(state.prListFilters.selectedStatuses),
+            ),
+          },
+        })),
+      resetPRListFilters: () =>
+        set((state) => ({
+          prListFilters: {
+            ...state.prListFilters,
+            sortBy: "updated",
+            selectedAuthors: new Set(),
+            selectedStatuses: new Set(),
+          },
+        })),
     }),
     {
       name: "ui-storage",
