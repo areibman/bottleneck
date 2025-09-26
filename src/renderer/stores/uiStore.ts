@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { SortByType } from "../types/prList";
+
+type PRStatusFilter = "open" | "draft" | "merged" | "closed";
+
 interface UIState {
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -22,6 +26,12 @@ interface UIState {
     currentPRNumber?: string;
   } | null;
 
+  prListFilters: {
+    sortBy: SortByType;
+    selectedAuthors: string[];
+    selectedStatuses: PRStatusFilter[];
+  };
+
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   toggleRightPanel: () => void;
@@ -36,6 +46,12 @@ interface UIState {
   clearSelection: () => void;
   setActiveView: (view: "list" | "detail") => void;
   setPRNavigationState: (state: UIState["prNavigationState"]) => void;
+  setPRListFilters: (
+    filters:
+      | Partial<UIState["prListFilters"]>
+      | ((filters: UIState["prListFilters"]) => UIState["prListFilters"]),
+  ) => void;
+  resetPRListFilters: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -53,6 +69,11 @@ export const useUIStore = create<UIState>()(
       wordWrap: false,
       theme: "dark",
       prNavigationState: null,
+      prListFilters: {
+        sortBy: "updated",
+        selectedAuthors: [],
+        selectedStatuses: [],
+      },
 
       toggleSidebar: () =>
         set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -94,6 +115,24 @@ export const useUIStore = create<UIState>()(
       clearSelection: () => set({ selectedPRs: new Set() }),
       setActiveView: (view) => set({ activeView: view }),
       setPRNavigationState: (state) => set({ prNavigationState: state }),
+      setPRListFilters: (filters) =>
+        set((state) => ({
+          prListFilters:
+            typeof filters === "function"
+              ? filters(state.prListFilters)
+              : {
+                  ...state.prListFilters,
+                  ...filters,
+                },
+        })),
+      resetPRListFilters: () =>
+        set({
+          prListFilters: {
+            sortBy: "updated",
+            selectedAuthors: [],
+            selectedStatuses: [],
+          },
+        }),
     }),
     {
       name: "ui-storage",
