@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { GitPullRequest } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
+import { useAuthStore } from "../stores/authStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
-import { PullRequest } from "../services/github";
+import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
 
@@ -46,10 +47,12 @@ export default function PRListView() {
     prListFilters,
     setPRListFilters,
   } = useUIStore();
+  const { token } = useAuthStore();
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const [isClosing, setIsClosing] = useState(false);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -400,12 +403,133 @@ export default function PRListView() {
     console.log("Merging PRs:", Array.from(selectedPRs));
   }, [selectedPRs]);
 
-  const handleCloseSelected = useCallback(() => {
-    // TODO: Implement close functionality
-    console.log("Closing PRs:", Array.from(selectedPRs));
-  }, [selectedPRs]);
+  const closableSelectedPRIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const id of selectedPRs) {
+      const pr = pullRequests.get(id);
+      if (pr && pr.state === "open" && !pr.merged) {
+        ids.push(id);
+      }
+    }
+    return ids;
+  }, [selectedPRs, pullRequests]);
+
+  const closePRIds = useCallback(
+    async (prIds: string[]) => {
+      if (isClosing || prIds.length === 0) {
+        return;
+      }
+
+      const uniqueIds = Array.from(new Set(prIds));
+      const closableIds = uniqueIds.filter((id) => {
+        const pr = pullRequests.get(id);
+        return pr && pr.state === "open" && !pr.merged;
+      });
+
+      if (closableIds.length === 0) {
+        return;
+      }
+
+      let authToken = token;
+
+      if (!authToken && typeof window !== "undefined" && window.electron) {
+        try {
+          authToken = await window.electron.auth.getToken();
+        } catch (error) {
+          console.error("Failed to resolve auth token:", error);
+        }
+      }
+
+      if (!authToken) {
+        alert("You need to sign in before closing pull requests.");
+        return;
+      }
+
+      setIsClosing(true);
+
+      const updatedPRs: PullRequest[] = [];
+      const closedIds: string[] = [];
+      const errors: string[] = [];
+
+      try {
+        if (authToken === "dev-token") {
+          const closedAt = new Date().toISOString();
+          for (const id of closableIds) {
+            const pr = pullRequests.get(id);
+            if (!pr) continue;
+            updatedPRs.push({
+              ...pr,
+              state: "closed",
+              draft: false,
+              merged: false,
+              closed_at: closedAt,
+            });
+            closedIds.push(id);
+          }
+        } else {
+          const api = new GitHubAPI(authToken);
+          for (const id of closableIds) {
+            const pr = pullRequests.get(id);
+            if (!pr) continue;
+            try {
+              const closedData = await api.closePullRequest(
+                pr.base.repo.owner.login,
+                pr.base.repo.name,
+                pr.number,
+              );
+
+              const mergedClosedData = {
+                ...pr,
+                ...closedData,
+                state: "closed" as const,
+                draft: false,
+                merged: closedData?.merged ?? pr.merged,
+                closed_at: closedData?.closed_at ?? new Date().toISOString(),
+              };
+
+              updatedPRs.push(mergedClosedData);
+              closedIds.push(id);
+            } catch (error: any) {
+              console.error(`Failed to close PR #${pr?.number}:`, error);
+              const message =
+                error?.response?.data?.message || error?.message || "Unknown error";
+              if (pr) {
+                errors.push(`PR #${pr.number}: ${message}`);
+              } else {
+                errors.push(message);
+              }
+            }
+          }
+        }
+
+        if (updatedPRs.length > 0) {
+          bulkUpdatePRs(updatedPRs);
+          closedIds.forEach((id) => deselectPR(id));
+        }
+
+        if (errors.length > 0) {
+          alert(`Some pull requests could not be closed:\n${errors.join("\n")}`);
+        }
+      } finally {
+        setIsClosing(false);
+      }
+    },
+    [isClosing, pullRequests, token, bulkUpdatePRs, deselectPR],
+  );
+
+  const handleCloseSelected = useCallback(async () => {
+    await closePRIds(closableSelectedPRIds);
+  }, [closePRIds, closableSelectedPRIds]);
+
+  const handleCloseGroup = useCallback(
+    async (prIds: string[]) => {
+      await closePRIds(prIds);
+    },
+    [closePRIds],
+  );
 
   const hasSelection = selectedPRs.size > 0;
+  const hasClosableSelection = closableSelectedPRIds.length > 0;
 
   // Show welcome view if no repository is selected
   if (!selectedRepo) {
@@ -460,27 +584,18 @@ export default function PRListView() {
                 </span>
 
                 <button
-                  onClick={handleMergeSelected}
-                  className={cn(
-                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
-                    theme === "dark"
-                      ? "text-green-400 hover:text-green-300 hover:bg-green-900/20"
-                      : "text-green-600 hover:text-green-700 hover:bg-green-50",
-                  )}
-                >
-                  Merge
-                </button>
-
-                <button
                   onClick={handleCloseSelected}
+                  disabled={!hasClosableSelection || isClosing}
                   className={cn(
                     "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
                     theme === "dark"
                       ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
                       : "text-red-600 hover:text-red-700 hover:bg-red-50",
+                    (!hasClosableSelection || isClosing) &&
+                    "opacity-50 cursor-not-allowed pointer-events-none",
                   )}
                 >
-                  Close
+                  {isClosing ? "Closing…" : "Close"}
                 </button>
 
                 <button
@@ -802,6 +917,7 @@ export default function PRListView() {
             onTogglePRSelection={handleCheckboxChange}
             onToggleGroupSelection={handleGroupSelection}
             onPRClick={handlePRClick}
+            onCloseGroup={handleCloseGroup}
           />
         )}
       </div>

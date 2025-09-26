@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   UncontrolledTreeEnvironment,
   Tree,
@@ -32,6 +32,9 @@ interface TreeData {
   count?: number;
   isInTaskGroup?: boolean;
   mostRecentDate?: { created: string; updated: string };
+  hasMergedPR?: boolean;
+  taskPRIds?: string[];
+  closablePRIds?: string[];
 }
 
 const getPRId = (pr: PullRequest) =>
@@ -88,6 +91,12 @@ function buildTreeItems(
         }
       });
 
+      const taskPRIds = taskPRs.map((item) => getPRId(item.pr));
+      const closablePRIds = taskPRs
+        .filter((item) => item.pr.state === "open" && !item.pr.merged)
+        .map((item) => getPRId(item.pr));
+      const hasMergedPR = taskPRs.some((item) => item.pr.merged);
+
       const taskKey = `task-${prefix}`;
       items[taskKey] = {
         index: taskKey,
@@ -102,6 +111,9 @@ function buildTreeItems(
             created: mostRecentCreated,
             updated: mostRecentUpdated,
           },
+          taskPRIds,
+          closablePRIds,
+          hasMergedPR,
         },
       };
       (items.root.children as TreeItemIndex[]).push(taskKey);
@@ -147,6 +159,7 @@ interface PRTreeViewProps {
   onTogglePRSelection: (prId: string, checked: boolean) => void;
   onToggleGroupSelection: (prIds: string[], checked: boolean) => void;
   onPRClick: (pr: PullRequest) => void;
+  onCloseGroup: (prIds: string[]) => void;
 }
 
 // Helper function to format date and time
@@ -199,6 +212,7 @@ export function PRTreeView({
   onTogglePRSelection,
   onToggleGroupSelection,
   onPRClick,
+  onCloseGroup,
 }: PRTreeViewProps) {
   const treeItems = useMemo(
     () => buildTreeItems(prsWithMetadata),
@@ -209,6 +223,8 @@ export function PRTreeView({
     () => new StaticTreeDataProvider<TreeData>(treeItems),
     [treeItems]
   );
+
+  const [hoveredGroup, setHoveredGroup] = useState<TreeItemIndex | null>(null);
 
   return (
     <span className="pr-tree-view-container">
@@ -317,10 +333,18 @@ export function PRTreeView({
                   if (!isSelected) {
                     e.currentTarget.style.backgroundColor = theme === "dark" ? "rgb(31 41 55)" : "rgb(243 244 246)";
                   }
+                  if (item.data.type === "task") {
+                    setHoveredGroup(item.index);
+                  } else {
+                    setHoveredGroup(null);
+                  }
                 }}
                 onMouseLeave={(e) => {
                   if (!isSelected) {
                     e.currentTarget.style.backgroundColor = "transparent";
+                  }
+                  if (item.data.type === "task") {
+                    setHoveredGroup((prev) => (prev === item.index ? null : prev));
                   }
                 }}
               >
@@ -355,6 +379,15 @@ export function PRTreeView({
                             ({item.data.count} PRs)
                           </span>
                         )}
+                        {item.data.hasMergedPR && (
+                          <GitMerge
+                            className={cn(
+                              "ml-2 w-4 h-4",
+                              theme === "dark" ? "text-purple-300" : "text-purple-500"
+                            )}
+                            title="Group contains a merged pull request"
+                          />
+                        )}
                       </div>
 
                       {/* Second row: Metadata */}
@@ -378,6 +411,25 @@ export function PRTreeView({
                         </div>
                       )}
                     </div>
+
+                    {item.data.closablePRIds && item.data.closablePRIds.length > 0 && hoveredGroup === item.index && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onCloseGroup(item.data.closablePRIds ?? []);
+                          setHoveredGroup(null);
+                        }}
+                        className={cn(
+                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors",
+                          theme === "dark"
+                            ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
+                            : "border-red-400 text-red-600 hover:bg-red-50"
+                        )}
+                      >
+                        Close unmerged PRs?
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
