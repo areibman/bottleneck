@@ -36,15 +36,29 @@ export default function PRListView() {
     currentRepoKey,
     pendingRepoKey,
   } = usePRStore();
-  const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
-    useUIStore();
-  const [sortBy, setSortBy] = useState<SortByType>("updated");
-  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set());
+  const {
+    selectedPRs,
+    selectPR,
+    deselectPR,
+    clearSelection,
+    theme,
+    prListFilters,
+    setPRListFilters,
+  } = useUIStore();
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<StatusType>>(new Set());
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  const sortBy = prListFilters.sortBy;
+  const selectedAuthors = useMemo(
+    () => new Set(prListFilters.selectedAuthors),
+    [prListFilters.selectedAuthors],
+  );
+  const selectedStatuses = useMemo(
+    () => new Set<StatusType>(prListFilters.selectedStatuses),
+    [prListFilters.selectedStatuses],
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -158,34 +172,46 @@ export default function PRListView() {
     return Array.from(authorMap.values());
   }, [pullRequests]);
 
-  const handleAuthorToggle = useCallback((authorLogin: string) => {
-    setSelectedAuthors(prev => {
-      const newSet = new Set(prev);
-      if (authorLogin === "all") {
-        // Toggle between all selected and none selected
-        if (newSet.size === 0 || !newSet.has("all")) {
-          // Select all
-          return new Set(["all", ...authors.map(a => a.login)]);
-        } else {
-          // Deselect all
-          return new Set();
+  const handleAuthorToggle = useCallback(
+    (authorLogin: string) => {
+      setPRListFilters(prev => {
+        const newSet = new Set(prev.selectedAuthors);
+        if (authorLogin === "all") {
+          if (newSet.size === 0 || !newSet.has("all")) {
+            const allAuthors = new Set([
+              "all",
+              ...authors.map((author) => author.login),
+            ]);
+            return {
+              ...prev,
+              selectedAuthors: Array.from(allAuthors),
+            };
+          }
+
+          return {
+            ...prev,
+            selectedAuthors: [],
+          };
         }
-      } else {
-        // Toggle individual author
+
         if (newSet.has(authorLogin)) {
           newSet.delete(authorLogin);
-          newSet.delete("all"); // Remove "all" if deselecting an individual
+          newSet.delete("all");
         } else {
           newSet.add(authorLogin);
-          // Check if all authors are now selected
-          if (authors.every(a => newSet.has(a.login))) {
+          if (authors.every((author) => newSet.has(author.login))) {
             newSet.add("all");
           }
         }
-      }
-      return newSet;
-    });
-  }, [authors]);
+
+        return {
+          ...prev,
+          selectedAuthors: Array.from(newSet),
+        };
+      });
+    },
+    [authors, setPRListFilters],
+  );
 
   // Helper function to get PR status
   const getPRStatus = useCallback((pr: PullRequest): StatusType => {
@@ -195,31 +221,41 @@ export default function PRListView() {
     return "open";
   }, []);
 
-  const handleStatusToggle = useCallback((status: StatusType | "all") => {
-    setSelectedStatuses(prev => {
-      if (status === "all") {
-        // Toggle between all selected and none selected
-        if (prev.size === 0 || prev.size < statusOptions.length) {
-          // Select all
-          return new Set(statusOptions.map(s => s.value));
-        } else {
-          // Deselect all (which means show all in our logic)
-          return new Set();
+  const handleStatusToggle = useCallback(
+    (status: StatusType | "all") => {
+      setPRListFilters(prev => {
+        if (status === "all") {
+          if (
+            prev.selectedStatuses.length === 0 ||
+            prev.selectedStatuses.length < statusOptions.length
+          ) {
+            return {
+              ...prev,
+              selectedStatuses: statusOptions.map((option) => option.value),
+            };
+          }
+
+          return {
+            ...prev,
+            selectedStatuses: [],
+          };
         }
-      } else {
-        // Toggle individual status - create a new Set to ensure React detects the change
-        const prevArray = Array.from(prev);
-        if (prev.has(status)) {
-          // Remove the status
-          const newArray = prevArray.filter(s => s !== status);
-          return new Set(newArray);
+
+        const nextStatuses = new Set<StatusType>(prev.selectedStatuses);
+        if (nextStatuses.has(status)) {
+          nextStatuses.delete(status);
         } else {
-          // Add the status
-          return new Set([...prevArray, status]);
+          nextStatuses.add(status);
         }
-      }
-    });
-  }, []);
+
+        return {
+          ...prev,
+          selectedStatuses: Array.from(nextStatuses),
+        };
+      });
+    },
+    [setPRListFilters],
+  );
 
   // Extract common prefix from PR title for sub-grouping
   const getTitlePrefix = useCallback((title: string): string => {
@@ -491,7 +527,9 @@ export default function PRListView() {
               <Dropdown<SortByType>
                 options={sortOptions}
                 value={sortBy}
-                onChange={setSortBy}
+                onChange={(value) =>
+                  setPRListFilters({ sortBy: value as SortByType })
+                }
                 labelPrefix="Sort by: "
               />
 
