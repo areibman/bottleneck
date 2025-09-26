@@ -9,9 +9,11 @@ import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
 import { PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
-import type { SortByType, PRWithMetadata } from "../types/prList";
-
-type StatusType = "open" | "draft" | "merged" | "closed";
+import type {
+  SortByType,
+  PRWithMetadata,
+  PRStatusType,
+} from "../types/prList";
 
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
@@ -19,10 +21,10 @@ const sortOptions: DropdownOption<SortByType>[] = [
 ];
 
 const statusOptions = [
-  { value: "open" as StatusType, label: "Open" },
-  { value: "draft" as StatusType, label: "Draft" },
-  { value: "merged" as StatusType, label: "Merged" },
-  { value: "closed" as StatusType, label: "Closed" },
+  { value: "open" as PRStatusType, label: "Open" },
+  { value: "draft" as PRStatusType, label: "Draft" },
+  { value: "merged" as PRStatusType, label: "Merged" },
+  { value: "closed" as PRStatusType, label: "Closed" },
 ];
 
 export default function PRListView() {
@@ -36,13 +38,24 @@ export default function PRListView() {
     currentRepoKey,
     pendingRepoKey,
   } = usePRStore();
-  const { selectedPRs, selectPR, deselectPR, clearSelection, theme } =
-    useUIStore();
-  const [sortBy, setSortBy] = useState<SortByType>("updated");
-  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set());
+  const {
+    selectedPRs,
+    selectPR,
+    deselectPR,
+    clearSelection,
+    theme,
+    prListSortBy,
+    prListSelectedAuthors,
+    prListSelectedStatuses,
+    setPRListSortBy,
+    setPRListSelectedAuthors,
+    setPRListSelectedStatuses,
+  } = useUIStore();
+  const sortBy = prListSortBy;
+  const selectedAuthors = prListSelectedAuthors;
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<StatusType>>(new Set());
+  const selectedStatuses = prListSelectedStatuses;
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -158,19 +171,21 @@ export default function PRListView() {
     return Array.from(authorMap.values());
   }, [pullRequests]);
 
-  const handleAuthorToggle = useCallback((authorLogin: string) => {
-    setSelectedAuthors(prev => {
-      const newSet = new Set(prev);
-      if (authorLogin === "all") {
-        // Toggle between all selected and none selected
-        if (newSet.size === 0 || !newSet.has("all")) {
-          // Select all
-          return new Set(["all", ...authors.map(a => a.login)]);
-        } else {
+  const handleAuthorToggle = useCallback(
+    (authorLogin: string) => {
+      setPRListSelectedAuthors((prev) => {
+        const newSet = new Set(prev);
+        if (authorLogin === "all") {
+          // Toggle between all selected and none selected
+          if (newSet.size === 0 || !newSet.has("all")) {
+            // Select all
+            return new Set(["all", ...authors.map((a) => a.login)]);
+          }
+
           // Deselect all
           return new Set();
         }
-      } else {
+
         // Toggle individual author
         if (newSet.has(authorLogin)) {
           newSet.delete(authorLogin);
@@ -178,48 +193,50 @@ export default function PRListView() {
         } else {
           newSet.add(authorLogin);
           // Check if all authors are now selected
-          if (authors.every(a => newSet.has(a.login))) {
+          if (authors.every((a) => newSet.has(a.login))) {
             newSet.add("all");
           }
         }
-      }
-      return newSet;
-    });
-  }, [authors]);
+
+        return newSet;
+      });
+    },
+    [authors, setPRListSelectedAuthors],
+  );
 
   // Helper function to get PR status
-  const getPRStatus = useCallback((pr: PullRequest): StatusType => {
+  const getPRStatus = useCallback((pr: PullRequest): PRStatusType => {
     if (pr.draft) return "draft";
     if (pr.merged) return "merged";
     if (pr.state === "closed") return "closed";
     return "open";
   }, []);
 
-  const handleStatusToggle = useCallback((status: StatusType | "all") => {
-    setSelectedStatuses(prev => {
+  const handleStatusToggle = useCallback((status: PRStatusType | "all") => {
+    setPRListSelectedStatuses((prev) => {
       if (status === "all") {
         // Toggle between all selected and none selected
         if (prev.size === 0 || prev.size < statusOptions.length) {
           // Select all
-          return new Set(statusOptions.map(s => s.value));
-        } else {
-          // Deselect all (which means show all in our logic)
-          return new Set();
+          return new Set(statusOptions.map((s) => s.value));
         }
-      } else {
-        // Toggle individual status - create a new Set to ensure React detects the change
-        const prevArray = Array.from(prev);
-        if (prev.has(status)) {
-          // Remove the status
-          const newArray = prevArray.filter(s => s !== status);
-          return new Set(newArray);
-        } else {
-          // Add the status
-          return new Set([...prevArray, status]);
-        }
+
+        // Deselect all (which means show all in our logic)
+        return new Set();
       }
+
+      // Toggle individual status - create a new Set to ensure React detects the change
+      const prevArray = Array.from(prev);
+      if (prev.has(status)) {
+        // Remove the status
+        const newArray = prevArray.filter((s) => s !== status);
+        return new Set(newArray);
+      }
+
+      // Add the status
+      return new Set([...prevArray, status]);
     });
-  }, []);
+  }, [setPRListSelectedStatuses]);
 
   // Extract common prefix from PR title for sub-grouping
   const getTitlePrefix = useCallback((title: string): string => {
@@ -491,7 +508,7 @@ export default function PRListView() {
               <Dropdown<SortByType>
                 options={sortOptions}
                 value={sortBy}
-                onChange={setSortBy}
+                onChange={setPRListSortBy}
                 labelPrefix="Sort by: "
               />
 

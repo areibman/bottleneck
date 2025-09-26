@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { SortByType, PRStatusType } from "../types/prList";
 
 interface UIState {
   sidebarOpen: boolean;
@@ -13,6 +14,10 @@ interface UIState {
   showWhitespace: boolean;
   wordWrap: boolean;
   theme: "light" | "dark";
+
+  prListSortBy: SortByType;
+  prListSelectedAuthors: Set<string>;
+  prListSelectedStatuses: Set<PRStatusType>;
 
   // PR navigation state for sidebar
   prNavigationState: {
@@ -36,6 +41,14 @@ interface UIState {
   clearSelection: () => void;
   setActiveView: (view: "list" | "detail") => void;
   setPRNavigationState: (state: UIState["prNavigationState"]) => void;
+  setPRListSortBy: (sortBy: SortByType) => void;
+  setPRListSelectedAuthors: (
+    updater: (prev: Set<string>) => Set<string>,
+  ) => void;
+  setPRListSelectedStatuses: (
+    updater: (prev: Set<PRStatusType>) => Set<PRStatusType>,
+  ) => void;
+  resetPRListFilters: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -52,6 +65,9 @@ export const useUIStore = create<UIState>()(
       showWhitespace: false,
       wordWrap: false,
       theme: "dark",
+      prListSortBy: "updated",
+      prListSelectedAuthors: new Set(),
+      prListSelectedStatuses: new Set(),
       prNavigationState: null,
 
       toggleSidebar: () =>
@@ -94,6 +110,21 @@ export const useUIStore = create<UIState>()(
       clearSelection: () => set({ selectedPRs: new Set() }),
       setActiveView: (view) => set({ activeView: view }),
       setPRNavigationState: (state) => set({ prNavigationState: state }),
+      setPRListSortBy: (sortBy) => set({ prListSortBy: sortBy }),
+      setPRListSelectedAuthors: (updater) =>
+        set((state) => ({
+          prListSelectedAuthors: updater(state.prListSelectedAuthors),
+        })),
+      setPRListSelectedStatuses: (updater) =>
+        set((state) => ({
+          prListSelectedStatuses: updater(state.prListSelectedStatuses),
+        })),
+      resetPRListFilters: () =>
+        set({
+          prListSortBy: "updated",
+          prListSelectedAuthors: new Set(),
+          prListSelectedStatuses: new Set(),
+        }),
     }),
     {
       name: "ui-storage",
