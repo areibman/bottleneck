@@ -5,6 +5,7 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { detectAgentName } from "../utils/agentIcons";
+import { getTitlePrefix } from "../utils/prUtils";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
 import { PullRequest } from "../services/github";
@@ -221,22 +222,6 @@ export default function PRListView() {
     });
   }, []);
 
-  // Extract common prefix from PR title for sub-grouping
-  const getTitlePrefix = useCallback((title: string): string => {
-    // Remove PR number if present (e.g., "#1234 Title" -> "Title")
-    const withoutNumber = title.replace(/^#?\d+\s*/, "");
-
-    // Extract prefix before colon or first few words
-    const colonMatch = withoutNumber.match(/^([^:]+):/);
-    if (colonMatch) {
-      return colonMatch[1].trim();
-    }
-
-    // Get first 3-4 words as prefix
-    const words = withoutNumber.split(/\s+/);
-    const prefixWords = words.slice(0, Math.min(3, words.length));
-    return prefixWords.join(" ");
-  }, []);
 
   // Simplified filtering logic - cleaner and more maintainable
   const getFilteredPRs = useMemo(() => {
@@ -294,11 +279,11 @@ export default function PRListView() {
     return getFilteredPRs.map((pr) => ({
       pr,
       agent: getAgentFromPR(pr),
-      titlePrefix: getTitlePrefix(pr.title),
+      titlePrefix: getTitlePrefix(pr.title, pr.head?.ref),
       author: pr.user?.login || "unknown",
       labelNames: pr.labels?.map((label: any) => label.name) || [],
     }));
-  }, [getFilteredPRs, getAgentFromPR, getTitlePrefix]);
+  }, [getFilteredPRs, getAgentFromPR]);
 
   const handlePRClick = useCallback(
     (pr: PullRequest) => {
