@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { GitPullRequest, GitBranch, Settings, AlertCircle, Bot } from "lucide-react";
+import { GitPullRequest, GitBranch, Settings, AlertCircle, SatelliteDish } from "lucide-react";
 import { CursorIcon } from "./icons/CursorIcon";
 import { DevinIcon } from "./icons/DevinIcon";
 import { ChatGPTIcon } from "./icons/ChatGPTIcon";
@@ -27,7 +27,7 @@ const NAV_ITEMS: SidebarNavItem[] = [
   { path: "/issues", icon: AlertCircle, label: "Issues" },
   { path: "/branches", icon: GitBranch, label: "Branches" },
   {
-    icon: Bot,
+    icon: SatelliteDish,
     label: "Async Agents",
     children: [
       { path: "/agents/cursor", icon: CursorIcon, label: "Cursor" },
