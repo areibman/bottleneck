@@ -1,7 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { GitPullRequest, GitBranch, Settings, AlertCircle } from "lucide-react";
+import { GitPullRequest, GitBranch, Settings, AlertCircle, SatelliteDish } from "lucide-react";
+import { CursorIcon } from "./icons/CursorIcon";
+import { DevinIcon } from "./icons/DevinIcon";
+import { ChatGPTIcon } from "./icons/ChatGPTIcon";
 import { cn } from "../utils/cn";
 import { usePRStore } from "../stores/prStore";
 import { useIssueStore } from "../stores/issueStore";
@@ -10,7 +13,6 @@ import type { SidebarNavItem } from "./sidebar/SidebarNav";
 import { SidebarNav } from "./sidebar/SidebarNav";
 import { IssueFiltersSection } from "./sidebar/IssueFiltersSection";
 import { PRNavigationSection } from "./sidebar/PRNavigationSection";
-import { PRFiltersSection } from "./sidebar/PRFiltersSection";
 import { SidebarFooter } from "./sidebar/SidebarFooter";
 import { ResizeHandle } from "./sidebar/ResizeHandle";
 
@@ -24,6 +26,15 @@ const NAV_ITEMS: SidebarNavItem[] = [
   { path: "/pulls", icon: GitPullRequest, label: "Pull Requests" },
   { path: "/issues", icon: AlertCircle, label: "Issues" },
   { path: "/branches", icon: GitBranch, label: "Branches" },
+  {
+    icon: SatelliteDish,
+    label: "Async Agents",
+    children: [
+      { path: "/agents/cursor", icon: CursorIcon, label: "Cursor" },
+      { path: "/agents/devin", icon: DevinIcon, label: "Devin" },
+      { path: "/agents/chatgpt", icon: ChatGPTIcon, label: "ChatGPT" },
+    ],
+  },
   { path: "/settings", icon: Settings, label: "Settings" },
 ];
 

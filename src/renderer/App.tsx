@@ -15,6 +15,9 @@ import SettingsView from "./views/SettingsView";
 import AuthView from "./views/AuthView";
 import IssuesView from "./views/IssuesView";
 import IssueDetailView from "./views/IssueDetailView";
+import CursorView from "./views/CursorView";
+import DevinView from "./views/DevinView";
+import ChatGPTView from "./views/ChatGPTView";
 import { setupKeyboardShortcuts } from "./utils/keyboard";
 import { cn } from "./utils/cn";
 
@@ -114,6 +117,9 @@ function App() {
               element={<IssueDetailView />}
             />
             <Route path="/settings" element={<SettingsView />} />
+            <Route path="/agents/cursor" element={<CursorView />} />
+            <Route path="/agents/devin" element={<DevinView />} />
+            <Route path="/agents/chatgpt" element={<ChatGPTView />} />
           </Routes>
         </main>
 

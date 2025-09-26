@@ -4,6 +4,7 @@ import { PullRequest } from "../../services/github";
 import { usePRStore } from "../../stores/prStore";
 import { useUIStore } from "../../stores/uiStore";
 import { detectAgentName } from "../../utils/agentIcons";
+import { getTitlePrefix } from "../../utils/prUtils";
 
 interface NavigationState {
   siblingPRs?: any[];
@@ -54,16 +55,6 @@ export function usePRNavigation(
     return "unknown";
   }, []);
 
-  const getTitlePrefix = useCallback((title: string): string => {
-    const withoutNumber = title.replace(/^#?\d+\s*/, "");
-    const colonMatch = withoutNumber.match(/^([^:]+):/);
-    if (colonMatch) {
-      return colonMatch[1].trim();
-    }
-    const words = withoutNumber.split(/\s+/);
-    const prefixWords = words.slice(0, Math.min(3, words.length));
-    return prefixWords.join(" ");
-  }, []);
 
   const fetchSiblingPRs = useCallback(
     async (currentPR: PullRequest) => {
@@ -82,11 +73,11 @@ export function usePRNavigation(
 
       // Find siblings based on agent and title prefix
       const currentAgent = getAgentFromPR(currentPR);
-      const currentPrefix = getTitlePrefix(currentPR.title);
+      const currentPrefix = getTitlePrefix(currentPR.title, currentPR.head?.ref);
 
       const siblingPRs = allPRs.filter((pr) => {
         const prAgent = getAgentFromPR(pr);
-        const prPrefix = getTitlePrefix(pr.title);
+        const prPrefix = getTitlePrefix(pr.title, pr.head?.ref);
         return prAgent === currentAgent && prPrefix === currentPrefix;
       });
 
@@ -148,7 +139,6 @@ export function usePRNavigation(
       fetchPullRequests,
       pullRequests,
       getAgentFromPR,
-      getTitlePrefix,
       fetchPRDetails,
       bulkUpdatePRs,
     ],

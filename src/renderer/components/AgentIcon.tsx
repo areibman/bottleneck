@@ -1,7 +1,10 @@
 import { Bot, User } from "lucide-react";
 import { cn } from "../utils/cn";
-import { getAgentIcon } from "../utils/agentIcons";
-import { useUIStore } from "../stores/uiStore";
+import { CursorIcon } from "./icons/CursorIcon";
+import { ChatGPTIcon } from "./icons/ChatGPTIcon";
+import { DevinIcon } from "./icons/DevinIcon";
+import { ClaudeIcon } from "./icons/ClaudeIcon";
+import { resolveAgentKey } from "../utils/agentIcons";
 
 interface AgentIconProps {
   agentName?: string | null;
@@ -10,20 +13,24 @@ interface AgentIconProps {
 }
 
 export function AgentIcon({ agentName, className, fallback }: AgentIconProps) {
-  const { theme } = useUIStore();
-  const iconInfo = agentName ? getAgentIcon(agentName) : undefined;
+  const agentKey = agentName ? resolveAgentKey(agentName) : undefined;
   const resolvedFallback = fallback ?? "bot";
 
-  if (iconInfo) {
-    const themeFilter = iconInfo.themeFilter?.[theme];
-    return (
-      <img
-        src={iconInfo.src}
-        alt={iconInfo.alt}
-        className={cn("w-4 h-4 flex-shrink-0", className)}
-        style={themeFilter ? { filter: themeFilter } : undefined}
-      />
-    );
+  // Use the appropriate icon component based on the agent key
+  if (agentKey) {
+    const iconClassName = cn("w-4 h-4 flex-shrink-0", className);
+
+    switch (agentKey) {
+      case "cursor":
+        return <CursorIcon className={iconClassName} />;
+      case "claude":
+        return <ClaudeIcon className={iconClassName} />;
+      case "openai":
+      case "codex":
+        return <ChatGPTIcon className={iconClassName} />;
+      case "devin":
+        return <DevinIcon className={iconClassName} />;
+    }
   }
 
   if (resolvedFallback === "user") {
