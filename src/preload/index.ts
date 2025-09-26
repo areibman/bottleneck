@@ -37,9 +37,6 @@ const electronAPI = {
     getVersion: () => ipcRenderer.invoke("app:get-version"),
   },
 
-  // Open external links
-  openExternal: (url: string) => ipcRenderer.invoke("app:open-external", url),
-
   // Utility functions
   utils: {
     fromBase64: (data: string) => ipcRenderer.invoke("utils:fromBase64", data),

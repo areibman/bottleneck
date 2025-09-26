@@ -49,8 +49,6 @@ declare global {
         getVersion: () => Promise<string>;
       };
 
-      openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
-
       utils: {
         fromBase64: (data: string) => Promise<string>;
       };
