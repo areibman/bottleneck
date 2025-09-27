@@ -219,10 +219,11 @@ export default function PRListView() {
 
   // Helper function to get PR status
   const getPRStatus = useCallback((pr: PullRequest): StatusType => {
-    if (pr.draft) return "draft";
     if (pr.merged) return "merged";
     if (pr.state === "closed") return "closed";
-    return "open";
+    if (pr.draft && pr.state === "open") return "draft"; // Only consider draft if PR is open
+    if (pr.state === "open") return "open";
+    return "closed"; // Default fallback
   }, []);
 
   const handleStatusToggle = useCallback(
@@ -478,13 +479,16 @@ export default function PRListView() {
                 pr.number,
               );
 
-              const mergedClosedData = {
+              const mergedClosedData: PullRequest = {
                 ...pr,
                 ...closedData,
                 state: "closed" as const,
                 draft: false,
                 merged: closedData?.merged ?? pr.merged,
                 closed_at: closedData?.closed_at ?? new Date().toISOString(),
+                // Ensure array fields are always arrays, not null
+                assignees: closedData?.assignees ?? pr.assignees ?? [],
+                requested_reviewers: closedData?.requested_reviewers ?? pr.requested_reviewers ?? [],
               };
 
               updatedPRs.push(mergedClosedData);
