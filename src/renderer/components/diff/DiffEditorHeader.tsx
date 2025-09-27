@@ -9,6 +9,8 @@ import {
   FilePlus,
   FileMinus,
   FileEdit,
+  Minimize2,
+  Maximize2,
 } from "lucide-react";
 import { File } from "../../services/github";
 import { cn } from "../../utils/cn";
@@ -20,12 +22,14 @@ interface DiffEditorHeaderProps {
   showWhitespace: boolean;
   wordWrap: boolean;
   showFullFile: boolean;
+  hideUnchangedRegions: boolean;
   isViewed: boolean;
   canShowFullFile: boolean;
   onToggleDiffView: () => void;
   onToggleWhitespace: () => void;
   onToggleWordWrap: () => void;
   onToggleFullFile: () => void;
+  onToggleHideUnchanged: () => void;
   onMarkViewed: () => void;
 }
 
@@ -36,12 +40,14 @@ export const DiffEditorHeader: FC<DiffEditorHeaderProps> = ({
   showWhitespace,
   wordWrap,
   showFullFile,
+  hideUnchangedRegions,
   isViewed,
   canShowFullFile,
   onToggleDiffView,
   onToggleWhitespace,
   onToggleWordWrap,
   onToggleFullFile,
+  onToggleHideUnchanged,
   onMarkViewed,
 }) => {
   const isDark = theme === "dark";
@@ -120,19 +126,38 @@ export const DiffEditorHeader: FC<DiffEditorHeaderProps> = ({
         </button>
 
         {file.status === "modified" && (
-          <button
-            onClick={onToggleFullFile}
-            className={cn(
-              "btn btn-ghost px-2 py-1 text-xs flex items-center gap-1",
-              showFullFile && (isDark ? "bg-gray-700" : "bg-gray-200"),
-              !canShowFullFile && "opacity-50 cursor-not-allowed",
+          <>
+            <button
+              onClick={onToggleFullFile}
+              className={cn(
+                "btn btn-ghost px-2 py-1 text-xs flex items-center gap-1",
+                showFullFile && (isDark ? "bg-gray-700" : "bg-gray-200"),
+                !canShowFullFile && "opacity-50 cursor-not-allowed",
+              )}
+              disabled={!canShowFullFile}
+              title={fullFileTitle}
+            >
+              <WholeWord className="w-4 h-4" />
+              <span>{showFullFile ? "Diff" : "Full"}</span>
+            </button>
+
+            {showFullFile && (
+              <button
+                onClick={onToggleHideUnchanged}
+                className={cn(
+                  "btn btn-ghost p-1 text-xs",
+                  hideUnchangedRegions && (isDark ? "bg-gray-700" : "bg-gray-200"),
+                )}
+                title={hideUnchangedRegions ? "Show all lines" : "Hide unchanged lines"}
+              >
+                {hideUnchangedRegions ? (
+                  <Maximize2 className="w-4 h-4" />
+                ) : (
+                  <Minimize2 className="w-4 h-4" />
+                )}
+              </button>
             )}
-            disabled={!canShowFullFile}
-            title={fullFileTitle}
-          >
-            <WholeWord className="w-4 h-4" />
-            <span>{showFullFile ? "Diff" : "Full"}</span>
-          </button>
+          </>
         )}
 
         <button

@@ -85,8 +85,13 @@ export function DiffEditor({
   const [patchOriginalContent, setPatchOriginalContent] = useState("");
   const [patchModifiedContent, setPatchModifiedContent] = useState("");
   const [patchMappings, setPatchMappings] = useState<PatchMappings | null>(null);
-  const [showFullFile, setShowFullFile] = useState(false);
+  // Default to full file view only if full file content is available
+  const [showFullFile, setShowFullFile] = useState(
+    !(originalContent === undefined && modifiedContent === undefined)
+  );
   const [diffEditorReady, setDiffEditorReady] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [hideUnchangedRegions, setHideUnchangedRegions] = useState(false); // Default to showing all lines
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay | null>(null);
   const [overlayPosition, setOverlayPosition] = useState<
     | { top: number; left: number }
@@ -104,7 +109,11 @@ export function DiffEditor({
   } = useOverlayResize();
 
   useEffect(() => {
-    setShowFullFile(false);
+    setIsInitializing(true);
+
+    // Default to full file view only if full file content is available
+    const hasFullContent = !(originalContent === undefined && modifiedContent === undefined);
+    setShowFullFile(hasFullContent);
 
     if (file.patch) {
       const { original, modified, mappings } = parsePatch(file.patch);
@@ -116,7 +125,14 @@ export function DiffEditor({
       setPatchModifiedContent("");
       setPatchMappings(null);
     }
-  }, [file.patch, file.filename]);
+
+    // Small delay to prevent flicker when switching files
+    const timer = setTimeout(() => {
+      setIsInitializing(false);
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [file.patch, file.filename, originalContent, modifiedContent]);
 
   const mapLineForSide = useCallback(
     (line: number | null | undefined, side: CommentSide): number | null => {
@@ -997,6 +1013,10 @@ export function DiffEditor({
     setShowFullFile((prev) => !prev);
   }, [canShowFullFile, file.status, setShowFullFile]);
 
+  const handleToggleHideUnchanged = useCallback(() => {
+    setHideUnchangedRegions((prev) => !prev);
+  }, []);
+
   const effectiveOriginalContent =
     showFullFile && originalContent !== undefined
       ? originalContent || ""
@@ -1015,74 +1035,82 @@ export function DiffEditor({
         showWhitespace={showWhitespace}
         wordWrap={wordWrap}
         showFullFile={showFullFile}
+        hideUnchangedRegions={hideUnchangedRegions}
         isViewed={isViewed}
         canShowFullFile={canShowFullFile}
         onToggleDiffView={toggleDiffView}
         onToggleWhitespace={toggleWhitespace}
         onToggleWordWrap={toggleWordWrap}
         onToggleFullFile={handleToggleFullFile}
+        onToggleHideUnchanged={handleToggleHideUnchanged}
         onMarkViewed={onMarkViewed}
       />
 
       <div className="flex-1 relative" ref={containerRef}>
-        <MonacoDiffEditor
-          original={
-            file.status === "added" ? "" : effectiveOriginalContent || ""
-          }
-          modified={
-            file.status === "removed" ? "" : effectiveModifiedContent || ""
-          }
-          language={language}
-          theme={theme === "dark" ? "vs-dark" : "vs"}
-          options={{
-            readOnly: true,
-            renderSideBySide: diffView === "split",
-            renderWhitespace: showWhitespace ? "all" : "none",
-            wordWrap: wordWrap ? "on" : "off",
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            fontSize: 12,
-            lineHeight: 18,
-            renderLineHighlight: "none",
-            glyphMargin: false,
-            folding: true,
-            lineNumbers: "on",
-            lineDecorationsWidth: 22,
-            lineNumbersMinChars: 3,
-            renderValidationDecorations: "off",
-            scrollbar: {
-              vertical: "visible",
-              horizontal: "visible",
-              verticalScrollbarSize: 10,
-              horizontalScrollbarSize: 10,
-            },
-            hideUnchangedRegions: {
-              enabled: !!showFullFile,
-              revealLineCount: 3,
-              minimumLineCount: 3,
-              contextLineCount: 3,
-            },
-            diffAlgorithm: "advanced",
-          }}
-          onMount={(editor) => {
-            diffEditorRef.current = editor;
-            setDiffEditorReady(true);
-
-            try {
-              const originalModel = editor.getOriginalEditor().getModel();
-              const modifiedModel = editor.getModifiedEditor().getModel();
-
-              if (originalModel && originalModel.getLineCount() === 0) {
-                originalModel.setValue(" ");
-              }
-              if (modifiedModel && modifiedModel.getLineCount() === 0) {
-                modifiedModel.setValue(" ");
-              }
-            } catch (error) {
-              console.warn("Monaco Editor initialization warning:", error);
+        {!isInitializing ? (
+          <MonacoDiffEditor
+            original={
+              file.status === "added" ? "" : effectiveOriginalContent || ""
             }
-          }}
-        />
+            modified={
+              file.status === "removed" ? "" : effectiveModifiedContent || ""
+            }
+            language={language}
+            theme={theme === "dark" ? "vs-dark" : "vs"}
+            options={{
+              readOnly: true,
+              renderSideBySide: diffView === "split",
+              renderWhitespace: showWhitespace ? "all" : "none",
+              wordWrap: wordWrap ? "on" : "off",
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 12,
+              lineHeight: 18,
+              renderLineHighlight: "none",
+              glyphMargin: false,
+              folding: true,
+              lineNumbers: "on",
+              lineDecorationsWidth: 22,
+              lineNumbersMinChars: 3,
+              renderValidationDecorations: "off",
+              scrollbar: {
+                vertical: "visible",
+                horizontal: "visible",
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+              },
+              hideUnchangedRegions: {
+                enabled: showFullFile && hideUnchangedRegions,
+                revealLineCount: 3,
+                minimumLineCount: 3,
+                contextLineCount: 3,
+              },
+              diffAlgorithm: "advanced",
+            }}
+            onMount={(editor) => {
+              diffEditorRef.current = editor;
+              setDiffEditorReady(true);
+
+              try {
+                const originalModel = editor.getOriginalEditor().getModel();
+                const modifiedModel = editor.getModifiedEditor().getModel();
+
+                if (originalModel && originalModel.getLineCount() === 0) {
+                  originalModel.setValue(" ");
+                }
+                if (modifiedModel && modifiedModel.getLineCount() === 0) {
+                  modifiedModel.setValue(" ");
+                }
+              } catch (error) {
+                console.warn("Monaco Editor initialization warning:", error);
+              }
+            }}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-gray-500">Loading...</div>
+          </div>
+        )}
 
         {activeOverlay && overlayPosition && (
           <CommentOverlay
