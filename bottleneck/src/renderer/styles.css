@@ -1,0 +1,19 @@
+* { box-sizing: border-box; }
+:root { --bg: #0b0d10; --panel: #11141a; --muted: #98a2b3; --text: #e6e7e8; --border: #1f2430; --brand: #6ea8fe }
+html, body, #root { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji }
+button { background: #1b2230; color: #e6e7e8; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; cursor: pointer }
+input, select { background: #0f141d; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px }
+.sidebar { width: 280px; border-right: 1px solid var(--border); background: var(--panel); padding: 12px; display: grid; grid-auto-rows: min-content; gap: 12px }
+.topbar { height: 44px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; align-items: center; gap: 8px; padding: 0 10px }
+.main { display: grid; grid-template-rows: 44px 1fr; height: 100vh }
+.row { display: flex; gap: 8px; align-items: center }
+.badge { font-size: 12px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted) }
+.list { display: grid; gap: 6px }
+.card { border: 1px solid var(--border); background: #0f1218; border-radius: 8px; padding: 10px }
+.tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border) }
+.tab { padding: 8px 10px; cursor: pointer; border-bottom: 2px solid transparent }
+.tab.active { border-color: var(--brand) }
+.split { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 44px) }
+.filelist { border-right: 1px solid var(--border); overflow: auto }
+.fileview { overflow: hidden }
+
