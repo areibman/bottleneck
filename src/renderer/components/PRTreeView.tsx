@@ -9,7 +9,7 @@ import {
 import "react-complex-tree/lib/style-modern.css";
 import "./PRTreeView.css";
 import {
-  GitPullRequestDraft,
+  GitPullRequest,
   GitPullRequestArrow,
   GitMerge,
   X,
@@ -20,6 +20,7 @@ import {
   FileText,
 } from "lucide-react";
 import { cn } from "../utils/cn";
+import { getPRIcon, getPRColorClass } from "../utils/prStatus";
 import { AgentIcon } from "./AgentIcon";
 import type { PullRequest } from "../services/github";
 import type { PRWithMetadata, SortByType } from "../types/prList";
@@ -380,13 +381,14 @@ export function PRTreeView({
                           </span>
                         )}
                         {item.data.hasMergedPR && (
-                          <GitMerge
-                            className={cn(
-                              "ml-2 w-4 h-4",
-                              theme === "dark" ? "text-purple-300" : "text-purple-500"
-                            )}
-                            title="Group contains a merged pull request"
-                          />
+                          <span title="Group contains a merged pull request">
+                            <GitMerge
+                              className={cn(
+                                "ml-2 w-4 h-4",
+                                theme === "dark" ? "text-purple-300" : "text-purple-500"
+                              )}
+                            />
+                          </span>
                         )}
                       </div>
 
@@ -438,26 +440,18 @@ export function PRTreeView({
                       <span
                         className={cn(
                           "mr-2",
-                          item.data.pr?.merged
-                            ? "text-purple-400"
-                            : item.data.pr?.state === "open"
-                              ? item.data.pr?.draft
-                                ? "text-gray-400"
-                                : "text-green-400"
-                              : "text-red-400"
+                          item.data.pr ? getPRColorClass(item.data.pr) : "text-gray-400"
                         )}
                       >
-                        {item.data.pr?.merged ? (
-                          <GitMerge className="w-5 h-5" />
-                        ) : item.data.pr?.state === "open" ? (
-                          item.data.pr?.draft ? (
-                            <GitPullRequestDraft className="w-5 h-5" />
-                          ) : (
-                            <GitPullRequestArrow className="w-5 h-5" />
-                          )
-                        ) : (
-                          <X className="w-5 h-5" />
-                        )}
+                        {(() => {
+                          if (!item.data.pr) return <X className="w-5 h-5" />;
+                          const Icon = getPRIcon(item.data.pr);
+                          // Special case: use GitPullRequestArrow instead of GitPullRequest for open PRs
+                          if (Icon === GitPullRequest) {
+                            return <GitPullRequestArrow className="w-5 h-5" />;
+                          }
+                          return <Icon className="w-5 h-5" />;
+                        })()}
                       </span>
 
                       {item.data.type === "pr" && item.data.pr && (

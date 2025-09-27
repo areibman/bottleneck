@@ -7,13 +7,14 @@ import { useAuthStore } from "../stores/authStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
+import { getPRStatus, PRStatusType } from "../utils/prStatus";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
 import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
 
-type StatusType = "open" | "draft" | "merged" | "closed";
+type StatusType = PRStatusType; // Use the centralized type
 
 const sortOptions: DropdownOption<SortByType>[] = [
   { value: "updated", label: "Recently updated" },
@@ -217,14 +218,8 @@ export default function PRListView() {
     [authors, setPRListFilters],
   );
 
-  // Helper function to get PR status
-  const getPRStatus = useCallback((pr: PullRequest): StatusType => {
-    if (pr.merged) return "merged";
-    if (pr.state === "closed") return "closed";
-    if (pr.draft && pr.state === "open") return "draft"; // Only consider draft if PR is open
-    if (pr.state === "open") return "open";
-    return "closed"; // Default fallback
-  }, []);
+  // Use the centralized getPRStatus utility
+  // No need for useCallback since getPRStatus is a pure function
 
   const handleStatusToggle = useCallback(
     (status: StatusType | "all") => {
