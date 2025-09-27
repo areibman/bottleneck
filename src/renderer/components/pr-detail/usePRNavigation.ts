@@ -19,7 +19,7 @@ export function usePRNavigation(
 ) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { fetchPullRequests, pullRequests, fetchPRDetails, bulkUpdatePRs } =
+  const { fetchPullRequests, pullRequests, fetchPRDetails } =
     usePRStore();
   const { setPRNavigationState } = useUIStore();
 
@@ -89,7 +89,7 @@ export function usePRNavigation(
         // Fetch detailed data for all siblings in parallel
         const detailPromises = siblingPRs.map((pr) =>
           fetchPRDetails(owner, repo, pr.number, {
-            updateStore: false,
+            updateStore: true, // Update store to keep PR states synchronized
           }).catch((error) => {
             console.error(
               `Failed to fetch details for PR #${pr.number}:`,
@@ -127,10 +127,7 @@ export function usePRNavigation(
 
         setNavigationState(newNavState);
 
-        // Cache the detailed PRs in the store
-        if (validPRs.length > 0) {
-          bulkUpdatePRs(validPRs);
-        }
+        // PRs are already cached in the store via updateStore: true in fetchPRDetails
       }
     },
     [
@@ -140,7 +137,6 @@ export function usePRNavigation(
       pullRequests,
       getAgentFromPR,
       fetchPRDetails,
-      bulkUpdatePRs,
     ],
   );
 

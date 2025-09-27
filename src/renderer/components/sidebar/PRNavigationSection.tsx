@@ -57,7 +57,7 @@ export function PRNavigationSection({
           const isCurrentPR =
             siblingPR.number?.toString() === navigationState?.currentPRNumber;
           const isPROpen = siblingPR.state === "open" && !siblingPR.merged;
-          const isPRDraft = Boolean(siblingPR.draft);
+          const isPRDraft = Boolean(siblingPR.draft) && isPROpen; // Only show draft if PR is open
           const isPRMerged = Boolean(siblingPR.merged);
 
           return (
