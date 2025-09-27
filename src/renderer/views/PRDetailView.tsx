@@ -33,6 +33,7 @@ import {
   RequestChangesDialog,
   usePRNavigation,
 } from "../components/pr-detail";
+import { useSyncStore } from "../stores/syncStore";
 
 export default function PRDetailView() {
   const { owner, repo, number } = useParams<{
@@ -43,6 +44,7 @@ export default function PRDetailView() {
   const { token } = useAuthStore();
   const { theme } = useUIStore();
   const { updatePR } = usePRStore();
+  const { lastSyncTime, isSyncing } = useSyncStore();
 
   // Use the navigation hook
   const { navigationState, fetchSiblingPRs } = usePRNavigation(
@@ -70,6 +72,9 @@ export default function PRDetailView() {
   const [fileListWidth, setFileListWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
   const fileListRef = useRef<HTMLDivElement>(null);
+  const lastHandledSyncTimeRef = useRef<number | null>(
+    lastSyncTime ? lastSyncTime.getTime() : null,
+  );
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
@@ -142,10 +147,14 @@ export default function PRDetailView() {
       if (!window.electron || !token) {
         const prNumber = parseInt(number || "0");
         const mockPR =
-          mockPullRequests.find((pr) => pr.number === prNumber) ||
+          mockPullRequests.find((mock) => mock.number === prNumber) ||
           mockPullRequests[0];
 
-        setPR(mockPR as any);
+        if (mockPR) {
+          setPR(mockPR as any);
+          updatePR(mockPR as any);
+        }
+
         setFiles(mockFiles as any);
         setComments(mockComments as any);
         setReviews(mockReviews as any);
@@ -177,6 +186,7 @@ export default function PRDetailView() {
           ]);
 
         setPR(prData);
+        updatePR(prData);
         setFiles(filesData);
         setComments(commentsData);
         setReviews(reviewsData);
@@ -194,6 +204,30 @@ export default function PRDetailView() {
       setLoading(false);
     }
   };
+
+  const loadPRDataRef = useRef(loadPRData);
+
+  useEffect(() => {
+    loadPRDataRef.current = loadPRData;
+  }, [loadPRData]);
+
+  useEffect(() => {
+    if (!lastSyncTime || isSyncing) {
+      return;
+    }
+
+    const currentTimestamp = lastSyncTime.getTime();
+
+    if (lastHandledSyncTimeRef.current === null) {
+      lastHandledSyncTimeRef.current = currentTimestamp;
+      return;
+    }
+
+    if (currentTimestamp !== lastHandledSyncTimeRef.current) {
+      lastHandledSyncTimeRef.current = currentTimestamp;
+      loadPRDataRef.current();
+    }
+  }, [isSyncing, lastSyncTime]);
 
   const resolveRepoContext = () => {
     const repoOwner = owner || pr?.base.repo.owner.login;

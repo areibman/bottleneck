@@ -275,6 +275,29 @@
     @apply bg-gray-200 text-gray-900;
   }
 
+  /* React Complex Tree dark mode overrides */
+  .dark .rct-tree-root,
+  .dark .rct-tree {
+    --rct-color-focustree-item-selected-bg: rgba(30, 64, 175, 0.3);
+    --rct-color-focustree-item-selected-text: #e2e8f0;
+    --rct-color-focustree-item-hover-bg: rgba(148, 163, 184, 0.16);
+    --rct-color-focustree-item-hover-text: #f8fafc;
+    --rct-color-focustree-item-active-bg: rgba(30, 64, 175, 0.45);
+    --rct-color-focustree-item-active-text: #dbeafe;
+    --rct-color-focustree-item-draggingover-bg: rgba(30, 64, 175, 0.45);
+    --rct-color-focustree-item-draggingover-color: #e2e8f0;
+    --rct-bar-color: #3b82f6;
+    --rct-color-arrow: #94a3b8;
+  }
+
+  .dark .rct-tree-item-button {
+    color: #e2e8f0;
+  }
+
+  .dark .rct-tree-item-button:hover {
+    color: #f8fafc;
+  }
+
   .tab {
     @apply px-4 py-2 text-sm font-medium border-b-2 border-transparent transition-colors duration-150 cursor-pointer;
   }

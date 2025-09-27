@@ -5,7 +5,6 @@ import {
   GitPullRequest,
   GitPullRequestDraft,
   GitMerge,
-  X,
   Check,
   GitBranch,
   ChevronDown,
@@ -17,6 +16,7 @@ import {
 import { PullRequest } from "../../services/github";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../../utils/cn";
+import { getPRIcon, getPRColorClass } from "../../utils/prStatus";
 import { CheckoutDropdown } from "./CheckoutDropdown";
 
 interface PRHeaderProps {
@@ -59,9 +59,6 @@ export function PRHeader({
     currentUser &&
     pr.changesRequestedBy?.some((r) => r.login === currentUser.login);
 
-  // Debug logging to track PR draft state
-  console.log("PRHeader render - PR draft state:", pr.draft, "isAuthor:", isAuthor);
-
   return (
     <div
       className={cn(
@@ -84,17 +81,17 @@ export function PRHeader({
           </button>
 
           <div className="flex items-center space-x-2">
-            {pr.draft ? (
-              <div title="Draft">
-                <GitPullRequestDraft className="w-5 h-5 text-gray-400" />
-              </div>
-            ) : pr.merged ? (
-              <GitMerge className="w-5 h-5 text-purple-400" />
-            ) : pr.state === "open" ? (
-              <GitPullRequest className="w-5 h-5 text-green-400" />
-            ) : (
-              <X className="w-5 h-5 text-red-400" />
-            )}
+            {(() => {
+              const Icon = getPRIcon(pr);
+              const colorClass = getPRColorClass(pr);
+              const iconElement = <Icon className={`w-5 h-5 ${colorClass}`} />;
+
+              // Wrap draft icon in a div with title
+              if (Icon === GitPullRequestDraft) {
+                return <div title="Draft">{iconElement}</div>;
+              }
+              return iconElement;
+            })()}
 
             <h1 className="text-base font-semibold">
               {pr.title}

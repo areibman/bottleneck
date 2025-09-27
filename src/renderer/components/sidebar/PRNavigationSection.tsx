@@ -1,12 +1,9 @@
 import {
-  GitPullRequest,
-  GitPullRequestDraft,
-  GitMerge,
-  X,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
+import { getPRIcon, getPRColorClass } from "../../utils/prStatus";
 
 interface PRNavigationState {
   siblingPRs?: any[];
@@ -56,9 +53,8 @@ export function PRNavigationSection({
         {siblingPRs.map((siblingPR) => {
           const isCurrentPR =
             siblingPR.number?.toString() === navigationState?.currentPRNumber;
-          const isPROpen = siblingPR.state === "open" && !siblingPR.merged;
-          const isPRDraft = Boolean(siblingPR.draft);
-          const isPRMerged = Boolean(siblingPR.merged);
+          const Icon = getPRIcon(siblingPR);
+          const colorClass = getPRColorClass(siblingPR);
 
           return (
             <div
@@ -81,15 +77,7 @@ export function PRNavigationSection({
               )}
             >
               <div className="flex-shrink-0">
-                {isPRDraft ? (
-                  <GitPullRequestDraft className="w-4 h-4 text-gray-400" />
-                ) : isPRMerged ? (
-                  <GitMerge className="w-4 h-4 text-purple-400" />
-                ) : isPROpen ? (
-                  <GitPullRequest className="w-4 h-4 text-green-400" />
-                ) : (
-                  <X className="w-4 h-4 text-red-400" />
-                )}
+                <Icon className={`w-4 h-4 ${colorClass}`} />
               </div>
 
               <div className="flex-1 min-w-0">
