@@ -14,6 +14,7 @@ interface Branch {
   ahead: number;
   behind: number;
   current?: boolean;
+  checkStatus?: import("../services/github").BranchCheckStatus;
 }
 
 interface BranchState {
@@ -248,9 +249,28 @@ export const useBranchStore = create<BranchState>((set, get) => ({
       const api = new GitHubAPI(token);
       const branchData = await api.getBranches(owner, repo, defaultBranch);
 
+      // Fetch check statuses in parallel but with limited concurrency to avoid rate limits
+      const results: Array<import("../services/github").BranchCheckStatus> = [];
+      const batchSize = 10;
+      for (let i = 0; i < branchData.length; i += batchSize) {
+        const batch = branchData.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map((b) =>
+            api.getBranchCheckStatus(owner, repo, b.name),
+          ),
+        );
+        results.push(...batchResults);
+      }
+
+      const branchesWithChecks = branchData.map((b, idx) => ({
+        ...b,
+        checkStatus: results[idx],
+      }));
+
       // Mark the default branch as current
-      const branchesWithCurrent = branchData.map((branch) => ({
+      const branchesWithCurrent = branchesWithChecks.map((branch) => ({
         ...branch,
+        checkStatus: branchesWithChecks.find((x) => x.name === branch.name)?.checkStatus,
         current: branch.name === defaultBranch,
       }));
 
