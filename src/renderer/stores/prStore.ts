@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import { GitHubAPI, PullRequest, Repository } from "../services/github";
 import { mockPullRequests } from "../mockData";
+import { loadRepoFromCache as loadRepoFromCacheHelper } from "./pr/cache";
+import {
+  loadRecentlyViewedRepos,
+  loadSelectedRepo,
+  saveRecentlyViewedRepos,
+  saveSelectedRepo,
+} from "./pr/storage";
+import { storePRsInDB, storeReposInDB } from "./pr/db";
+import { resolveAuthToken } from "./utils/auth";
 
 interface PRGroup {
   id: string;
@@ -20,7 +29,7 @@ export interface PRFilters {
 
 export type PRFilterType = 'open' | 'draft' | 'review-requested' | 'merged' | 'closed';
 
-interface PRState {
+export interface PRState {
   pullRequests: Map<string, PullRequest>;
   repositories: Repository[];
   selectedRepo: Repository | null;
@@ -70,59 +79,8 @@ interface PRState {
     repo: string,
   ) => Promise<void>;
   storeReposInDB: (repos: Repository[]) => Promise<void>;
+  loadRepoFromCache: (owner: string, repo: string) => Promise<boolean>;
 }
-
-// Load recently viewed repos from electron store on initialization
-const loadRecentlyViewedRepos = async (): Promise<Repository[]> => {
-  if (window.electron) {
-    try {
-      const result = await window.electron.settings.get("recentlyViewedRepos");
-      if (result.success && result.value) {
-        return result.value as Repository[];
-      }
-    } catch (error) {
-      console.error("Failed to load recently viewed repos:", error);
-    }
-  }
-  return [];
-};
-
-// Save recently viewed repos to electron store
-const saveRecentlyViewedRepos = async (repos: Repository[]) => {
-  if (window.electron) {
-    try {
-      await window.electron.settings.set("recentlyViewedRepos", repos);
-    } catch (error) {
-      console.error("Failed to save recently viewed repos:", error);
-    }
-  }
-};
-
-// Load selected repo from electron store
-const loadSelectedRepo = async (): Promise<Repository | null> => {
-  if (window.electron) {
-    try {
-      const result = await window.electron.settings.get("selectedRepo");
-      if (result.success && result.value) {
-        return result.value as Repository;
-      }
-    } catch (error) {
-      console.error("Failed to load selected repo:", error);
-    }
-  }
-  return null;
-};
-
-// Save selected repo to electron store
-const saveSelectedRepo = async (repo: Repository | null) => {
-  if (window.electron) {
-    try {
-      await window.electron.settings.set("selectedRepo", repo);
-    } catch (error) {
-      console.error("Failed to save selected repo:", error);
-    }
-  }
-};
 
 export const usePRStore = create<PRState>((set, get) => {
   // Initialize from storage
@@ -146,6 +104,16 @@ export const usePRStore = create<PRState>((set, get) => {
 
         // Don't auto-fetch here - let the sync store handle initial fetch
         // This prevents duplicate fetches on hard refresh
+      }
+
+      if (updates.selectedRepo) {
+        void loadRepoFromCacheHelper({
+          owner: updates.selectedRepo.owner,
+          repo: updates.selectedRepo.name,
+          getState: get,
+          setState: set,
+          groupPRsByPrefix: () => get().groupPRsByPrefix(),
+        });
       }
     },
   );
@@ -175,7 +143,7 @@ export const usePRStore = create<PRState>((set, get) => {
     ) => {
       const repoFullName = `${owner}/${repo}`;
       const { replaceStore = true } = options;
-      const { loading, pendingRepoKey, currentRepoKey } = get();
+      const { loading, pendingRepoKey, currentRepoKey, loadedRepos } = get();
 
       console.log(`[PRStore] fetchPullRequests called for ${repoFullName}`, {
         force,
@@ -195,7 +163,9 @@ export const usePRStore = create<PRState>((set, get) => {
           }
         }
 
-        const needsFetch = force || currentRepoKey !== repoFullName;
+        const repoAlreadyLoaded = loadedRepos.has(repoFullName);
+        const needsFetch =
+          force || currentRepoKey !== repoFullName || !repoAlreadyLoaded;
 
         if (!needsFetch) {
           return;
@@ -206,19 +176,12 @@ export const usePRStore = create<PRState>((set, get) => {
           error: null,
           pendingRepoKey: repoFullName,
         });
+      } else if (!force && loadedRepos.has(repoFullName)) {
+        return;
       }
 
       try {
-        let token: string | null = null;
-
-        // Check if we're using electron or dev mode
-        if (window.electron) {
-          token = await window.electron.auth.getToken();
-        } else {
-          // In dev mode, get token from auth store
-          const authStore = require("./authStore").useAuthStore.getState();
-          token = authStore.token;
-        }
+        const token = await resolveAuthToken();
 
         if (!token) throw new Error("Not authenticated");
 
@@ -246,15 +209,26 @@ export const usePRStore = create<PRState>((set, get) => {
         }
 
         if (replaceStore) {
-          set({
-            pullRequests: prMap,
-            loading: false,
-            currentRepoKey: repoFullName,
-            pendingRepoKey: null,
+          set((state) => {
+            const newLoadedRepos = new Set(state.loadedRepos);
+            newLoadedRepos.add(repoFullName);
+            return {
+              pullRequests: prMap,
+              loading: false,
+              currentRepoKey: repoFullName,
+              pendingRepoKey: null,
+              loadedRepos: newLoadedRepos,
+            };
           });
 
           // Auto-group PRs after fetching
           get().groupPRsByPrefix();
+        } else {
+          set((state) => {
+            const newLoadedRepos = new Set(state.loadedRepos);
+            newLoadedRepos.add(repoFullName);
+            return { loadedRepos: newLoadedRepos };
+          });
         }
 
         // Store in database (skip for dev mode)
@@ -285,16 +259,7 @@ export const usePRStore = create<PRState>((set, get) => {
     ) => {
       const { updateStore = true } = options;
       try {
-        let token: string | null = null;
-
-        // Check if we're using electron or dev mode
-        if (window.electron) {
-          token = await window.electron.auth.getToken();
-        } else {
-          // In dev mode, get token from auth store
-          const authStore = require("./authStore").useAuthStore.getState();
-          token = authStore.token;
-        }
+        const token = await resolveAuthToken();
 
         if (!token) return null;
 
@@ -345,16 +310,7 @@ export const usePRStore = create<PRState>((set, get) => {
       set({ loading: true, error: null });
 
       try {
-        let token: string | null = null;
-
-        // Check if we're using electron or dev mode
-        if (window.electron) {
-          token = await window.electron.auth.getToken();
-        } else {
-          // In dev mode, get token from auth store
-          const authStore = require("./authStore").useAuthStore.getState();
-          token = authStore.token;
-        }
+        const token = await resolveAuthToken();
 
         if (!token) {
           set({ loading: false });
@@ -478,6 +434,13 @@ export const usePRStore = create<PRState>((set, get) => {
 
       if (repo) {
         get().addToRecentlyViewed(repo);
+        void loadRepoFromCacheHelper({
+          owner: repo.owner,
+          repo: repo.name,
+          getState: get,
+          setState: set,
+          groupPRsByPrefix: () => get().groupPRsByPrefix(),
+        });
       }
     },
 
@@ -642,16 +605,7 @@ export const usePRStore = create<PRState>((set, get) => {
 
     fetchPRStats: async (owner: string, repo: string, prNumbers: number[]) => {
       try {
-        let token: string | null = null;
-
-        // Check if we're using electron or dev mode
-        if (window.electron) {
-          token = await window.electron.auth.getToken();
-        } else {
-          // In dev mode, get token from auth store
-          const authStore = require("./authStore").useAuthStore.getState();
-          token = authStore.token;
-        }
+        const token = await resolveAuthToken();
 
         if (!token || token === "dev-token") return;
 
@@ -681,77 +635,15 @@ export const usePRStore = create<PRState>((set, get) => {
     },
 
     // Database operations
-    storePRsInDB: async (prs: PullRequest[], owner: string, repo: string) => {
-      // Get repo ID first
-      const repoResult = await window.electron.db.query(
-        "SELECT id FROM repositories WHERE owner = ? AND name = ?",
-        [owner, repo],
-      );
-
-      if (
-        !repoResult.success ||
-        !repoResult.data ||
-        repoResult.data.length === 0
-      )
-        return;
-
-      const repoId = repoResult.data[0].id;
-
-      // Store each PR
-      for (const pr of prs) {
-        await window.electron.db.execute(
-          `INSERT OR REPLACE INTO pull_requests 
-         (id, repository_id, number, title, body, state, draft, merged, mergeable,
-          merge_commit_sha, head_ref, head_sha, base_ref, base_sha, author_login,
-          author_avatar_url, assignees, reviewers, labels, created_at, updated_at,
-          closed_at, merged_at, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            pr.id,
-            repoId,
-            pr.number,
-            pr.title,
-            pr.body,
-            pr.state,
-            pr.draft ? 1 : 0,
-            pr.merged ? 1 : 0,
-            pr.mergeable ? 1 : 0,
-            pr.merge_commit_sha,
-            pr.head.ref,
-            pr.head.sha,
-            pr.base.ref,
-            pr.base.sha,
-            pr.user.login,
-            pr.user.avatar_url,
-            JSON.stringify(pr.assignees),
-            JSON.stringify(pr.requested_reviewers),
-            JSON.stringify(pr.labels),
-            pr.created_at,
-            pr.updated_at,
-            pr.closed_at,
-            pr.merged_at,
-          ],
-        );
-      }
-    },
-
-    storeReposInDB: async (repos: Repository[]) => {
-      for (const repo of repos) {
-        await window.electron.db.execute(
-          `INSERT OR REPLACE INTO repositories 
-         (owner, name, full_name, description, default_branch, private, clone_url, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            repo.owner,
-            repo.name,
-            repo.full_name,
-            repo.description,
-            repo.default_branch,
-            repo.private ? 1 : 0,
-            repo.clone_url,
-          ],
-        );
-      }
-    },
+    storePRsInDB,
+    storeReposInDB,
+    loadRepoFromCache: async (owner: string, repo: string) =>
+      loadRepoFromCacheHelper({
+        owner,
+        repo,
+        getState: get,
+        setState: set,
+        groupPRsByPrefix: () => get().groupPRsByPrefix(),
+      }),
   };
 });
