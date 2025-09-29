@@ -1,3 +1,4 @@
+/* @jsxRuntime classic */
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "./stores/authStore";
@@ -20,10 +21,12 @@ import DevinView from "./views/DevinView";
 import ChatGPTView from "./views/ChatGPTView";
 import { setupKeyboardShortcuts } from "./utils/keyboard";
 import { cn } from "./utils/cn";
+import CommandPalette from "./components/CommandPalette";
+import KeyboardShortcutsModal from "./components/KeyboardShortcutsModal";
 
 function App() {
   const { isAuthenticated, checkAuth, token } = useAuthStore();
-  const { sidebarOpen, sidebarWidth, setSidebarWidth, rightPanelOpen, theme } =
+  const { sidebarOpen, sidebarWidth, setSidebarWidth, rightPanelOpen, theme, commandPaletteOpen, toggleCommandPalette } =
     useUIStore();
   const { loadSettings } = useSettingsStore();
   const { fetchRepositories } = usePRStore();
@@ -130,6 +133,8 @@ function App() {
           })}
         />
       </div>
+      <CommandPalette isOpen={commandPaletteOpen} onClose={toggleCommandPalette} />
+      <KeyboardShortcutsModal />
     </div>
   );
 }

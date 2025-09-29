@@ -14,6 +14,10 @@ export function setupKeyboardShortcuts() {
       toggleRightPanel,
       toggleCommandPalette,
       toggleKeyboardShortcuts,
+      toggleTheme,
+      toggleDiffView,
+      toggleWhitespace,
+      toggleWordWrap,
     } = useUIStore.getState();
 
     // Command/Ctrl key combinations
@@ -44,6 +48,60 @@ export function setupKeyboardShortcuts() {
         e.preventDefault();
         toggleKeyboardShortcuts();
         return;
+      }
+
+      // Toggle theme (Cmd/Ctrl + T)
+      if (e.key.toLowerCase() === "t" && !e.shiftKey) {
+        e.preventDefault();
+        toggleTheme();
+        return;
+      }
+
+      // Diff view toggle (Cmd/Ctrl + Shift + D)
+      if (e.key.toLowerCase() === "d" && e.shiftKey) {
+        e.preventDefault();
+        toggleDiffView();
+        return;
+      }
+
+      // Toggle whitespace (Cmd/Ctrl + Shift + W)
+      if (e.key.toLowerCase() === "w" && e.shiftKey) {
+        e.preventDefault();
+        toggleWhitespace();
+        return;
+      }
+
+      // Toggle word wrap (Cmd/Ctrl + Shift + M)
+      if (e.key.toLowerCase() === "m" && e.shiftKey) {
+        e.preventDefault();
+        toggleWordWrap();
+        return;
+      }
+
+      // Open settings (Cmd/Ctrl + ,)
+      if (e.key === ",") {
+        e.preventDefault();
+        window.location.href = "/settings";
+        return;
+      }
+
+      // Route navigation (Cmd/Ctrl + 1/2/3)
+      if (!e.shiftKey) {
+        if (e.key === "1") {
+          e.preventDefault();
+          window.location.href = "/pulls";
+          return;
+        }
+        if (e.key === "2") {
+          e.preventDefault();
+          window.location.href = "/issues";
+          return;
+        }
+        if (e.key === "3") {
+          e.preventDefault();
+          window.location.href = "/branches";
+          return;
+        }
       }
     }
   };
