@@ -19,6 +19,7 @@ interface SyncState {
   setSyncProgress: (progress: number, message?: string) => void;
   addSyncError: (error: string) => void;
   clearSyncErrors: () => void;
+  clearSyncCache: () => void;
 }
 
 // Initialize lastSyncTime from localStorage
@@ -262,5 +263,27 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   clearSyncErrors: () => {
     set({ syncErrors: [] });
+  },
+
+  clearSyncCache: () => {
+    // Clear localStorage
+    localStorage.removeItem("lastSyncTime");
+    
+    // Clear the PR store
+    const prStore = usePRStore.getState();
+    prStore.pullRequests.clear();
+    
+    // Reset sync state
+    set({
+      lastSyncTime: null,
+      syncProgress: 0,
+      syncMessage: "",
+      syncErrors: [],
+    });
+    
+    // Trigger a fresh sync
+    setTimeout(() => {
+      get().syncAll();
+    }, 100);
   },
 }));

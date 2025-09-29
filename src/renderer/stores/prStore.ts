@@ -70,6 +70,10 @@ interface PRState {
     repo: string,
   ) => Promise<void>;
   storeReposInDB: (repos: Repository[]) => Promise<void>;
+  createPullRequest: () => void;
+  markAllAsRead: () => void;
+  starRepository: (owner: string, repo: string) => Promise<void>;
+  unstarRepository: (owner: string, repo: string) => Promise<void>;
 }
 
 // Load recently viewed repos from electron store on initialization
@@ -751,6 +755,103 @@ export const usePRStore = create<PRState>((set, get) => {
             repo.clone_url,
           ],
         );
+      }
+    },
+
+    createPullRequest: () => {
+      const { selectedRepo } = get();
+      if (selectedRepo) {
+        // Open GitHub's create PR page in the browser
+        window.open(`https://github.com/${selectedRepo.full_name}/pull/new`, "_blank");
+      }
+    },
+
+    markAllAsRead: () => {
+      set((state) => {
+        const newPRs = new Map(state.pullRequests);
+        newPRs.forEach((pr, key) => {
+          // Mark each PR as read (you might want to add a 'read' property to PRs)
+          newPRs.set(key, { ...pr, unread: false } as any);
+        });
+        return { pullRequests: newPRs };
+      });
+    },
+
+    starRepository: async (owner: string, repo: string) => {
+      try {
+        let token: string | null = null;
+        if (window.electron) {
+          token = await window.electron.auth.getToken();
+        } else {
+          const authStore = require("./authStore").useAuthStore.getState();
+          token = authStore.token;
+        }
+
+        if (!token || token === "dev-token") return;
+
+        const api = new GitHubAPI(token);
+        await api.starRepository(owner, repo);
+        
+        // Update the repository in state
+        set((state) => {
+          const repos = state.repositories.map(r => {
+            if (r.owner === owner && r.name === repo) {
+              return { ...r, stargazers_count: (r.stargazers_count || 0) + 1 };
+            }
+            return r;
+          });
+          
+          const selectedRepo = state.selectedRepo;
+          if (selectedRepo && selectedRepo.owner === owner && selectedRepo.name === repo) {
+            return {
+              repositories: repos,
+              selectedRepo: { ...selectedRepo, stargazers_count: (selectedRepo.stargazers_count || 0) + 1 }
+            };
+          }
+          
+          return { repositories: repos };
+        });
+      } catch (error) {
+        console.error("Failed to star repository:", error);
+      }
+    },
+
+    unstarRepository: async (owner: string, repo: string) => {
+      try {
+        let token: string | null = null;
+        if (window.electron) {
+          token = await window.electron.auth.getToken();
+        } else {
+          const authStore = require("./authStore").useAuthStore.getState();
+          token = authStore.token;
+        }
+
+        if (!token || token === "dev-token") return;
+
+        const api = new GitHubAPI(token);
+        await api.unstarRepository(owner, repo);
+        
+        // Update the repository in state
+        set((state) => {
+          const repos = state.repositories.map(r => {
+            if (r.owner === owner && r.name === repo) {
+              return { ...r, stargazers_count: Math.max((r.stargazers_count || 1) - 1, 0) };
+            }
+            return r;
+          });
+          
+          const selectedRepo = state.selectedRepo;
+          if (selectedRepo && selectedRepo.owner === owner && selectedRepo.name === repo) {
+            return {
+              repositories: repos,
+              selectedRepo: { ...selectedRepo, stargazers_count: Math.max((selectedRepo.stargazers_count || 1) - 1, 0) }
+            };
+          }
+          
+          return { repositories: repos };
+        });
+      } catch (error) {
+        console.error("Failed to unstar repository:", error);
       }
     },
   };

@@ -1630,4 +1630,28 @@ export class GitHubAPI {
       draft: isDraft !== undefined ? isDraft : draft,
     };
   }
+
+  async starRepository(owner: string, repo: string): Promise<void> {
+    try {
+      await this.octokit.rest.activity.starRepoForAuthenticatedUser({
+        owner,
+        repo,
+      });
+    } catch (error) {
+      console.error(`Failed to star repository ${owner}/${repo}:`, error);
+      throw error;
+    }
+  }
+
+  async unstarRepository(owner: string, repo: string): Promise<void> {
+    try {
+      await this.octokit.rest.activity.unstarRepoForAuthenticatedUser({
+        owner,
+        repo,
+      });
+    } catch (error) {
+      console.error(`Failed to unstar repository ${owner}/${repo}:`, error);
+      throw error;
+    }
+  }
 }

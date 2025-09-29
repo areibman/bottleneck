@@ -20,6 +20,7 @@ import DevinView from "./views/DevinView";
 import ChatGPTView from "./views/ChatGPTView";
 import { setupKeyboardShortcuts } from "./utils/keyboard";
 import { cn } from "./utils/cn";
+import CommandPalette from "./components/CommandPalette";
 
 function App() {
   const { isAuthenticated, checkAuth, token } = useAuthStore();
@@ -95,6 +96,7 @@ function App() {
       )}
     >
       <TopBar />
+      <CommandPalette />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
