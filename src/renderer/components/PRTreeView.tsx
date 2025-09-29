@@ -415,22 +415,31 @@ export function PRTreeView({
                     </div>
 
                     {item.data.closablePRIds && item.data.closablePRIds.length > 0 && hoveredGroup === item.index && (
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={(event) => {
                           event.stopPropagation();
                           onCloseGroup(item.data.closablePRIds ?? []);
                           setHoveredGroup(null);
                         }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onCloseGroup(item.data.closablePRIds ?? []);
+                            setHoveredGroup(null);
+                          }
+                        }}
                         className={cn(
-                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors",
+                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors cursor-pointer",
                           theme === "dark"
                             ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
                             : "border-red-400 text-red-600 hover:bg-red-50"
                         )}
                       >
                         Close unmerged PRs?
-                      </button>
+                      </div>
                     )}
                   </>
                 ) : (
