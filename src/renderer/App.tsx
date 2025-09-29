@@ -18,6 +18,7 @@ import IssueDetailView from "./views/IssueDetailView";
 import CursorView from "./views/CursorView";
 import DevinView from "./views/DevinView";
 import ChatGPTView from "./views/ChatGPTView";
+import CommandPalette from "./components/CommandPalette";
 import { setupKeyboardShortcuts } from "./utils/keyboard";
 import { cn } from "./utils/cn";
 
@@ -130,6 +131,8 @@ function App() {
           })}
         />
       </div>
+      {/* Command Palette Overlay */}
+      <CommandPalette />
     </div>
   );
 }

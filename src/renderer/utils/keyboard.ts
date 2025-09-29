@@ -45,6 +45,43 @@ export function setupKeyboardShortcuts() {
         toggleKeyboardShortcuts();
         return;
       }
+
+      // Toggle theme (Cmd/Ctrl + Shift + T)
+      if (e.key === "t" && e.shiftKey) {
+        e.preventDefault();
+        useUIStore.getState().toggleTheme();
+        return;
+      }
+
+      // Toggle diff view (Cmd/Ctrl + Shift + D)
+      if (e.key === "d" && e.shiftKey) {
+        e.preventDefault();
+        useUIStore.getState().toggleDiffView();
+        return;
+      }
+
+      // Toggle whitespace (Cmd/Ctrl + Shift + W)
+      if (e.key === "w" && e.shiftKey) {
+        e.preventDefault();
+        useUIStore.getState().toggleWhitespace();
+        return;
+      }
+
+      // Toggle word wrap (Cmd/Ctrl + Shift + L)
+      if (e.key === "l" && e.shiftKey) {
+        e.preventDefault();
+        useUIStore.getState().toggleWordWrap();
+        return;
+      }
+
+      // Sync all (Cmd/Ctrl + R)
+      if (e.key === "r" && !e.shiftKey) {
+        e.preventDefault();
+        import("../stores/syncStore").then(({ useSyncStore }) => {
+          useSyncStore.getState().syncAll();
+        });
+        return;
+      }
     }
   };
 
