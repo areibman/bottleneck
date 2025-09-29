@@ -124,7 +124,7 @@ const commands: Command[] = [
 ];
 
 export default function CommandPalette() {
-  const { commandPaletteOpen, toggleCommandPalette, theme } = useUIStore();
+  const { commandPaletteOpen, toggleCommandPalette } = useUIStore();
   const navigate = useNavigate();
   // Expose navigate so that commands array can use it without hooks
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,30 +191,24 @@ export default function CommandPalette() {
         onClick={toggleCommandPalette}
       />
       <div
-        className={cn(
-          "relative w-full max-w-lg mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border",
-          theme === "dark" ? "border-gray-700" : "border-gray-200",
-        )}
+        className="relative w-full max-w-lg mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
       >
-        <div className="flex items-center px-4 border-b h-12 gap-2 dark:border-gray-700 border-gray-200">
-          <Search className="w-4 h-4 text-gray-400" />
+        <div className="flex items-center px-4 border-b h-12 gap-2 border-gray-200 dark:border-gray-700">
+          <Search className="w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
             autoFocus
-            className={cn(
-              "flex-1 bg-transparent outline-none text-sm",
-              theme === "dark" ? "text-gray-100" : "text-gray-900",
-            )}
+            className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             placeholder="Type a command or search…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button onClick={toggleCommandPalette} className="p-1">
+          <button onClick={toggleCommandPalette} className="p-1 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
             <X className="w-4 h-4" />
           </button>
         </div>
         <ul className="max-h-80 overflow-y-auto py-1">
           {filtered.length === 0 && (
-            <li className="px-4 py-2 text-sm text-gray-500">No commands</li>
+            <li className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No commands</li>
           )}
           {filtered.map((cmd, idx) => (
             <li
@@ -227,12 +221,8 @@ export default function CommandPalette() {
               className={cn(
                 "flex items-center justify-between px-4 py-2 cursor-pointer text-sm",
                 idx === selectedIndex
-                  ? theme === "dark"
-                    ? "bg-gray-700 text-white"
-                    : "bg-gray-100 text-gray-900"
-                  : theme === "dark"
-                    ? "text-gray-300 hover:bg-gray-700"
-                    : "text-gray-700 hover:bg-gray-100",
+                  ? "bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700",
               )}
             >
               <span>{cmd.name}</span>
@@ -242,12 +232,7 @@ export default function CommandPalette() {
         </ul>
         {isPreviewKey && filtered[selectedIndex]?.preview && (
           <div
-            className={cn(
-              "border-t px-4 py-3 text-sm",
-              theme === "dark"
-                ? "border-gray-700 text-gray-300"
-                : "border-gray-200 text-gray-700",
-            )}
+            className="border-t px-4 py-3 text-sm border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-300"
           >
             {filtered[selectedIndex].preview}
           </div>
