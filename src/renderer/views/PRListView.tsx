@@ -35,6 +35,7 @@ export default function PRListView() {
     loading,
     selectedRepo,
     fetchPRDetails,
+    fetchPullRequests,
     bulkUpdatePRs,
     currentRepoKey,
     pendingRepoKey,
@@ -93,6 +94,13 @@ export default function PRListView() {
     if (!selectedRepo) return null;
     return `${selectedRepo.owner}/${selectedRepo.name}`;
   }, [selectedRepo]);
+
+  // Auto-fetch PRs when we have a selected repo but no matching data
+  useEffect(() => {
+    if (selectedRepoKey && selectedRepo && !loading && currentRepoKey !== selectedRepoKey) {
+      fetchPullRequests(selectedRepo.owner, selectedRepo.name);
+    }
+  }, [selectedRepoKey, currentRepoKey, loading, selectedRepo, fetchPullRequests]);
 
   const dataMatchesSelectedRepo = useMemo(() => {
     if (!selectedRepoKey) return false;
