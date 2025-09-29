@@ -18,6 +18,13 @@ export function setupKeyboardShortcuts() {
 
     // Command/Ctrl key combinations
     if (e.metaKey || e.ctrlKey) {
+      // Open command palette on Cmd/Ctrl press (without additional key)
+      if (e.key === "Meta" || e.key === "Control") {
+        e.preventDefault();
+        toggleCommandPalette();
+        return;
+      }
+
       // Toggle sidebar (Cmd/Ctrl + B)
       if (e.key === "b" && !e.shiftKey) {
         e.preventDefault();
