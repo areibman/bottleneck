@@ -69,6 +69,22 @@ declare global {
         clear: () => Promise<{ success: boolean; error?: string }>;
       };
 
+      cursor: {
+        request: (
+          options: {
+            path: string;
+            method?: string;
+            headers?: Record<string, string>;
+            body?: string | null;
+          },
+        ) => Promise<{
+          success: boolean;
+          status?: number;
+          data?: any;
+          error?: string;
+        }>;
+      };
+
       on: (
         channel: string,
         callback: (event: IpcRendererEvent, ...args: any[]) => void,

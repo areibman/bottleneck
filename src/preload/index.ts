@@ -50,6 +50,16 @@ const electronAPI = {
     clear: () => ipcRenderer.invoke("settings:clear"),
   },
 
+  // Cursor background agent API bridge
+  cursor: {
+    request: (options: {
+      path: string;
+      method?: string;
+      headers?: Record<string, string>;
+      body?: string | null;
+    }) => ipcRenderer.invoke("cursor:request", options),
+  },
+
   // IPC event listeners
   on: (
     channel: string,

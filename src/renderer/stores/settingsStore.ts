@@ -26,6 +26,7 @@ interface Settings {
   cacheSize: number;
   enableDebugMode: boolean;
   enableTelemetry: boolean;
+  cursorApiKey: string;
 }
 
 interface SettingsState {
@@ -62,6 +63,7 @@ const defaultSettings: Settings = {
   cacheSize: 500,
   enableDebugMode: false,
   enableTelemetry: false,
+  cursorApiKey: "",
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

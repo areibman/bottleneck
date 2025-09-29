@@ -319,3 +319,63 @@ ipcMain.handle("settings:clear", async () => {
     return { success: false, error: (error as Error).message };
   }
 });
+
+ipcMain.handle(
+  "cursor:request",
+  async (
+    _event,
+    options: {
+      path: string;
+      method?: string;
+      headers?: Record<string, string>;
+      body?: string | null;
+    },
+  ) => {
+    const { path, method = "GET", headers = {}, body } = options;
+
+    try {
+      const response = await fetch(`https://api.cursor.com${path}`, {
+        method,
+        headers,
+        body: body ?? undefined,
+      });
+
+      const status = response.status;
+      const contentType = response.headers.get("content-type") ?? "";
+      const rawBody = status === 204 ? null : await response.text();
+      let data: unknown = null;
+
+      if (rawBody) {
+        if (contentType.includes("application/json")) {
+          try {
+            data = JSON.parse(rawBody);
+          } catch {
+            data = rawBody;
+          }
+        } else {
+          data = rawBody;
+        }
+      }
+
+      if (!response.ok) {
+        const errorMessage =
+          (typeof data === "object" && data !== null && "message" in data && typeof (data as any).message === "string")
+            ? (data as any).message
+            : typeof data === "string"
+              ? data
+              : `Cursor API request failed with status ${status}`;
+
+        return { success: false, status, error: errorMessage, data };
+      }
+
+      return { success: true, status, data };
+    } catch (error) {
+      return {
+        success: false,
+        error: (error as Error).message,
+        status: undefined,
+        data: undefined,
+      };
+    }
+  },
+);

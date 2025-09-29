@@ -32,6 +32,13 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    proxy: {
+      "/cursor-api": {
+        target: "https://api.cursor.com",
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/cursor-api/, ""),
+      },
+    },
   },
   optimizeDeps: {
     include: ["monaco-editor"],

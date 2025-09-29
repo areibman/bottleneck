@@ -10,6 +10,9 @@ import {
   RefreshCw,
   FolderOpen,
   AlertTriangle,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -25,6 +28,7 @@ export default function SettingsView() {
   >("general");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [showCursorApiKey, setShowCursorApiKey] = useState(false);
 
   const handleSave = async () => {
     await saveSettings();
@@ -35,6 +39,15 @@ export default function SettingsView() {
     // Clear local database cache
     await window.electron.db.execute("DELETE FROM pull_requests");
     await window.electron.db.execute("DELETE FROM repositories");
+  };
+
+  const handleClearCursorApiKey = async () => {
+    updateSettings({ cursorApiKey: "" });
+    if (window.electron?.settings) {
+      await window.electron.settings.set("cursorApiKey", "");
+    } else {
+      localStorage.removeItem("cursorApiKey");
+    }
   };
 
   const handleResetToDefaults = async () => {
@@ -82,6 +95,7 @@ export default function SettingsView() {
           cacheSize: 500,
           enableDebugMode: false,
           enableTelemetry: false,
+          cursorApiKey: "",
         };
 
         for (const [key, value] of Object.entries(defaultSettings)) {
@@ -734,6 +748,85 @@ export default function SettingsView() {
                       min="100"
                       max="5000"
                     />
+                  </div>
+
+                  <div
+                    className={cn(
+                      "rounded-md border p-4",
+                      theme === "dark"
+                        ? "border-gray-700 bg-gray-900"
+                        : "border-gray-200 bg-gray-50",
+                    )}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="h-4 w-4" />
+                          <h3 className="text-sm font-semibold">Cursor Background Agents</h3>
+                        </div>
+                        <p
+                          className={cn(
+                            "mt-1 text-xs",
+                            theme === "dark" ? "text-gray-400" : "text-gray-600",
+                          )}
+                        >
+                          Manage the API key used for Cursor background agents launched from Bottleneck.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCursorApiKey((visible) => !visible)}
+                        className={cn(
+                          "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
+                          theme === "dark"
+                            ? "border-gray-700 text-gray-300 hover:bg-gray-800"
+                            : "border-gray-200 text-gray-700 hover:bg-gray-100",
+                        )}
+                      >
+                        {showCursorApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showCursorApiKey ? "Hide" : "Show"}
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <input
+                        type={showCursorApiKey ? "text" : "password"}
+                        value={settings.cursorApiKey}
+                        onChange={(event) =>
+                          updateSettings({ cursorApiKey: event.target.value })
+                        }
+                        placeholder="key_..."
+                        className={cn(
+                          "flex-1 rounded-md border px-3 py-2 text-sm",
+                          theme === "dark"
+                            ? "border-gray-700 bg-gray-900 text-gray-100 placeholder:text-gray-500"
+                            : "border-gray-300 bg-white text-gray-900 placeholder:text-gray-400",
+                        )}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleClearCursorApiKey}
+                          disabled={!settings.cursorApiKey}
+                          className={cn(
+                            "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
+                            theme === "dark"
+                              ? "border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-50 disabled:hover:bg-transparent"
+                              : "border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:hover:bg-transparent",
+                          )}
+                        >
+                          Clear
+                        </button>
+                        <span
+                          className={cn(
+                            "text-[11px]",
+                            theme === "dark" ? "text-gray-500" : "text-gray-500",
+                          )}
+                        >
+                          Click “Save Changes” to persist updates securely.
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex items-center space-x-3">
