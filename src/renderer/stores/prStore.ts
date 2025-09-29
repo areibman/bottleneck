@@ -54,6 +54,7 @@ interface PRState {
   setSelectedRepo: (repo: Repository | null) => void;
   addToRecentlyViewed: (repo: Repository) => void;
   removeFromRecentlyViewed: (repoId: number) => void;
+  goToPR: (owner: string, repo: string, number: number) => void;
   setFilter: (filter: PRFilterType) => void;
   setFilters: (filters: Partial<PRFilters>) => void;
   setStatusFilter: (filter: PRFilterType) => void;
@@ -377,6 +378,7 @@ export const usePRStore = create<PRState>((set, get) => {
               default_branch: "main",
               private: false,
               clone_url: "https://github.com/dev-user/bottleneck.git",
+              html_url: "https://github.com/dev-user/bottleneck",
               updated_at: new Date(Date.now() - 3600000).toISOString(),
               pushed_at: new Date(Date.now() - 3600000).toISOString(),
               stargazers_count: 42,
@@ -391,6 +393,7 @@ export const usePRStore = create<PRState>((set, get) => {
               default_branch: "main",
               private: false,
               clone_url: "https://github.com/dev-user/sample-project.git",
+              html_url: "https://github.com/dev-user/sample-project",
               updated_at: new Date(Date.now() - 86400000).toISOString(),
               pushed_at: new Date(Date.now() - 86400000).toISOString(),
               stargazers_count: 10,
@@ -405,6 +408,7 @@ export const usePRStore = create<PRState>((set, get) => {
               default_branch: "main",
               private: true,
               clone_url: "https://github.com/my-org/enterprise-app.git",
+              html_url: "https://github.com/my-org/enterprise-app",
               updated_at: new Date(Date.now() - 7200000).toISOString(),
               pushed_at: new Date(Date.now() - 7200000).toISOString(),
               stargazers_count: 128,
@@ -419,6 +423,7 @@ export const usePRStore = create<PRState>((set, get) => {
               default_branch: "main",
               private: false,
               clone_url: "https://github.com/my-org/ui-components.git",
+              html_url: "https://github.com/my-org/ui-components",
               updated_at: new Date(Date.now() - 172800000).toISOString(),
               pushed_at: new Date(Date.now() - 172800000).toISOString(),
               stargazers_count: 256,
@@ -433,6 +438,7 @@ export const usePRStore = create<PRState>((set, get) => {
               default_branch: "main",
               private: false,
               clone_url: "https://github.com/another-org/api-gateway.git",
+              html_url: "https://github.com/another-org/api-gateway",
               updated_at: new Date(Date.now() - 1800000).toISOString(),
               pushed_at: new Date(Date.now() - 1800000).toISOString(),
               stargazers_count: 89,
@@ -506,6 +512,10 @@ export const usePRStore = create<PRState>((set, get) => {
 
         return { recentlyViewedRepos: filtered };
       });
+    },
+
+    goToPR: (owner: string, repo: string, number: number) => {
+      window.location.href = `/pulls/${owner}/${repo}/${number}`;
     },
 
     setFilter: (filter) => {

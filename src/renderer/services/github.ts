@@ -77,6 +77,7 @@ export interface Repository {
   default_branch: string;
   private: boolean;
   clone_url: string;
+  html_url: string;
   updated_at: string | null;
   pushed_at: string | null;
   stargazers_count: number;
@@ -210,6 +211,7 @@ export class GitHubAPI {
       default_branch: repo.default_branch || "main",
       private: repo.private,
       clone_url: repo.clone_url,
+      html_url: repo.html_url,
       updated_at: repo.updated_at,
       pushed_at: repo.pushed_at,
       stargazers_count: repo.stargazers_count,

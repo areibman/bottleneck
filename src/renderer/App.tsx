@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./stores/authStore";
 import { useUIStore } from "./stores/uiStore";
 import { usePRStore } from "./stores/prStore";
@@ -19,9 +19,13 @@ import CursorView from "./views/CursorView";
 import DevinView from "./views/DevinView";
 import ChatGPTView from "./views/ChatGPTView";
 import { setupKeyboardShortcuts } from "./utils/keyboard";
+import { setNavigateFunction } from "./utils/navigation";
+import CommandPalette from "./components/CommandPalette";
+import ShortcutPreview from "./components/ShortcutPreview";
 import { cn } from "./utils/cn";
 
 function App() {
+  const navigate = useNavigate();
   const { isAuthenticated, checkAuth, token } = useAuthStore();
   const { sidebarOpen, sidebarWidth, setSidebarWidth, rightPanelOpen, theme } =
     useUIStore();
@@ -30,6 +34,9 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Set up navigation function for keyboard shortcuts
+    setNavigateFunction(navigate);
+    
     console.log("window.electron:", window.electron);
     if (window.electron) {
       // Load settings and auth in parallel
@@ -41,7 +48,7 @@ function App() {
       console.error("window.electron is not available!");
       setLoading(false);
     }
-  }, [checkAuth, loadSettings]);
+  }, [checkAuth, loadSettings, navigate]);
 
   // Fetch repositories when authenticated and trigger initial sync if needed
   useEffect(() => {
@@ -130,6 +137,12 @@ function App() {
           })}
         />
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette />
+
+      {/* Shortcut Preview */}
+      <ShortcutPreview />
     </div>
   );
 }
