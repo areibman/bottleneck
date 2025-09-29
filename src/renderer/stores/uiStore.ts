@@ -72,7 +72,7 @@ export const useUIStore = create<UIState>()(
       prListFilters: {
         sortBy: "updated",
         selectedAuthors: [],
-        selectedStatuses: [],
+        selectedStatuses: ["open", "draft"],
       },
 
       toggleSidebar: () =>
@@ -121,16 +121,16 @@ export const useUIStore = create<UIState>()(
             typeof filters === "function"
               ? filters(state.prListFilters)
               : {
-                  ...state.prListFilters,
-                  ...filters,
-                },
+                ...state.prListFilters,
+                ...filters,
+              },
         })),
       resetPRListFilters: () =>
         set({
           prListFilters: {
             sortBy: "updated",
             selectedAuthors: [],
-            selectedStatuses: [],
+            selectedStatuses: ["open", "draft"],
           },
         }),
     }),
