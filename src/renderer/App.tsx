@@ -8,6 +8,8 @@ import { useSyncStore } from "./stores/syncStore";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import RightPanel from "./components/RightPanel";
+import CommandPalette from "./components/CommandPalette";
+import KeyboardShortcutsModal from "./components/KeyboardShortcutsModal";
 import PRListView from "./views/PRListView";
 import PRDetailView from "./views/PRDetailView";
 import BranchesView from "./views/BranchesView";
@@ -130,6 +132,9 @@ function App() {
           })}
         />
       </div>
+
+      <CommandPalette />
+      <KeyboardShortcutsModal />
     </div>
   );
 }
