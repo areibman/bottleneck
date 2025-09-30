@@ -85,7 +85,9 @@ export function setupKeyboardShortcuts() {
     }
   };
 
-  document.addEventListener("keydown", handleKeyDown);
+  // Use the capture phase so we receive the event even if a child component
+  // stops propagation (e.g. Monaco editor or content-editable elements).
+  window.addEventListener("keydown", handleKeyDown, true);
 
   // Listen to IPC events from the main process menu
   window.electron.on("toggle-sidebar", () => {
@@ -105,6 +107,6 @@ export function setupKeyboardShortcuts() {
   });
 
   return () => {
-    document.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keydown", handleKeyDown, true);
   };
 }
