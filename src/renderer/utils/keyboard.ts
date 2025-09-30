@@ -1,12 +1,7 @@
 import { useUIStore } from "../stores/uiStore";
 
 export function setupKeyboardShortcuts() {
-  if (!window.electron) {
-    console.warn(
-      "window.electron not available, skipping keyboard shortcuts setup",
-    );
-    return () => {};
-  }
+  const isElectron = Boolean(window.electron);
 
   const handleKeyDown = (e: KeyboardEvent) => {
     const {
@@ -20,29 +15,41 @@ export function setupKeyboardShortcuts() {
     if (e.metaKey || e.ctrlKey) {
       // Toggle sidebar (Cmd/Ctrl + B)
       if (e.key === "b" && !e.shiftKey) {
-        e.preventDefault();
-        toggleSidebar();
+        // In Electron, the menu accelerator handles this and sends an IPC event.
+        if (!isElectron) {
+          e.preventDefault();
+          toggleSidebar();
+        }
         return;
       }
 
       // Toggle right panel (Cmd/Ctrl + Shift + B)
       if (e.key === "b" && e.shiftKey) {
-        e.preventDefault();
-        toggleRightPanel();
+        // In Electron, the menu accelerator handles this and sends an IPC event.
+        if (!isElectron) {
+          e.preventDefault();
+          toggleRightPanel();
+        }
         return;
       }
 
       // Open command palette (Cmd/Ctrl + Shift + P)
       if (e.key === "p" && e.shiftKey) {
-        e.preventDefault();
-        toggleCommandPalette();
+        // In Electron, the menu accelerator handles this and sends an IPC event.
+        if (!isElectron) {
+          e.preventDefault();
+          toggleCommandPalette();
+        }
         return;
       }
 
       // Show keyboard shortcuts (Cmd/Ctrl + /)
       if (e.key === "/") {
-        e.preventDefault();
-        toggleKeyboardShortcuts();
+        // In Electron, the menu accelerator handles this and sends an IPC event.
+        if (!isElectron) {
+          e.preventDefault();
+          toggleKeyboardShortcuts();
+        }
         return;
       }
 
