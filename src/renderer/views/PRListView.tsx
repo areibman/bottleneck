@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { GitPullRequest } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { GitPullRequest, Tag, X, Search } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
@@ -13,6 +13,7 @@ import WelcomeView from "./WelcomeView";
 import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
+import { getLabelColors } from "../utils/labelColors";
 
 type StatusType = PRStatusType; // Use the centralized type
 
@@ -30,6 +31,7 @@ const statusOptions = [
 
 export default function PRListView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     pullRequests,
     loading,
@@ -55,6 +57,10 @@ export default function PRListView() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+  const labelDropdownRef = useRef<HTMLDivElement>(null);
+  const [labelSearch, setLabelSearch] = useState("");
+  const [repoLabels, setRepoLabels] = useState<Array<{ name: string; color: string }>>([]);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -65,6 +71,12 @@ export default function PRListView() {
     () => new Set<StatusType>(prListFilters.selectedStatuses),
     [prListFilters.selectedStatuses],
   );
+  const selectedLabels = useMemo(
+    () => new Set(prListFilters.selectedLabels),
+    [prListFilters.selectedLabels],
+  );
+  const labelMode = prListFilters.labelMode;
+  const includeNoLabel = prListFilters.includeNoLabel;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -75,16 +87,19 @@ export default function PRListView() {
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setShowStatusDropdown(false);
       }
+      if (labelDropdownRef.current && !labelDropdownRef.current.contains(event.target as Node)) {
+        setShowLabelDropdown(false);
+      }
     };
 
-    if (showAuthorDropdown || showStatusDropdown) {
+    if (showAuthorDropdown || showStatusDropdown || showLabelDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAuthorDropdown, showStatusDropdown]);
+  }, [showAuthorDropdown, showStatusDropdown, showLabelDropdown]);
 
 
   // Removed automatic stats fetching - was causing performance issues
@@ -112,6 +127,45 @@ export default function PRListView() {
 
   const showRefreshingIndicator =
     loading && dataMatchesSelectedRepo && pendingRepoKey === selectedRepoKey;
+
+  // Fetch repository labels
+  useEffect(() => {
+    const fetchLabels = async () => {
+      if (!selectedRepo) {
+        setRepoLabels([]);
+        return;
+      }
+      try {
+        let authToken = token;
+        if (!authToken && typeof window !== "undefined" && window.electron) {
+          try {
+            authToken = await window.electron.auth.getToken();
+          } catch {}
+        }
+        if (!authToken) return;
+        if (authToken === "dev-token") {
+          const labelMap = new Map<string, string>();
+          Array.from(pullRequests.values()).forEach((pr) => {
+            const baseOwner = pr.base?.repo?.owner?.login;
+            const baseName = pr.base?.repo?.name;
+            if (baseOwner === selectedRepo.owner && baseName === selectedRepo.name) {
+              (pr.labels || []).forEach((l: any) => {
+                if (l?.name && !labelMap.has(l.name)) labelMap.set(l.name, l.color || "999999");
+              });
+            }
+          });
+          setRepoLabels(Array.from(labelMap.entries()).map(([name, color]) => ({ name, color })));
+        } else {
+          const api = new GitHubAPI(authToken);
+          const labels = await api.getRepositoryLabels(selectedRepo.owner, selectedRepo.name);
+          setRepoLabels(labels);
+        }
+      } catch (e) {
+        console.error("Failed to fetch repository labels:", e);
+      }
+    };
+    fetchLabels();
+  }, [selectedRepo, token, pullRequests]);
 
   // Function to fetch detailed PR data in the background
   const fetchDetailedPRsInBackground = useCallback(
@@ -265,8 +319,67 @@ export default function PRListView() {
     [setPRListFilters],
   );
 
+  // Label filter handlers
+  const toggleLabel = useCallback((labelName: string) => {
+    setPRListFilters(prev => {
+      const current = new Set(prev.selectedLabels);
+      if (current.has(labelName)) current.delete(labelName); else current.add(labelName);
+      return { ...prev, selectedLabels: Array.from(current) };
+    });
+  }, [setPRListFilters]);
 
-  // Simplified filtering logic - cleaner and more maintainable
+  const clearAllLabels = useCallback(() => {
+    setPRListFilters(prev => ({ ...prev, selectedLabels: [], includeNoLabel: false }));
+  }, [setPRListFilters]);
+
+  const setLabelModeValue = useCallback((mode: "OR" | "AND" | "NOT" | "ONLY") => {
+    setPRListFilters(prev => ({ ...prev, labelMode: mode }));
+  }, [setPRListFilters]);
+
+  const toggleIncludeNoLabel = useCallback(() => {
+    setPRListFilters(prev => ({ ...prev, includeNoLabel: !prev.includeNoLabel }));
+  }, [setPRListFilters]);
+
+  // URL sync: read initial params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const labelsParam = params.get("labels");
+    const modeParam = params.get("labelMode");
+    const noLabelParam = params.get("noLabel");
+    if (labelsParam || modeParam || noLabelParam) {
+      setPRListFilters(prev => ({
+        ...prev,
+        selectedLabels: labelsParam ? labelsParam.split(",").map(decodeURIComponent).filter(Boolean) : prev.selectedLabels,
+        labelMode: (modeParam as any) || prev.labelMode,
+        includeNoLabel: noLabelParam === "1",
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // URL sync: write params when filters change
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (prListFilters.selectedLabels.length > 0) {
+      params.set("labels", prListFilters.selectedLabels.map(encodeURIComponent).join(","));
+    } else {
+      params.delete("labels");
+    }
+    if (prListFilters.labelMode && prListFilters.labelMode !== "OR") {
+      params.set("labelMode", prListFilters.labelMode);
+    } else {
+      params.delete("labelMode");
+    }
+    if (prListFilters.includeNoLabel) {
+      params.set("noLabel", "1");
+    } else {
+      params.delete("noLabel");
+    }
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [prListFilters.selectedLabels, prListFilters.labelMode, prListFilters.includeNoLabel, navigate, location.pathname, location.search]);
+
+
+  // Filtering logic with author, status, then labels
   const getFilteredPRs = useMemo(() => {
     if (!selectedRepo) {
       return [];
@@ -279,24 +392,48 @@ export default function PRListView() {
       return baseOwner === selectedRepo.owner && baseName === selectedRepo.name;
     });
 
-    // Step 2: Apply filters
-    const filteredPRs = repoFilteredPRs.filter((pr) => {
-      // Author filter
+    // Step 2: Apply author and status filters
+    const authorStatusFilteredPRs = repoFilteredPRs.filter((pr) => {
       const authorMatches = selectedAuthors.size === 0 ||
         selectedAuthors.has("all") ||
         selectedAuthors.has(pr.user.login);
 
-      // Status filter
       const prStatus = getPRStatus(pr);
       const statusMatches = selectedStatuses.size === 0 ||
         selectedStatuses.has(prStatus);
 
-      // Both filters must pass
       return authorMatches && statusMatches;
     });
 
-    // Step 3: Sort PRs
-    const sortedPRs = [...filteredPRs].sort((a, b) => {
+    // Step 3: Apply label filters
+    const labelFilteredPRs = authorStatusFilteredPRs.filter((pr) => {
+      const prLabelNames = new Set<string>((pr.labels || []).map((l: any) => l?.name).filter(Boolean));
+      const hasNoLabels = prLabelNames.size === 0;
+
+      if (selectedLabels.size === 0 && !includeNoLabel) return true;
+
+      const hasAnySelected = Array.from(selectedLabels).some((name) => prLabelNames.has(name));
+      const hasAllSelected = Array.from(selectedLabels).every((name) => prLabelNames.has(name));
+      const isExactMatch = prLabelNames.size === selectedLabels.size && hasAllSelected;
+
+      switch (labelMode) {
+        case "OR":
+          return (selectedLabels.size > 0 ? hasAnySelected : false) || (includeNoLabel && hasNoLabels);
+        case "AND":
+          return (selectedLabels.size > 0 ? hasAllSelected : true) || (includeNoLabel && hasNoLabels);
+        case "NOT":
+          return !hasAnySelected && (!includeNoLabel ? true : hasNoLabels || true);
+        case "ONLY":
+          if (selectedLabels.size === 0 && includeNoLabel) return hasNoLabels;
+          if (selectedLabels.size === 0) return false;
+          return isExactMatch || (includeNoLabel && hasNoLabels);
+        default:
+          return true;
+      }
+    });
+
+    // Step 4: Sort PRs
+    const sortedPRs = [...labelFilteredPRs].sort((a, b) => {
       const aDate = sortBy === "updated"
         ? new Date(a.updated_at).getTime()
         : new Date(a.created_at).getTime();
@@ -312,10 +449,39 @@ export default function PRListView() {
     pullRequests,
     selectedAuthors,
     selectedStatuses,
+    selectedLabels,
+    labelMode,
+    includeNoLabel,
     sortBy,
     selectedRepo,
     getPRStatus,
   ]);
+
+  // Compute label counts from author+status filtered pool (before label filter)
+  const labelCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!selectedRepo) return counts;
+    const repoFilteredPRs = Array.from(pullRequests.values()).filter((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      return baseOwner === selectedRepo.owner && baseName === selectedRepo.name;
+    });
+    const pool = repoFilteredPRs.filter((pr) => {
+      const authorMatches = selectedAuthors.size === 0 || selectedAuthors.has("all") || selectedAuthors.has(pr.user.login);
+      const prStatus = getPRStatus(pr);
+      const statusMatches = selectedStatuses.size === 0 || selectedStatuses.has(prStatus);
+      return authorMatches && statusMatches;
+    });
+    pool.forEach((pr) => {
+      const seen = new Set<string>();
+      (pr.labels || []).forEach((l: any) => {
+        if (!l?.name || seen.has(l.name)) return;
+        seen.add(l.name);
+        counts.set(l.name, (counts.get(l.name) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [pullRequests, selectedRepo, selectedAuthors, selectedStatuses, getPRStatus]);
 
   // Pre-compute PR metadata for grouping
   const prsWithMetadata = useMemo<PRWithMetadata[]>(() => {
@@ -880,9 +1046,199 @@ export default function PRListView() {
                   </div>
                 )}
               </div>
+
+              {/* Label filter dropdown */}
+              <div className="relative" ref={labelDropdownRef}>
+                <button
+                  onClick={() => setShowLabelDropdown(!showLabelDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[160px]",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                >
+                  <Tag className={cn("w-3.5 h-3.5", theme === "dark" ? "text-gray-300" : "text-gray-700")} />
+                  <span>Labels:</span>
+                  <span className={cn(
+                    "truncate",
+                    theme === "dark" ? "text-gray-300" : "text-gray-700"
+                  )}>
+                    {selectedLabels.size === 0 && !includeNoLabel
+                      ? "All"
+                      : `${selectedLabels.size + (includeNoLabel ? 1 : 0)} selected (${labelMode})`}
+                  </span>
+                </button>
+
+                {showLabelDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[300px] max-w-[360px] rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2 max-h-[380px] overflow-y-auto">
+                      {/* Search */}
+                      <div className="flex items-center mb-2 px-2 py-1 rounded border"
+                        style={{
+                          borderColor: theme === "dark" ? "#374151" : "#e5e7eb",
+                          backgroundColor: theme === "dark" ? "#1f2937" : "#ffffff",
+                        }}
+                      >
+                        <Search className={cn("w-4 h-4 mr-2", theme === "dark" ? "text-gray-400" : "text-gray-500")} />
+                        <input
+                          value={labelSearch}
+                          onChange={(e) => setLabelSearch(e.target.value)}
+                          placeholder="Search labels..."
+                          className={cn("flex-1 text-xs outline-none bg-transparent",
+                            theme === "dark" ? "text-gray-200 placeholder-gray-400" : "text-gray-800 placeholder-gray-400"
+                          )}
+                        />
+                      </div>
+
+                      {/* Quick Filters */}
+                      <div className="mb-2">
+                        <div className={cn("text-xs font-semibold mb-1",
+                          theme === "dark" ? "text-gray-400" : "text-gray-600")}>Quick Filters</div>
+                        {[{name:"bug", icon:"🐛"},{name:"feature", icon:"✨"},{name:"documentation", icon:"📝"},{name:"critical", icon:"🚨"},{name:"needs-review", icon:"👀"}].map((q) => {
+                          const found = repoLabels.find(l => l.name.toLowerCase() === q.name.toLowerCase());
+                          const color = found?.color || "6b7280";
+                          const labelColors = getLabelColors(color, theme);
+                          return (
+                            <button
+                              key={q.name}
+                              onClick={() => toggleLabel(found?.name || q.name)}
+                              className={cn(
+                                "inline-flex items-center px-2 py-1 mr-1 mb-1 rounded text-xs border",
+                                selectedLabels.has(found?.name || q.name)
+                                  ? (theme === "dark" ? "border-blue-400" : "border-blue-500")
+                                  : (theme === "dark" ? "border-gray-700" : "border-gray-200")
+                              )}
+                              style={{ backgroundColor: labelColors.backgroundColor, color: labelColors.color }}
+                            >
+                              <span className="mr-1">{q.icon}</span>
+                              {found?.name || q.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className={cn("my-2 border-t", theme === "dark" ? "border-gray-700" : "border-gray-200")} />
+
+                      {/* All Labels */}
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className={cn("text-xs font-semibold",
+                            theme === "dark" ? "text-gray-400" : "text-gray-600")}>All Labels ({repoLabels.length})
+                          </div>
+                          <button onClick={clearAllLabels} className={cn("text-xs",
+                            theme === "dark" ? "text-gray-400 hover:text-gray-200" : "text-gray-600 hover:text-gray-900")}>Clear all</button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {repoLabels
+                            .filter(l => l.name.toLowerCase().includes(labelSearch.toLowerCase()))
+                            .sort((a, b) => {
+                              const ca = labelCounts.get(a.name) || 0;
+                              const cb = labelCounts.get(b.name) || 0;
+                              if (cb !== ca) return cb - ca;
+                              return a.name.localeCompare(b.name);
+                            })
+                            .map((label) => {
+                              const labelColors = getLabelColors(label.color, theme);
+                              const count = labelCounts.get(label.name) || 0;
+                              return (
+                                <label
+                                  key={label.name}
+                                  className={cn(
+                                    "flex items-center justify-between p-2 rounded cursor-pointer",
+                                    theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50"
+                                  )}
+                                >
+                                  <span className="flex items-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedLabels.has(label.name)}
+                                      onChange={() => toggleLabel(label.name)}
+                                      className="rounded mr-2"
+                                    />
+                                    <span
+                                      className="w-3 h-3 rounded inline-block mr-2"
+                                      style={{ backgroundColor: `#${label.color}` }}
+                                    />
+                                    <span className="text-sm" style={{ color: labelColors.color }}>{label.name}</span>
+                                  </span>
+                                  <span className={cn("text-xs", theme === "dark" ? "text-gray-400" : "text-gray-500")}>{count}</span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      <div className={cn("my-2 border-t", theme === "dark" ? "border-gray-700" : "border-gray-200")} />
+
+                      {/* No Label option */}
+                      <label className={cn("flex items-center p-2 rounded cursor-pointer mb-2",
+                        theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50")}
+                      >
+                        <input type="checkbox" className="rounded mr-2" checked={includeNoLabel} onChange={toggleIncludeNoLabel} />
+                        <span className="text-sm">PRs without any labels</span>
+                      </label>
+
+                      {/* Filter Logic */}
+                      <div>
+                        <div className={cn("text-xs font-semibold mb-1",
+                          theme === "dark" ? "text-gray-400" : "text-gray-600")}>Filter logic</div>
+                        {(["OR","AND","NOT","ONLY"] as const).map(m => (
+                          <label key={m} className={cn("flex items-center p-2 rounded cursor-pointer",
+                            theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50")}
+                          >
+                            <input type="radio" name="label-mode" className="mr-2" checked={labelMode === m} onChange={() => setLabelModeValue(m)} />
+                            <span className="text-sm">{m}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
+
+        {/* Selected label chips */}
+        {(selectedLabels.size > 0 || includeNoLabel) && (
+          <div className="mt-3 flex items-center flex-wrap gap-2">
+            {Array.from(selectedLabels).map((name) => {
+              const repoLabel = repoLabels.find(l => l.name === name);
+              const color = repoLabel?.color || "6b7280";
+              const colors = getLabelColors(color, theme);
+              return (
+                <span key={name} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  style={{ backgroundColor: colors.backgroundColor, color: colors.color }}
+                >
+                  {name}
+                  <button className="ml-1" onClick={() => toggleLabel(name)}>
+                    <X className={cn("w-3 h-3", theme === "dark" ? "text-gray-300" : "text-gray-700")} />
+                  </button>
+                </span>
+              );
+            })}
+            {includeNoLabel && (
+              <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-700")}
+              >
+                No Label
+                <button className="ml-1" onClick={toggleIncludeNoLabel}>
+                  <X className={cn("w-3 h-3", theme === "dark" ? "text-gray-300" : "text-gray-700")} />
+                </button>
+              </span>
+            )}
+            <button onClick={clearAllLabels} className={cn("text-xs underline ml-1",
+              theme === "dark" ? "text-gray-400 hover:text-gray-200" : "text-gray-600 hover:text-gray-900")}>Clear all</button>
+          </div>
+        )}
       </div>
 
       {/* PR List */}
@@ -916,7 +1272,7 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
-            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}`}
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${Array.from(selectedLabels).join('-')}-${labelMode}-${includeNoLabel}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}

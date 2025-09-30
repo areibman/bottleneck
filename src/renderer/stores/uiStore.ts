@@ -30,6 +30,9 @@ interface UIState {
     sortBy: SortByType;
     selectedAuthors: string[];
     selectedStatuses: PRStatusFilter[];
+    selectedLabels: string[];
+    labelMode: "OR" | "AND" | "NOT" | "ONLY";
+    includeNoLabel: boolean;
   };
 
   toggleSidebar: () => void;
@@ -73,6 +76,9 @@ export const useUIStore = create<UIState>()(
         sortBy: "updated",
         selectedAuthors: [],
         selectedStatuses: ["open", "draft"],
+        selectedLabels: [],
+        labelMode: "OR",
+        includeNoLabel: false,
       },
 
       toggleSidebar: () =>
@@ -131,6 +137,9 @@ export const useUIStore = create<UIState>()(
             sortBy: "updated",
             selectedAuthors: [],
             selectedStatuses: ["open", "draft"],
+            selectedLabels: [],
+            labelMode: "OR",
+            includeNoLabel: false,
           },
         }),
     }),
