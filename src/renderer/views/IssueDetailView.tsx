@@ -9,8 +9,11 @@ import {
   Edit2,
   Trash2,
   MoreVertical,
+  X,
+  Plus,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
+import { useIssueStore } from "../stores/issueStore";
 import { GitHubAPI, Issue, Comment } from "../services/github";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
@@ -218,6 +221,7 @@ export default function IssueDetailView() {
   const navigate = useNavigate();
   const { token } = useAuthStore();
   const { theme } = useUIStore();
+  const { closeIssue, reopenIssue, addLabel, removeLabel } = useIssueStore();
 
   const [issue, setIssue] = useState<Issue | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -230,13 +234,41 @@ export default function IssueDetailView() {
   const editIssueEditorRef = useRef<UncontrolledMarkdownEditorRef>(null);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [showCommentMenu, setShowCommentMenu] = useState<number | null>(null);
+  const [changingIssueState, setChangingIssueState] = useState(false);
+  const [showLabelInput, setShowLabelInput] = useState(false);
+  const [newLabelName, setNewLabelName] = useState("");
+  const [availableLabels, setAvailableLabels] = useState<
+    Array<{ name: string; color: string; description: string }>
+  >([]);
 
   useEffect(() => {
     if (owner && repo && number) {
       loadIssueData();
       loadCurrentUser();
+      loadAvailableLabels();
     }
   }, [owner, repo, number, token]);
+
+  const loadAvailableLabels = async () => {
+    try {
+      if (!token || token === "dev-token" || !owner || !repo) {
+        // Mock labels for dev mode
+        setAvailableLabels([
+          { name: "bug", color: "d73a4a", description: "Something isn't working" },
+          { name: "enhancement", color: "a2eeef", description: "New feature or request" },
+          { name: "documentation", color: "0075ca", description: "Improvements or additions to documentation" },
+          { name: "good first issue", color: "7057ff", description: "Good for newcomers" },
+          { name: "help wanted", color: "008672", description: "Extra attention is needed" },
+        ]);
+      } else {
+        const api = new GitHubAPI(token);
+        const labels = await api.getRepoLabels(owner, repo);
+        setAvailableLabels(labels);
+      }
+    } catch (error) {
+      console.error("Failed to load available labels:", error);
+    }
+  };
 
   const loadCurrentUser = async () => {
     try {
@@ -417,6 +449,67 @@ export default function IssueDetailView() {
   const cancelEditIssue = useCallback(() => setEditingIssue(false), []);
   const cancelEditComment = useCallback(() => setEditingCommentId(null), []);
 
+  const handleCloseIssue = async () => {
+    if (!owner || !repo || !number || !issue) return;
+
+    setChangingIssueState(true);
+    try {
+      await closeIssue(owner, repo, parseInt(number));
+      setIssue({ ...issue, state: "closed", closed_at: new Date().toISOString() });
+    } catch (error) {
+      console.error("Failed to close issue:", error);
+    } finally {
+      setChangingIssueState(false);
+    }
+  };
+
+  const handleReopenIssue = async () => {
+    if (!owner || !repo || !number || !issue) return;
+
+    setChangingIssueState(true);
+    try {
+      await reopenIssue(owner, repo, parseInt(number));
+      setIssue({ ...issue, state: "open", closed_at: null });
+    } catch (error) {
+      console.error("Failed to reopen issue:", error);
+    } finally {
+      setChangingIssueState(false);
+    }
+  };
+
+  const handleAddLabel = async (labelName: string) => {
+    if (!owner || !repo || !number || !issue) return;
+
+    try {
+      await addLabel(owner, repo, parseInt(number), labelName);
+      // Find the label color from available labels
+      const labelColor =
+        availableLabels.find((l) => l.name === labelName)?.color || "cccccc";
+      setIssue({
+        ...issue,
+        labels: [...issue.labels, { name: labelName, color: labelColor }],
+      });
+      setShowLabelInput(false);
+      setNewLabelName("");
+    } catch (error) {
+      console.error("Failed to add label:", error);
+    }
+  };
+
+  const handleRemoveLabel = async (labelName: string) => {
+    if (!owner || !repo || !number || !issue) return;
+
+    try {
+      await removeLabel(owner, repo, parseInt(number), labelName);
+      setIssue({
+        ...issue,
+        labels: issue.labels.filter((l) => l.name !== labelName),
+      });
+    } catch (error) {
+      console.error("Failed to remove label:", error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -489,6 +582,36 @@ export default function IssueDetailView() {
                 </span>
               </h1>
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {issue.state === "open" ? (
+              <button
+                onClick={handleCloseIssue}
+                disabled={changingIssueState}
+                className={cn(
+                  "flex items-center space-x-1 px-3 py-1.5 rounded text-sm font-medium transition-colors",
+                  "bg-purple-600 text-white hover:bg-purple-700",
+                  changingIssueState && "opacity-50 cursor-not-allowed",
+                )}
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>{changingIssueState ? "Closing..." : "Close issue"}</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleReopenIssue}
+                disabled={changingIssueState}
+                className={cn(
+                  "flex items-center space-x-1 px-3 py-1.5 rounded text-sm font-medium transition-colors",
+                  "bg-green-600 text-white hover:bg-green-700",
+                  changingIssueState && "opacity-50 cursor-not-allowed",
+                )}
+              >
+                <AlertCircle className="w-4 h-4" />
+                <span>{changingIssueState ? "Reopening..." : "Reopen issue"}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -697,14 +820,84 @@ export default function IssueDetailView() {
                 </div>
 
                 <div>
-                  <h3
-                    className={cn(
-                      "text-sm font-semibold mb-2",
-                      theme === "dark" ? "text-gray-300" : "text-gray-700",
-                    )}
-                  >
-                    Labels
-                  </h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3
+                      className={cn(
+                        "text-sm font-semibold",
+                        theme === "dark" ? "text-gray-300" : "text-gray-700",
+                      )}
+                    >
+                      Labels
+                    </h3>
+                    <button
+                      onClick={() => setShowLabelInput(!showLabelInput)}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        theme === "dark"
+                          ? "hover:bg-gray-700 text-gray-400"
+                          : "hover:bg-gray-200 text-gray-600",
+                      )}
+                      title="Add label"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {showLabelInput && (
+                    <div className="mb-2">
+                      <select
+                        value={newLabelName}
+                        onChange={(e) => setNewLabelName(e.target.value)}
+                        className={cn(
+                          "w-full px-2 py-1 text-sm rounded border mb-1",
+                          theme === "dark"
+                            ? "bg-gray-700 border-gray-600 text-gray-200"
+                            : "bg-white border-gray-300 text-gray-900",
+                        )}
+                      >
+                        <option value="">Select a label...</option>
+                        {availableLabels
+                          .filter(
+                            (l) => !issue.labels.some((il) => il.name === l.name),
+                          )
+                          .map((label) => (
+                            <option key={label.name} value={label.name}>
+                              {label.name}
+                            </option>
+                          ))}
+                      </select>
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => {
+                            if (newLabelName) handleAddLabel(newLabelName);
+                          }}
+                          disabled={!newLabelName}
+                          className={cn(
+                            "flex-1 px-2 py-1 text-xs rounded",
+                            "bg-green-600 text-white hover:bg-green-700",
+                            !newLabelName && "opacity-50 cursor-not-allowed",
+                          )}
+                        >
+                          Add
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowLabelInput(false);
+                            setNewLabelName("");
+                          }}
+                          className={cn(
+                            "flex-1 px-2 py-1 text-xs rounded",
+                            theme === "dark"
+                              ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300",
+                          )}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {issue.labels.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {issue.labels.map((l) => {
@@ -712,13 +905,20 @@ export default function IssueDetailView() {
                         return (
                           <span
                             key={l.name}
-                            className="px-2 py-0.5 text-xs rounded font-medium"
+                            className="group relative inline-flex items-center px-2 py-0.5 text-xs rounded font-medium"
                             style={{
                               backgroundColor: labelColors.backgroundColor,
                               color: labelColors.color,
                             }}
                           >
                             {l.name}
+                            <button
+                              onClick={() => handleRemoveLabel(l.name)}
+                              className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove label"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </span>
                         );
                       })}

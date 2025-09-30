@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, X } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -14,22 +14,34 @@ import { Issue } from "../services/github";
 const IssueItem = React.memo(
   ({
     issue,
+    isSelected,
     onIssueClick,
+    onToggleSelect,
     theme,
   }: {
     issue: Issue;
+    isSelected: boolean;
     onIssueClick: (issue: Issue) => void;
+    onToggleSelect: (e: React.MouseEvent) => void;
     theme: "light" | "dark";
   }) => {
     return (
       <div
         className={cn(
-          "px-4 py-3 cursor-pointer",
+          "px-4 py-3 cursor-pointer relative",
           theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100",
+          isSelected && (theme === "dark" ? "bg-gray-800" : "bg-gray-100"),
         )}
         onClick={() => onIssueClick(issue)}
       >
         <div className="flex items-start space-x-3">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
           <div className="flex-shrink-0 mt-1">
             {issue.state === "open" ? (
               <div title="Open">
@@ -131,12 +143,23 @@ const sortOptions: DropdownOption<SortByType>[] = [
 
 export default function IssuesView() {
   const navigate = useNavigate();
-  const { issues, loading, fetchIssues, filters, setFilter } = useIssueStore();
+  const {
+    issues,
+    loading,
+    fetchIssues,
+    filters,
+    setFilter,
+    selectedIssues,
+    toggleIssueSelection,
+    clearSelection,
+    closeSelectedIssues,
+  } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
   );
+  const [closingIssues, setClosingIssues] = useState(false);
 
   useEffect(() => {
     if (selectedRepo) {
@@ -292,6 +315,33 @@ export default function IssuesView() {
     [navigate, selectedRepo],
   );
 
+  const handleCloseSelected = useCallback(async () => {
+    if (!selectedRepo || selectedIssues.size === 0) return;
+
+    const confirmMessage =
+      selectedIssues.size === 1
+        ? "Are you sure you want to close this issue?"
+        : `Are you sure you want to close ${selectedIssues.size} issues?`;
+
+    if (!confirm(confirmMessage)) return;
+
+    setClosingIssues(true);
+    try {
+      await closeSelectedIssues(selectedRepo.owner, selectedRepo.name);
+    } catch (error) {
+      console.error("Failed to close issues:", error);
+    } finally {
+      setClosingIssues(false);
+    }
+  }, [selectedRepo, selectedIssues, closeSelectedIssues]);
+
+  const getIssueKey = useCallback(
+    (issue: Issue) => {
+      return `${selectedRepo?.owner}/${selectedRepo?.name}#${issue.number}`;
+    },
+    [selectedRepo],
+  );
+
   if (!selectedRepo) {
     return <WelcomeView />;
   }
@@ -331,6 +381,37 @@ export default function IssuesView() {
           </h1>
 
           <div className="flex items-center space-x-2">
+            {selectedIssues.size > 0 && (
+              <>
+                <button
+                  onClick={handleCloseSelected}
+                  disabled={closingIssues}
+                  className={cn(
+                    "flex items-center space-x-1 px-3 py-1.5 rounded text-sm font-medium transition-colors",
+                    "bg-red-600 text-white hover:bg-red-700",
+                    closingIssues && "opacity-50 cursor-not-allowed",
+                  )}
+                >
+                  <X className="w-4 h-4" />
+                  <span>
+                    {closingIssues
+                      ? "Closing..."
+                      : `Close ${selectedIssues.size}`}
+                  </span>
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className={cn(
+                    "px-3 py-1.5 rounded text-sm transition-colors",
+                    theme === "dark"
+                      ? "bg-gray-700 hover:bg-gray-600 text-gray-200"
+                      : "bg-gray-200 hover:bg-gray-300 text-gray-700",
+                  )}
+                >
+                  Clear
+                </button>
+              </>
+            )}
             <Dropdown<SortByType>
               options={sortOptions}
               value={sortBy}
@@ -386,14 +467,22 @@ export default function IssuesView() {
               theme === "dark" ? "divide-gray-700" : "divide-gray-200",
             )}
           >
-            {filteredIssues.map((issue) => (
-              <IssueItem
-                key={issue.id}
-                issue={issue}
-                onIssueClick={handleIssueClick}
-                theme={theme}
-              />
-            ))}
+            {filteredIssues.map((issue) => {
+              const issueKey = getIssueKey(issue);
+              return (
+                <IssueItem
+                  key={issue.id}
+                  issue={issue}
+                  isSelected={selectedIssues.has(issueKey)}
+                  onIssueClick={handleIssueClick}
+                  onToggleSelect={(e) => {
+                    e.stopPropagation();
+                    toggleIssueSelection(issueKey);
+                  }}
+                  theme={theme}
+                />
+              );
+            })}
           </div>
         )}
       </div>
