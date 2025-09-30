@@ -885,6 +885,29 @@ export class GitHubAPI {
     return data as Issue;
   }
 
+  async updateIssueState(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    state: "open" | "closed",
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state,
+    });
+    return data as Issue;
+  }
+
+  async closeIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
+    return this.updateIssueState(owner, repo, issueNumber, "closed");
+  }
+
+  async reopenIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
+    return this.updateIssueState(owner, repo, issueNumber, "open");
+  }
+
   async getBranches(owner: string, repo: string, defaultBranch = "main") {
     const { data } = await this.octokit.repos.listBranches({
       owner,
@@ -1423,6 +1446,31 @@ export class GitHubAPI {
       issue_number: pullNumber,
       name: label,
     });
+  }
+
+  async setIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ) {
+    const { data } = await this.octokit.issues.setLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels,
+    });
+    return data;
+  }
+
+  async listRepoLabels(owner: string, repo: string): Promise<Array<{ name: string; color: string }>> {
+    const { data } = await this.octokit.issues.listLabelsForRepo({
+      owner,
+      repo,
+      per_page: 500,
+    });
+
+    return data.map((l: any) => ({ name: l.name, color: l.color }));
   }
 
   async getLatestCommitSha(owner: string, repo: string, pullNumber: number) {
