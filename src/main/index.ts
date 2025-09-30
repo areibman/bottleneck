@@ -319,3 +319,92 @@ ipcMain.handle("settings:clear", async () => {
     return { success: false, error: (error as Error).message };
   }
 });
+
+// Menu event handlers
+ipcMain.on("open-preferences", () => {
+  mainWindow?.webContents.send("open-preferences");
+});
+
+ipcMain.on("new-draft-pr", () => {
+  mainWindow?.webContents.send("new-draft-pr");
+});
+
+ipcMain.on("clone-repository", () => {
+  mainWindow?.webContents.send("clone-repository");
+});
+
+ipcMain.on("sync-all", () => {
+  mainWindow?.webContents.send("sync-all");
+});
+
+ipcMain.on("open-command-palette", () => {
+  mainWindow?.webContents.send("open-command-palette");
+});
+
+ipcMain.on("toggle-sidebar", () => {
+  mainWindow?.webContents.send("toggle-sidebar");
+});
+
+ipcMain.on("toggle-right-panel", () => {
+  mainWindow?.webContents.send("toggle-right-panel");
+});
+
+ipcMain.on("go-to-pr", () => {
+  mainWindow?.webContents.send("go-to-pr");
+});
+
+ipcMain.on("go-to-file", () => {
+  mainWindow?.webContents.send("go-to-file");
+});
+
+ipcMain.on("next-pr", () => {
+  mainWindow?.webContents.send("next-pr");
+});
+
+ipcMain.on("previous-pr", () => {
+  mainWindow?.webContents.send("previous-pr");
+});
+
+ipcMain.on("next-file", () => {
+  mainWindow?.webContents.send("next-file");
+});
+
+ipcMain.on("previous-file", () => {
+  mainWindow?.webContents.send("previous-file");
+});
+
+ipcMain.on("next-comment", () => {
+  mainWindow?.webContents.send("next-comment");
+});
+
+ipcMain.on("previous-comment", () => {
+  mainWindow?.webContents.send("previous-comment");
+});
+
+ipcMain.on("approve-pr", () => {
+  mainWindow?.webContents.send("approve-pr");
+});
+
+ipcMain.on("request-changes", () => {
+  mainWindow?.webContents.send("request-changes");
+});
+
+ipcMain.on("submit-comment", () => {
+  mainWindow?.webContents.send("submit-comment");
+});
+
+ipcMain.on("mark-file-viewed", () => {
+  mainWindow?.webContents.send("mark-file-viewed");
+});
+
+ipcMain.on("toggle-diff-view", () => {
+  mainWindow?.webContents.send("toggle-diff-view");
+});
+
+ipcMain.on("toggle-whitespace", () => {
+  mainWindow?.webContents.send("toggle-whitespace");
+});
+
+ipcMain.on("show-shortcuts", () => {
+  mainWindow?.webContents.send("show-shortcuts");
+});
