@@ -1,10 +1,12 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { GitPullRequest } from "lucide-react";
+import { GitPullRequest, Users } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
+import { useTeamsStore } from "../stores/teamsStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import TeamManagementDialog from "../components/TeamManagementDialog";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
@@ -50,11 +52,14 @@ export default function PRListView() {
     setPRListFilters,
   } = useUIStore();
   const { token } = useAuthStore();
+  const { teams, markTeamAsUsed } = useTeamsStore();
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [showTeamDialog, setShowTeamDialog] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<any>(null);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -225,6 +230,53 @@ export default function PRListView() {
     },
     [authors, setPRListFilters],
   );
+
+  const handleTeamToggle = useCallback(
+    (teamId: string) => {
+      const team = teams.find((t) => t.id === teamId);
+      if (!team) return;
+
+      markTeamAsUsed(teamId);
+
+      setPRListFilters(prev => {
+        const newSet = new Set(prev.selectedAuthors);
+        
+        // Check if all team members are already selected
+        const allMembersSelected = team.members.every((member) => newSet.has(member));
+
+        if (allMembersSelected) {
+          // Deselect all team members
+          team.members.forEach((member) => newSet.delete(member));
+          newSet.delete("all");
+        } else {
+          // Select all team members
+          team.members.forEach((member) => newSet.add(member));
+          // Check if this makes "all" selected
+          if (authors.every((author) => newSet.has(author.login))) {
+            newSet.add("all");
+          }
+        }
+
+        return {
+          ...prev,
+          selectedAuthors: Array.from(newSet),
+        };
+      });
+    },
+    [teams, authors, markTeamAsUsed, setPRListFilters],
+  );
+
+  const handleCreateTeam = useCallback(() => {
+    setEditingTeam(null);
+    setShowTeamDialog(true);
+    setShowAuthorDropdown(false);
+  }, []);
+
+  const handleEditTeam = useCallback((team: any) => {
+    setEditingTeam(team);
+    setShowTeamDialog(true);
+    setShowAuthorDropdown(false);
+  }, []);
 
   // Use the centralized getPRStatus utility
   // No need for useCallback since getPRStatus is a pure function
@@ -545,6 +597,17 @@ export default function PRListView() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Team Management Dialog */}
+      <TeamManagementDialog
+        isOpen={showTeamDialog}
+        onClose={() => {
+          setShowTeamDialog(false);
+          setEditingTeam(null);
+        }}
+        availableAuthors={authors}
+        initialTeam={editingTeam}
+      />
+
       {/* Header */}
       <div
         className={cn(
@@ -821,13 +884,13 @@ export default function PRListView() {
                 {showAuthorDropdown && (
                   <div
                     className={cn(
-                      "absolute top-full mt-1 right-0 z-50 min-w-[200px] rounded-md shadow-lg border",
+                      "absolute top-full mt-1 right-0 z-50 min-w-[250px] max-w-[350px] rounded-md shadow-lg border",
                       theme === "dark"
                         ? "bg-gray-800 border-gray-700"
                         : "bg-white border-gray-200"
                     )}
                   >
-                    <div className="p-2 max-h-64 overflow-y-auto">
+                    <div className="p-2 max-h-96 overflow-y-auto">
                       {/* All Authors option */}
                       <label
                         className={cn(
@@ -846,12 +909,127 @@ export default function PRListView() {
                         <span className="text-sm font-medium">All Authors</span>
                       </label>
 
+                      {/* Teams Section */}
+                      {teams.length > 0 && (
+                        <>
+                          <div className={cn(
+                            "my-1 border-t",
+                            theme === "dark" ? "border-gray-700" : "border-gray-200"
+                          )} />
+
+                          <div className="px-2 py-1">
+                            <span className={cn(
+                              "text-xs font-medium uppercase",
+                              theme === "dark" ? "text-gray-400" : "text-gray-500"
+                            )}>
+                              Teams
+                            </span>
+                          </div>
+
+                          {teams.map((team) => {
+                            const allMembersSelected = team.members.every((member) =>
+                              selectedAuthors.has(member)
+                            );
+                            const someMembersSelected = team.members.some((member) =>
+                              selectedAuthors.has(member)
+                            );
+
+                            return (
+                              <div
+                                key={team.id}
+                                className={cn(
+                                  "group flex items-center justify-between p-2 rounded",
+                                  theme === "dark"
+                                    ? "hover:bg-gray-700"
+                                    : "hover:bg-gray-50"
+                                )}
+                              >
+                                <label className="flex items-center space-x-2 cursor-pointer flex-1 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={allMembersSelected}
+                                    ref={(el) => {
+                                      if (el) {
+                                        el.indeterminate = someMembersSelected && !allMembersSelected;
+                                      }
+                                    }}
+                                    onChange={() => handleTeamToggle(team.id)}
+                                    className="rounded"
+                                  />
+                                  <div
+                                    className="w-3 h-3 rounded flex-shrink-0"
+                                    style={{ backgroundColor: team.color || "#3b82f6" }}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center space-x-1">
+                                      <span className="text-sm font-medium truncate">{team.name}</span>
+                                      <span className={cn(
+                                        "text-xs",
+                                        theme === "dark" ? "text-gray-500" : "text-gray-400"
+                                      )}>
+                                        ({team.members.length})
+                                      </span>
+                                    </div>
+                                    {team.description && (
+                                      <div className={cn(
+                                        "text-xs truncate",
+                                        theme === "dark" ? "text-gray-500" : "text-gray-400"
+                                      )}>
+                                        {team.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditTeam(team);
+                                  }}
+                                  className={cn(
+                                    "opacity-0 group-hover:opacity-100 p-1 rounded text-xs",
+                                    theme === "dark"
+                                      ? "hover:bg-gray-600 text-gray-400"
+                                      : "hover:bg-gray-200 text-gray-600"
+                                  )}
+                                  title="Edit team"
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {/* Create Team Button */}
+                      <button
+                        onClick={handleCreateTeam}
+                        className={cn(
+                          "w-full flex items-center space-x-2 p-2 rounded text-sm",
+                          theme === "dark"
+                            ? "hover:bg-gray-700 text-blue-400"
+                            : "hover:bg-gray-50 text-blue-600"
+                        )}
+                      >
+                        <Users className="w-4 h-4" />
+                        <span>{teams.length > 0 ? "Create New Team..." : "Create Team..."}</span>
+                      </button>
+
                       <div className={cn(
                         "my-1 border-t",
                         theme === "dark" ? "border-gray-700" : "border-gray-200"
                       )} />
 
                       {/* Individual authors */}
+                      <div className="px-2 py-1">
+                        <span className={cn(
+                          "text-xs font-medium uppercase",
+                          theme === "dark" ? "text-gray-400" : "text-gray-500"
+                        )}>
+                          Individual Authors
+                        </span>
+                      </div>
+
                       {authors.map(author => (
                         <label
                           key={author.login}
