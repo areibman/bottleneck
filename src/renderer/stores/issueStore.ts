@@ -26,6 +26,7 @@ interface IssueState {
   clearSelection: () => void;
   selectAll: (issueNumbers: number[]) => void;
   fetchRepoLabels: (owner: string, repo: string) => Promise<void>;
+  createLabel: (owner: string, repo: string, name: string, color: string, description?: string) => Promise<void>;
   addLabelsToIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
   removeLabelsFromIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
   setFilter: (key: keyof IssueFilters, value: any) => void;
@@ -290,6 +291,34 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     }
   },
 
+  createLabel: async (owner: string, repo: string, name: string, color: string, description?: string) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      if (token === "dev-token") {
+        // Add to mock labels
+        const newLabel = { name, color, description: description || null };
+        set({ repoLabels: [...get().repoLabels, newLabel] });
+      } else {
+        const api = new GitHubAPI(token);
+        const newLabel = await api.createLabel(owner, repo, name, color, description);
+        set({ repoLabels: [...get().repoLabels, newLabel] });
+      }
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
   addLabelsToIssues: async (owner: string, repo: string, issueNumbers: number[], labels: string[]) => {
     try {
       let token: string | null = null;
@@ -316,7 +345,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
               const newLabels = labels.filter(l => !existingLabels.has(l));
               const mockLabels = newLabels.map(name => ({
                 name,
-                color: Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
+                color: Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
               }));
               newIssues.set(key, {
                 ...issue,

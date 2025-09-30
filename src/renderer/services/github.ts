@@ -1586,6 +1586,28 @@ export class GitHubAPI {
     }));
   }
 
+  async createLabel(
+    owner: string,
+    repo: string,
+    name: string,
+    color: string,
+    description?: string,
+  ): Promise<{ name: string; color: string; description: string | null }> {
+    const { data } = await this.octokit.issues.createLabel({
+      owner,
+      repo,
+      name,
+      color,
+      description,
+    });
+
+    return {
+      name: data.name,
+      color: data.color,
+      description: data.description,
+    };
+  }
+
   async addIssueLabels(
     owner: string,
     repo: string,
