@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, X, Plus, Tag } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -15,19 +15,48 @@ const IssueItem = React.memo(
   ({
     issue,
     onIssueClick,
+    onCloseIssue,
+    onReopenIssue,
+    onAddLabel,
+    onRemoveLabel,
+    availableLabels,
     theme,
   }: {
     issue: Issue;
     onIssueClick: (issue: Issue) => void;
+    onCloseIssue: (issue: Issue) => void;
+    onReopenIssue: (issue: Issue) => void;
+    onAddLabel: (issue: Issue, label: string) => void;
+    onRemoveLabel: (issue: Issue, label: string) => void;
+    availableLabels: Array<{ name: string; color: string; description: string | null }>;
     theme: "light" | "dark";
   }) => {
+    const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+    const [showAddLabel, setShowAddLabel] = useState(false);
+    const [newLabelName, setNewLabelName] = useState("");
+
+    const handleAddLabel = () => {
+      if (newLabelName.trim()) {
+        onAddLabel(issue, newLabelName.trim());
+        setNewLabelName("");
+        setShowAddLabel(false);
+      }
+    };
+
+    const handleKeyPress = (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        handleAddLabel();
+      } else if (e.key === "Escape") {
+        setShowAddLabel(false);
+        setNewLabelName("");
+      }
+    };
     return (
       <div
         className={cn(
-          "px-4 py-3 cursor-pointer",
+          "px-4 py-3 group",
           theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100",
         )}
-        onClick={() => onIssueClick(issue)}
       >
         <div className="flex items-start space-x-3">
           <div className="flex-shrink-0 mt-1">
@@ -45,49 +74,150 @@ const IssueItem = React.memo(
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <h3
-                  className={cn(
-                    "text-sm font-medium truncate",
-                    theme === "dark" ? "text-white" : "text-gray-900",
-                  )}
+                <div 
+                  className="cursor-pointer"
+                  onClick={() => onIssueClick(issue)}
                 >
-                  {issue.title}
-                </h3>
+                  <h3
+                    className={cn(
+                      "text-sm font-medium truncate",
+                      theme === "dark" ? "text-white" : "text-gray-900",
+                    )}
+                  >
+                    {issue.title}
+                  </h3>
 
-                <div
-                  className={cn(
-                    "flex items-center mt-1 text-xs space-x-3",
-                    theme === "dark" ? "text-gray-400" : "text-gray-600",
-                  )}
-                >
-                  <span>#{issue.number}</span>
-                  <span>by {issue.user.login}</span>
-                  <span>
-                    {formatDistanceToNow(new Date(issue.updated_at), {
-                      addSuffix: true,
-                    })}
-                  </span>
+                  <div
+                    className={cn(
+                      "flex items-center mt-1 text-xs space-x-3",
+                      theme === "dark" ? "text-gray-400" : "text-gray-600",
+                    )}
+                  >
+                    <span>#{issue.number}</span>
+                    <span>by {issue.user.login}</span>
+                    <span>
+                      {formatDistanceToNow(new Date(issue.updated_at), {
+                        addSuffix: true,
+                      })}
+                    </span>
+                  </div>
                 </div>
 
-                {issue.labels.length > 0 && (
-                  <div className="flex items-center mt-2 space-x-1">
-                    {issue.labels.slice(0, 5).map((label) => {
-                      const labelColors = getLabelColors(label.color, theme);
-                      return (
-                        <span
-                          key={label.name}
-                          className="px-2 py-0.5 text-xs rounded font-medium"
-                          style={{
-                            backgroundColor: labelColors.backgroundColor,
-                            color: labelColors.color,
+                <div className="flex items-center mt-2 space-x-1 flex-wrap">
+                  {issue.labels.slice(0, 5).map((label) => {
+                    const labelColors = getLabelColors(label.color, theme);
+                    return (
+                      <span
+                        key={label.name}
+                        className="px-2 py-0.5 text-xs rounded font-medium flex items-center space-x-1 group/label"
+                        style={{
+                          backgroundColor: labelColors.backgroundColor,
+                          color: labelColors.color,
+                        }}
+                      >
+                        <span>{label.name}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveLabel(issue, label.name);
                           }}
+                          className="opacity-0 group-hover/label:opacity-100 hover:bg-black hover:bg-opacity-20 rounded"
                         >
-                          {label.name}
-                        </span>
-                      );
-                    })}
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowLabelDropdown(!showLabelDropdown);
+                      }}
+                      className={cn(
+                        "px-2 py-0.5 text-xs rounded font-medium flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                        theme === "dark" 
+                          ? "bg-gray-700 text-gray-300 hover:bg-gray-600" 
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      )}
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add label</span>
+                    </button>
+
+                    {showLabelDropdown && (
+                      <div
+                        className={cn(
+                          "absolute top-8 left-0 z-10 w-64 max-h-48 overflow-y-auto rounded shadow-lg border",
+                          theme === "dark"
+                            ? "bg-gray-700 border-gray-600"
+                            : "bg-white border-gray-200"
+                        )}
+                      >
+                        <div className="p-2">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <input
+                              type="text"
+                              placeholder="Add new label..."
+                              value={newLabelName}
+                              onChange={(e) => setNewLabelName(e.target.value)}
+                              onKeyDown={handleKeyPress}
+                              className={cn(
+                                "flex-1 px-2 py-1 text-xs rounded border",
+                                theme === "dark"
+                                  ? "bg-gray-800 border-gray-600 text-white"
+                                  : "bg-white border-gray-300 text-gray-900"
+                              )}
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleAddLabel}
+                              className={cn(
+                                "px-2 py-1 text-xs rounded",
+                                theme === "dark"
+                                  ? "bg-green-600 hover:bg-green-700 text-white"
+                                  : "bg-green-500 hover:bg-green-600 text-white"
+                              )}
+                            >
+                              Add
+                            </button>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            {availableLabels
+                              .filter(label => !issue.labels.some(l => l.name === label.name))
+                              .map((label) => (
+                                <button
+                                  key={label.name}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAddLabel(issue, label.name);
+                                    setShowLabelDropdown(false);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-2 py-1 text-xs rounded hover:bg-opacity-20 flex items-center space-x-2",
+                                    theme === "dark" ? "hover:bg-gray-600" : "hover:bg-gray-100"
+                                  )}
+                                >
+                                  <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: `#${label.color}` }}
+                                  />
+                                  <span>{label.name}</span>
+                                  {label.description && (
+                                    <span className="text-gray-500 truncate">
+                                      {label.description}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="flex items-center space-x-3 ml-4">
@@ -112,6 +242,42 @@ const IssueItem = React.memo(
                   <MessageSquare className="w-3 h-3 mr-1" />
                   {issue.comments}
                 </span>
+
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  {issue.state === "open" ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCloseIssue(issue);
+                      }}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        theme === "dark"
+                          ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
+                          : "hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+                      )}
+                      title="Close issue"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReopenIssue(issue);
+                      }}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        theme === "dark"
+                          ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
+                          : "hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+                      )}
+                      title="Reopen issue"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -131,7 +297,19 @@ const sortOptions: DropdownOption<SortByType>[] = [
 
 export default function IssuesView() {
   const navigate = useNavigate();
-  const { issues, loading, fetchIssues, filters, setFilter } = useIssueStore();
+  const { 
+    issues, 
+    loading, 
+    fetchIssues, 
+    filters, 
+    setFilter, 
+    closeIssue, 
+    reopenIssue, 
+    addIssueLabels, 
+    removeIssueLabel, 
+    fetchRepositoryLabels,
+    availableLabels 
+  } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
@@ -141,8 +319,9 @@ export default function IssuesView() {
   useEffect(() => {
     if (selectedRepo) {
       fetchIssues(selectedRepo.owner, selectedRepo.name);
+      fetchRepositoryLabels(selectedRepo.owner, selectedRepo.name);
     }
-  }, [selectedRepo, fetchIssues]);
+  }, [selectedRepo, fetchIssues, fetchRepositoryLabels]);
 
   const authors = useMemo(() => {
     const authorMap = new Map<string, { login: string; avatar_url: string }>();
@@ -292,6 +471,42 @@ export default function IssuesView() {
     [navigate, selectedRepo],
   );
 
+  const handleCloseIssue = useCallback(
+    (issue: Issue) => {
+      if (selectedRepo) {
+        closeIssue(selectedRepo.owner, selectedRepo.name, issue.number);
+      }
+    },
+    [closeIssue, selectedRepo],
+  );
+
+  const handleReopenIssue = useCallback(
+    (issue: Issue) => {
+      if (selectedRepo) {
+        reopenIssue(selectedRepo.owner, selectedRepo.name, issue.number);
+      }
+    },
+    [reopenIssue, selectedRepo],
+  );
+
+  const handleAddLabel = useCallback(
+    (issue: Issue, label: string) => {
+      if (selectedRepo) {
+        addIssueLabels(selectedRepo.owner, selectedRepo.name, issue.number, [label]);
+      }
+    },
+    [addIssueLabels, selectedRepo],
+  );
+
+  const handleRemoveLabel = useCallback(
+    (issue: Issue, label: string) => {
+      if (selectedRepo) {
+        removeIssueLabel(selectedRepo.owner, selectedRepo.name, issue.number, label);
+      }
+    },
+    [removeIssueLabel, selectedRepo],
+  );
+
   if (!selectedRepo) {
     return <WelcomeView />;
   }
@@ -391,6 +606,11 @@ export default function IssuesView() {
                 key={issue.id}
                 issue={issue}
                 onIssueClick={handleIssueClick}
+                onCloseIssue={handleCloseIssue}
+                onReopenIssue={handleReopenIssue}
+                onAddLabel={handleAddLabel}
+                onRemoveLabel={handleRemoveLabel}
+                availableLabels={availableLabels.get(`${selectedRepo.owner}/${selectedRepo.name}`) || []}
                 theme={theme}
               />
             ))}

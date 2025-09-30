@@ -1630,4 +1630,97 @@ export class GitHubAPI {
       draft: isDraft !== undefined ? isDraft : draft,
     };
   }
+
+  async closeIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state: "closed",
+    });
+
+    return data as Issue;
+  }
+
+  async reopenIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state: "open",
+    });
+
+    return data as Issue;
+  }
+
+  async addIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.addLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels,
+    });
+
+    return data as Issue;
+  }
+
+  async removeIssueLabel(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    label: string,
+  ): Promise<void> {
+    await this.octokit.issues.removeLabel({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      name: label,
+    });
+  }
+
+  async setIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.setLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels,
+    });
+
+    return data as Issue;
+  }
+
+  async getRepositoryLabels(
+    owner: string,
+    repo: string,
+  ): Promise<Array<{ name: string; color: string; description: string | null }>> {
+    const { data } = await this.octokit.issues.listLabelsForRepo({
+      owner,
+      repo,
+      per_page: 100,
+    });
+
+    return data.map(label => ({
+      name: label.name,
+      color: label.color,
+      description: label.description,
+    }));
+  }
 }
