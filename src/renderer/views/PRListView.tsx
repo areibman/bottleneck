@@ -5,6 +5,7 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { LabelFilterDropdown } from "../components/LabelFilterDropdown";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
@@ -65,6 +66,9 @@ export default function PRListView() {
     () => new Set<StatusType>(prListFilters.selectedStatuses),
     [prListFilters.selectedStatuses],
   );
+  const selectedLabels = prListFilters.selectedLabels;
+  const labelFilterMode = prListFilters.labelFilterMode;
+  const includeNoLabels = prListFilters.includeNoLabels;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -185,6 +189,45 @@ export default function PRListView() {
     return Array.from(authorMap.values());
   }, [pullRequests]);
 
+  // Extract available labels from all PRs
+  const { availableLabels, labelPRCounts } = useMemo(() => {
+    const labelMap = new Map<string, { name: string; color: string }>();
+    const labelCounts = new Map<string, number>();
+    let noLabelCount = 0;
+
+    // Only count from PRs in the current repo
+    Array.from(pullRequests.values()).forEach((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      if (selectedRepo && baseOwner === selectedRepo.owner && baseName === selectedRepo.name) {
+        if (pr.labels && pr.labels.length > 0) {
+          pr.labels.forEach((label) => {
+            if (!labelMap.has(label.name)) {
+              labelMap.set(label.name, label);
+            }
+            labelCounts.set(label.name, (labelCounts.get(label.name) || 0) + 1);
+          });
+        } else {
+          noLabelCount++;
+        }
+      }
+    });
+
+    // Add special count for PRs without labels
+    if (noLabelCount > 0) {
+      labelCounts.set("__no_labels__", noLabelCount);
+    }
+
+    const sortedLabels = Array.from(labelMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+
+    return {
+      availableLabels: sortedLabels,
+      labelPRCounts: labelCounts,
+    };
+  }, [pullRequests, selectedRepo]);
+
   const handleAuthorToggle = useCallback(
     (authorLogin: string) => {
       setPRListFilters(prev => {
@@ -291,8 +334,39 @@ export default function PRListView() {
       const statusMatches = selectedStatuses.size === 0 ||
         selectedStatuses.has(prStatus);
 
-      // Both filters must pass
-      return authorMatches && statusMatches;
+      // Label filter
+      const prLabels = pr.labels?.map(l => l.name) || [];
+      const hasNoLabels = prLabels.length === 0;
+      
+      let labelMatches = true;
+      if (selectedLabels.length > 0 || includeNoLabels) {
+        if (labelFilterMode === "or") {
+          // Show PRs with any selected label OR no labels if includeNoLabels is true
+          labelMatches = (includeNoLabels && hasNoLabels) || 
+            (selectedLabels.length > 0 && selectedLabels.some(label => prLabels.includes(label)));
+        } else if (labelFilterMode === "and") {
+          // Show PRs with all selected labels
+          labelMatches = (includeNoLabels && hasNoLabels) ||
+            (selectedLabels.length > 0 && selectedLabels.every(label => prLabels.includes(label)));
+        } else if (labelFilterMode === "not") {
+          // Exclude PRs with any of the selected labels
+          labelMatches = !selectedLabels.some(label => prLabels.includes(label));
+          if (includeNoLabels) {
+            labelMatches = labelMatches && !hasNoLabels;
+          }
+        } else if (labelFilterMode === "only") {
+          // Show PRs with exactly these labels
+          if (includeNoLabels && selectedLabels.length === 0) {
+            labelMatches = hasNoLabels;
+          } else {
+            labelMatches = selectedLabels.length === prLabels.length &&
+              selectedLabels.every(label => prLabels.includes(label));
+          }
+        }
+      }
+
+      // All filters must pass
+      return authorMatches && statusMatches && labelMatches;
     });
 
     // Step 3: Sort PRs
@@ -312,6 +386,9 @@ export default function PRListView() {
     pullRequests,
     selectedAuthors,
     selectedStatuses,
+    selectedLabels,
+    labelFilterMode,
+    includeNoLabels,
     sortBy,
     selectedRepo,
     getPRStatus,
@@ -721,6 +798,19 @@ export default function PRListView() {
                   </div>
                 )}
               </div>
+
+              {/* Label filter dropdown */}
+              <LabelFilterDropdown
+                labels={availableLabels}
+                selectedLabels={selectedLabels}
+                labelFilterMode={labelFilterMode}
+                includeNoLabels={includeNoLabels}
+                onLabelsChange={(labels) => setPRListFilters({ selectedLabels: labels })}
+                onModeChange={(mode) => setPRListFilters({ labelFilterMode: mode })}
+                onIncludeNoLabelsChange={(include) => setPRListFilters({ includeNoLabels: include })}
+                theme={theme}
+                prCounts={labelPRCounts}
+              />
 
               {/* Author filter with checkbox list */}
               <div className="relative" ref={authorDropdownRef}>
