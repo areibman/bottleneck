@@ -1539,6 +1539,127 @@ export class GitHubAPI {
     });
   }
 
+  async closeIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state: "closed",
+    });
+
+    return data as Issue;
+  }
+
+  async reopenIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state: "open",
+    });
+
+    return data as Issue;
+  }
+
+  async getRepoLabels(
+    owner: string,
+    repo: string,
+  ): Promise<Array<{ name: string; color: string; description: string | null }>> {
+    const { data } = await this.octokit.issues.listLabelsForRepo({
+      owner,
+      repo,
+      per_page: 100,
+    });
+
+    return data.map(label => ({
+      name: label.name,
+      color: label.color,
+      description: label.description,
+    }));
+  }
+
+  async createLabel(
+    owner: string,
+    repo: string,
+    name: string,
+    color: string,
+    description?: string,
+  ): Promise<{ name: string; color: string; description: string | null }> {
+    const { data } = await this.octokit.issues.createLabel({
+      owner,
+      repo,
+      name,
+      color,
+      description,
+    });
+
+    return {
+      name: data.name,
+      color: data.color,
+      description: data.description,
+    };
+  }
+
+  async addIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ): Promise<Array<{ name: string; color: string }>> {
+    const { data } = await this.octokit.issues.addLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels,
+    });
+
+    return data.map(label => ({
+      name: label.name,
+      color: label.color,
+    }));
+  }
+
+  async removeIssueLabel(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    label: string,
+  ): Promise<void> {
+    await this.octokit.issues.removeLabel({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      name: label,
+    });
+  }
+
+  async setIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ): Promise<Array<{ name: string; color: string }>> {
+    const { data } = await this.octokit.issues.setLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels,
+    });
+
+    return data.map(label => ({
+      name: label.name,
+      color: label.color,
+    }));
+  }
+
   async getCurrentUser() {
     const { data } = await this.octokit.users.getAuthenticated();
     return data;
