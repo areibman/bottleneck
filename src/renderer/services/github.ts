@@ -1499,13 +1499,26 @@ export class GitHubAPI {
     owner: string,
     repo: string,
     issueNumber: number,
-    body: string,
+    body?: string,
+    params?: { state?: "open" | "closed"; labels?: string[] },
   ): Promise<Issue> {
     const { data } = await this.octokit.issues.update({
       owner,
       repo,
       issue_number: issueNumber,
       body,
+      ...params,
+    });
+
+    return data as Issue;
+  }
+
+  async closeIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
+    const { data } = await this.octokit.issues.update({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      state: "closed",
     });
 
     return data as Issue;

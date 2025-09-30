@@ -21,6 +21,8 @@ interface IssueState {
   setFilter: (key: keyof IssueFilters, value: any) => void;
   setFilters: (filters: IssueFilters) => void;
   resetFilters: () => void;
+  closeIssues: (issueKeys: string[]) => void;
+  updateIssueLabels: (key: string, labels: { name: string; color: string }[]) => void;
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
@@ -123,6 +125,30 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         assignee: "all",
         author: "all",
       },
+    });
+  },
+
+  closeIssues: (issueKeys: string[]) => {
+    set((state) => {
+      const newIssues = new Map(state.issues);
+      issueKeys.forEach((key) => {
+        const issue = newIssues.get(key);
+        if (issue) {
+          newIssues.set(key, { ...issue, state: "closed" });
+        }
+      });
+      return { issues: newIssues };
+    });
+  },
+
+  updateIssueLabels: (key: string, labels: { name: string; color: string }[]) => {
+    set((state) => {
+      const newIssues = new Map(state.issues);
+      const issue = newIssues.get(key);
+      if (issue) {
+        newIssues.set(key, { ...issue, labels });
+      }
+      return { issues: newIssues };
     });
   },
 }));
