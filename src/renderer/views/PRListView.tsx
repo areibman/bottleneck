@@ -4,7 +4,9 @@ import { GitPullRequest } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
+import { useTeamsStore } from "../stores/teamsStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { TeamAuthorDropdown } from "../components/teams/TeamAuthorDropdown";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
@@ -50,8 +52,7 @@ export default function PRListView() {
     setPRListFilters,
   } = useUIStore();
   const { token } = useAuthStore();
-  const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
-  const authorDropdownRef = useRef<HTMLDivElement>(null);
+  const { getSelectedAuthors, isAuthorInSelectedTeams } = useTeamsStore();
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -69,22 +70,19 @@ export default function PRListView() {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
-        setShowAuthorDropdown(false);
-      }
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setShowStatusDropdown(false);
       }
     };
 
-    if (showAuthorDropdown || showStatusDropdown) {
+    if (showStatusDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAuthorDropdown, showStatusDropdown]);
+  }, [showStatusDropdown]);
 
 
   // Removed automatic stats fetching - was causing performance issues
@@ -281,10 +279,13 @@ export default function PRListView() {
 
     // Step 2: Apply filters
     const filteredPRs = repoFilteredPRs.filter((pr) => {
-      // Author filter
+      // Author filter - check both individual selections and team memberships
+      const teamAuthors = getSelectedAuthors();
       const authorMatches = selectedAuthors.size === 0 ||
         selectedAuthors.has("all") ||
-        selectedAuthors.has(pr.user.login);
+        selectedAuthors.has(pr.user.login) ||
+        teamAuthors.includes(pr.user.login) ||
+        isAuthorInSelectedTeams(pr.user.login);
 
       // Status filter
       const prStatus = getPRStatus(pr);
@@ -722,164 +723,13 @@ export default function PRListView() {
                 )}
               </div>
 
-              {/* Author filter with checkbox list */}
-              <div className="relative" ref={authorDropdownRef}>
-                <button
-                  onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
-                  className={cn(
-                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[150px] max-w-[250px]",
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
-                      : "bg-white border-gray-300 hover:bg-gray-100"
-                  )}
-                >
-                  {selectedAuthors.size === 1 && !selectedAuthors.has("all") ? (
-                    <>
-                      {(() => {
-                        const authorLogin = Array.from(selectedAuthors)[0];
-                        const author = authors.find(a => a.login === authorLogin);
-                        return author ? (
-                          <>
-                            <img
-                              src={author.avatar_url}
-                              alt={author.login}
-                              className="w-4 h-4 rounded-full flex-shrink-0"
-                            />
-                            <span className={cn(
-                              "truncate",
-                              theme === "dark" ? "text-gray-300" : "text-gray-700"
-                            )}>
-                              {author.login}
-                            </span>
-                          </>
-                        ) : (
-                          <span className={cn(
-                            "truncate",
-                            theme === "dark" ? "text-gray-300" : "text-gray-700"
-                          )}>
-                            {authorLogin}
-                          </span>
-                        );
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      {selectedAuthors.size > 1 && !selectedAuthors.has("all") ? (
-                        <>
-                          <div className="flex -space-x-2">
-                            {Array.from(selectedAuthors)
-                              .slice(0, 3)
-                              .map(authorLogin => {
-                                const author = authors.find(a => a.login === authorLogin);
-                                return author ? (
-                                  <img
-                                    key={author.login}
-                                    src={author.avatar_url}
-                                    alt={author.login}
-                                    className="w-4 h-4 rounded-full border border-gray-800"
-                                    style={{
-                                      borderColor: theme === "dark" ? "#1f2937" : "#ffffff"
-                                    }}
-                                  />
-                                ) : null;
-                              })}
-                            {selectedAuthors.size > 3 && (
-                              <div className={cn(
-                                "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-medium border",
-                                theme === "dark"
-                                  ? "bg-gray-700 text-gray-300 border-gray-800"
-                                  : "bg-gray-200 text-gray-700 border-white"
-                              )}>
-                                +{selectedAuthors.size - 3}
-                              </div>
-                            )}
-                          </div>
-                          <span className={cn(
-                            "truncate",
-                            theme === "dark" ? "text-gray-300" : "text-gray-700"
-                          )}>
-                            {selectedAuthors.size} selected
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Authors:</span>
-                          <span className={cn(
-                            "truncate",
-                            theme === "dark" ? "text-gray-300" : "text-gray-700"
-                          )}>
-                            {selectedAuthors.size === 0 || selectedAuthors.has("all")
-                              ? "All"
-                              : `${selectedAuthors.size} selected`}
-                          </span>
-                        </>
-                      )}
-                    </>
-                  )}
-                </button>
-
-                {showAuthorDropdown && (
-                  <div
-                    className={cn(
-                      "absolute top-full mt-1 right-0 z-50 min-w-[200px] rounded-md shadow-lg border",
-                      theme === "dark"
-                        ? "bg-gray-800 border-gray-700"
-                        : "bg-white border-gray-200"
-                    )}
-                  >
-                    <div className="p-2 max-h-64 overflow-y-auto">
-                      {/* All Authors option */}
-                      <label
-                        className={cn(
-                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
-                          theme === "dark"
-                            ? "hover:bg-gray-700"
-                            : "hover:bg-gray-50"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedAuthors.size === 0 || selectedAuthors.has("all")}
-                          onChange={() => handleAuthorToggle("all")}
-                          className="rounded"
-                        />
-                        <span className="text-sm font-medium">All Authors</span>
-                      </label>
-
-                      <div className={cn(
-                        "my-1 border-t",
-                        theme === "dark" ? "border-gray-700" : "border-gray-200"
-                      )} />
-
-                      {/* Individual authors */}
-                      {authors.map(author => (
-                        <label
-                          key={author.login}
-                          className={cn(
-                            "flex items-center space-x-2 p-2 rounded cursor-pointer",
-                            theme === "dark"
-                              ? "hover:bg-gray-700"
-                              : "hover:bg-gray-50"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedAuthors.has(author.login)}
-                            onChange={() => handleAuthorToggle(author.login)}
-                            className="rounded"
-                          />
-                          <img
-                            src={author.avatar_url}
-                            alt={author.login}
-                            className="w-5 h-5 rounded-full"
-                          />
-                          <span className="text-sm">{author.login}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Author filter with teams support */}
+              <TeamAuthorDropdown
+                availableAuthors={authors}
+                selectedAuthors={selectedAuthors}
+                onAuthorToggle={handleAuthorToggle}
+                className="min-w-[150px] max-w-[250px]"
+              />
             </div>
           )}
         </div>

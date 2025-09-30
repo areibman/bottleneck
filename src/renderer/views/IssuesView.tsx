@@ -4,10 +4,12 @@ import { AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
+import { useTeamsStore } from "../stores/teamsStore";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import { getLabelColors } from "../utils/labelColors";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { TeamAuthorDropdown } from "../components/teams/TeamAuthorDropdown";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 
@@ -134,9 +136,11 @@ export default function IssuesView() {
   const { issues, loading, fetchIssues, filters, setFilter } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
+  const { getSelectedAuthors, isAuthorInSelectedTeams } = useTeamsStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
   );
+  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (selectedRepo) {
@@ -149,23 +153,38 @@ export default function IssuesView() {
     issues.forEach((issue) => {
       authorMap.set(issue.user.login, issue.user);
     });
-
-    const authorOptions: DropdownOption<string>[] = [
-      { value: "all", label: "All Authors" },
-      ...Array.from(authorMap.values()).map((author) => ({
-        value: author.login,
-        label: author.login,
-        icon: (
-          <img
-            src={author.avatar_url}
-            alt={author.login}
-            className="w-4 h-4 rounded-full"
-          />
-        ),
-      })),
-    ];
-    return authorOptions;
+    return Array.from(authorMap.values());
   }, [issues]);
+  
+  const handleAuthorToggle = useCallback(
+    (authorLogin: string) => {
+      setSelectedAuthors(prev => {
+        const newSet = new Set(prev);
+        if (authorLogin === "all") {
+          if (newSet.size === 0 || !newSet.has("all")) {
+            const allAuthors = new Set([
+              "all",
+              ...authors.map((author) => author.login),
+            ]);
+            return allAuthors;
+          }
+          return new Set();
+        }
+
+        if (newSet.has(authorLogin)) {
+          newSet.delete(authorLogin);
+          newSet.delete("all");
+        } else {
+          newSet.add(authorLogin);
+          if (authors.every((author) => newSet.has(author.login))) {
+            newSet.add("all");
+          }
+        }
+        return newSet;
+      });
+    },
+    [authors],
+  );
 
   const agents = useMemo(() => {
     const agentMap = new Map<string, { login: string; avatar_url: string }>();
@@ -227,11 +246,15 @@ export default function IssuesView() {
         }
       }
 
-      // Author filter
-      if (
-        filters.author !== "all" &&
-        issue.user.login !== filters.author
-      ) {
+      // Author filter - check both individual selections and team memberships
+      const teamAuthors = getSelectedAuthors();
+      const authorMatches = selectedAuthors.size === 0 ||
+        selectedAuthors.has("all") ||
+        selectedAuthors.has(issue.user.login) ||
+        teamAuthors.includes(issue.user.login) ||
+        isAuthorInSelectedTeams(issue.user.login);
+      
+      if (!authorMatches) {
         return false;
       }
 
@@ -337,11 +360,11 @@ export default function IssuesView() {
               onChange={setSortBy}
               labelPrefix="Sort by: "
             />
-            <Dropdown
-              options={authors}
-              value={filters.author}
-              onChange={(value) => setFilter("author", value)}
-              labelPrefix="Author: "
+            <TeamAuthorDropdown
+              availableAuthors={authors}
+              selectedAuthors={selectedAuthors}
+              onAuthorToggle={handleAuthorToggle}
+              className="min-w-[150px] max-w-[250px]"
             />
             <Dropdown
               options={agents}
