@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -10,26 +10,48 @@ import { getLabelColors } from "../utils/labelColors";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
+import LabelSelector from "../components/LabelSelector";
 
 const IssueItem = React.memo(
   ({
     issue,
+    isSelected,
     onIssueClick,
+    onToggleSelect,
     theme,
   }: {
     issue: Issue;
+    isSelected: boolean;
     onIssueClick: (issue: Issue) => void;
+    onToggleSelect: (e: React.MouseEvent, issueNumber: number) => void;
     theme: "light" | "dark";
   }) => {
     return (
       <div
         className={cn(
-          "px-4 py-3 cursor-pointer",
+          "px-4 py-3 cursor-pointer flex items-start space-x-3",
           theme === "dark" ? "hover:bg-gray-800" : "hover:bg-gray-100",
+          isSelected && (theme === "dark" ? "bg-gray-800" : "bg-gray-100")
         )}
         onClick={() => onIssueClick(issue)}
       >
-        <div className="flex items-start space-x-3">
+        <button
+          onClick={(e) => onToggleSelect(e, issue.number)}
+          className={cn(
+            "flex-shrink-0 mt-1 p-0.5 rounded transition-colors",
+            theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-200"
+          )}
+        >
+          {isSelected ? (
+            <CheckSquare className="w-4 h-4 text-blue-500" />
+          ) : (
+            <Square className={cn(
+              "w-4 h-4",
+              theme === "dark" ? "text-gray-400" : "text-gray-500"
+            )} />
+          )}
+        </button>
+        <div className="flex items-start space-x-3 flex-1">
           <div className="flex-shrink-0 mt-1">
             {issue.state === "open" ? (
               <div title="Open">
@@ -131,18 +153,37 @@ const sortOptions: DropdownOption<SortByType>[] = [
 
 export default function IssuesView() {
   const navigate = useNavigate();
-  const { issues, loading, fetchIssues, filters, setFilter } = useIssueStore();
+  const { 
+    issues, 
+    loading, 
+    fetchIssues, 
+    filters, 
+    setFilter,
+    selectedIssues,
+    toggleIssueSelection,
+    clearSelection,
+    selectAll,
+    closeIssues,
+    reopenIssues,
+    fetchRepoLabels,
+    repoLabels,
+    addLabelsToIssues,
+    removeLabelsFromIssues
+  } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
   );
+  const [bulkLabelsToAdd, setBulkLabelsToAdd] = useState<string[]>([]);
+  const [bulkLabelsToRemove, setBulkLabelsToRemove] = useState<string[]>([]);
 
   useEffect(() => {
     if (selectedRepo) {
       fetchIssues(selectedRepo.owner, selectedRepo.name);
+      fetchRepoLabels(selectedRepo.owner, selectedRepo.name);
     }
-  }, [selectedRepo, fetchIssues]);
+  }, [selectedRepo, fetchIssues, fetchRepoLabels]);
 
   const authors = useMemo(() => {
     const authorMap = new Map<string, { login: string; avatar_url: string }>();
@@ -292,6 +333,69 @@ export default function IssuesView() {
     [navigate, selectedRepo],
   );
 
+  const handleToggleSelect = useCallback(
+    (e: React.MouseEvent, issueNumber: number) => {
+      e.stopPropagation();
+      toggleIssueSelection(issueNumber);
+    },
+    [toggleIssueSelection]
+  );
+
+  const handleCloseSelected = useCallback(async () => {
+    if (selectedRepo && selectedIssues.size > 0) {
+      await closeIssues(
+        selectedRepo.owner,
+        selectedRepo.name,
+        Array.from(selectedIssues)
+      );
+    }
+  }, [selectedRepo, selectedIssues, closeIssues]);
+
+  const handleReopenSelected = useCallback(async () => {
+    if (selectedRepo && selectedIssues.size > 0) {
+      await reopenIssues(
+        selectedRepo.owner,
+        selectedRepo.name,
+        Array.from(selectedIssues)
+      );
+    }
+  }, [selectedRepo, selectedIssues, reopenIssues]);
+
+  const handleApplyLabels = useCallback(async () => {
+    if (selectedRepo && selectedIssues.size > 0) {
+      const issueNumbers = Array.from(selectedIssues);
+      
+      if (bulkLabelsToAdd.length > 0) {
+        await addLabelsToIssues(
+          selectedRepo.owner,
+          selectedRepo.name,
+          issueNumbers,
+          bulkLabelsToAdd
+        );
+      }
+      
+      if (bulkLabelsToRemove.length > 0) {
+        await removeLabelsFromIssues(
+          selectedRepo.owner,
+          selectedRepo.name,
+          issueNumbers,
+          bulkLabelsToRemove
+        );
+      }
+      
+      setBulkLabelsToAdd([]);
+      setBulkLabelsToRemove([]);
+    }
+  }, [selectedRepo, selectedIssues, bulkLabelsToAdd, bulkLabelsToRemove, addLabelsToIssues, removeLabelsFromIssues]);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedIssues.size === filteredIssues.length) {
+      clearSelection();
+    } else {
+      selectAll(filteredIssues.map(issue => issue.number));
+    }
+  }, [selectedIssues, filteredIssues, clearSelection, selectAll]);
+
   if (!selectedRepo) {
     return <WelcomeView />;
   }
@@ -331,6 +435,79 @@ export default function IssuesView() {
           </h1>
 
           <div className="flex items-center space-x-2">
+            {selectedIssues.size > 0 && (
+              <>
+                <div className="flex items-center space-x-2 mr-4">
+                  <button
+                    onClick={handleSelectAll}
+                    className={cn(
+                      "p-1.5 rounded transition-colors",
+                      theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-200"
+                    )}
+                    title={selectedIssues.size === filteredIssues.length ? "Deselect all" : "Select all"}
+                  >
+                    {selectedIssues.size === filteredIssues.length ? (
+                      <CheckSquare className="w-4 h-4 text-blue-500" />
+                    ) : (
+                      <Square className={cn(
+                        "w-4 h-4",
+                        theme === "dark" ? "text-gray-400" : "text-gray-500"
+                      )} />
+                    )}
+                  </button>
+                  <span className={cn(
+                    "text-sm",
+                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                  )}>
+                    {selectedIssues.size} selected
+                  </span>
+                  <button
+                    onClick={clearSelection}
+                    className={cn(
+                      "p-1.5 rounded transition-colors",
+                      theme === "dark" ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-200 text-gray-600"
+                    )}
+                    title="Clear selection"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center space-x-2 border-l pl-4">
+                  <button
+                    onClick={handleCloseSelected}
+                    className={cn(
+                      "px-3 py-1.5 rounded text-sm font-medium transition-colors",
+                      theme === "dark"
+                        ? "bg-purple-600 hover:bg-purple-700 text-white"
+                        : "bg-purple-500 hover:bg-purple-600 text-white"
+                    )}
+                  >
+                    Close Issues
+                  </button>
+                  <button
+                    onClick={handleReopenSelected}
+                    className={cn(
+                      "px-3 py-1.5 rounded text-sm font-medium transition-colors",
+                      theme === "dark"
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : "bg-green-500 hover:bg-green-600 text-white"
+                    )}
+                  >
+                    Reopen Issues
+                  </button>
+                  <div className="flex items-center space-x-2">
+                    <LabelSelector
+                      availableLabels={repoLabels}
+                      selectedLabels={bulkLabelsToAdd}
+                      onAddLabel={(label) => setBulkLabelsToAdd([...bulkLabelsToAdd, label])}
+                      onRemoveLabel={(label) => setBulkLabelsToAdd(bulkLabelsToAdd.filter(l => l !== label))}
+                      onApply={handleApplyLabels}
+                      showApplyButton={true}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
             <Dropdown<SortByType>
               options={sortOptions}
               value={sortBy}
@@ -390,7 +567,9 @@ export default function IssuesView() {
               <IssueItem
                 key={issue.id}
                 issue={issue}
+                isSelected={selectedIssues.has(issue.number)}
                 onIssueClick={handleIssueClick}
+                onToggleSelect={handleToggleSelect}
                 theme={theme}
               />
             ))}
