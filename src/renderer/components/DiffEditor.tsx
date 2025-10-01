@@ -109,7 +109,14 @@ export function DiffEditor({
   } = useOverlayResize();
 
   useEffect(() => {
+    console.log('🔄 File changed:', file.filename, 'Resetting editor state');
     setIsInitializing(true);
+    setDiffEditorReady(false); // Reset editor ready state when file changes
+    diffEditorRef.current = null; // Clear editor ref to prevent stale listeners
+
+    // Reset decoration refs to prevent stale decoration IDs
+    commentDecorationsRef.current = { original: [], modified: [] };
+    hoverDecorationsRef.current = { original: [], modified: [] };
 
     // Default to full file view only if full file content is available
     const hasFullContent = !(originalContent === undefined && modifiedContent === undefined);
@@ -128,6 +135,7 @@ export function DiffEditor({
 
     // Small delay to prevent flicker when switching files
     const timer = setTimeout(() => {
+      console.log('✅ Initialization complete for:', file.filename);
       setIsInitializing(false);
     }, 50);
 
@@ -179,6 +187,20 @@ export function DiffEditor({
   const commentThreads = useMemo(() => {
     const threads = buildThreads(comments);
 
+    console.log('Building comment threads:', {
+      commentsCount: comments.length,
+      threadsCount: threads.length,
+      showFullFile,
+      hasPatchMappings: !!patchMappings,
+      comments: comments.map(c => ({
+        id: c.id,
+        line: c.line,
+        original_line: c.original_line,
+        side: c.side,
+        path: c.path,
+      })),
+    });
+
     return threads
       .map((thread) => {
         const rootComment = thread.comments[0];
@@ -226,12 +248,21 @@ export function DiffEditor({
         const normalizedStart = Math.min(startLineNumber, endLineNumber);
         const normalizedEnd = Math.max(startLineNumber, endLineNumber);
 
-        return {
+        const mappedThread = {
           ...thread,
           lineNumber: normalizedEnd,
           startLineNumber: normalizedStart,
           endLineNumber: normalizedEnd,
         };
+
+        console.log('Mapped thread:', {
+          threadId: thread.id,
+          originalLine: thread.lineNumber,
+          mappedLine: normalizedEnd,
+          side: thread.side,
+        });
+
+        return mappedThread;
       })
       .sort((a, b) => a.lineNumber - b.lineNumber);
   }, [comments, mapLineForSide, mapPositionForSide]);
@@ -317,7 +348,9 @@ export function DiffEditor({
         .filter((thread) => thread.side === "RIGHT")
         .flatMap(lineDecoration),
     );
-  }, [commentThreads]);
+
+    console.log('✨ Applied decorations for', commentThreads.length, 'comment threads');
+  }, [commentThreads, diffEditorReady]);
 
   useEffect(() => {
     return () => {
@@ -378,23 +411,35 @@ export function DiffEditor({
   const handleMouseDown = useCallback(
     (side: CommentSide) =>
       (e: MonacoEditorType.IEditorMouseEvent) => {
+        console.log('🖱️ Mouse down event:', {
+          side,
+          targetType: e.target.type,
+          lineNumber: e.target.position?.lineNumber,
+          leftButton: e.event.leftButton
+        });
+
         if (
           e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
           e.target.type !==
           monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
           e.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
         ) {
+          console.log('❌ Ignoring click - not in gutter area');
           return;
         }
 
-        if (!e.event.leftButton) return;
+        if (!e.event.leftButton) {
+          console.log('❌ Ignoring click - not left button');
+          return;
+        }
 
         const lineNumber = e.target.position?.lineNumber;
-        if (!lineNumber) return;
+        if (!lineNumber) {
+          console.log('❌ No line number found');
+          return;
+        }
 
-        // In patch view, we need to map the editor line number to the actual file line number
-        // This is a simplified mapping - in reality we'd need to parse the patch to get accurate mappings
-        console.log('Clicked on editor line', lineNumber, 'side', side);
+        console.log('✅ Valid gutter click on line', lineNumber, 'side', side);
 
         const selectionRange = getSelectionRangeForSide(side);
         const startRange = selectionRange ? selectionRange.start : lineNumber;
@@ -509,10 +554,21 @@ export function DiffEditor({
   );
 
   useEffect(() => {
+    console.log('📡 Event listener setup effect triggered:', {
+      diffEditorReady,
+      hasEditor: !!diffEditorRef.current,
+      file: file.filename
+    });
+
     disposablesRef.current.forEach((sub) => sub.dispose());
     disposablesRef.current = [];
 
-    if (!diffEditorReady || !diffEditorRef.current) return;
+    if (!diffEditorReady || !diffEditorRef.current) {
+      console.log('⏸️ Skipping event listener setup - editor not ready');
+      return;
+    }
+
+    console.log('🎧 Setting up event listeners for:', file.filename);
 
     const diffEditor = diffEditorRef.current;
     const originalEditor = diffEditor.getOriginalEditor();
@@ -528,12 +584,14 @@ export function DiffEditor({
     ];
 
     disposablesRef.current = subscriptions;
+    console.log('✅ Event listeners attached successfully');
 
     return () => {
+      console.log('🧹 Cleaning up event listeners for:', file.filename);
       subscriptions.forEach((sub) => sub.dispose());
       disposablesRef.current = [];
     };
-  }, [diffEditorReady, handleMouseDown, handleMouseMove, handleMouseLeave]);
+  }, [diffEditorReady, handleMouseDown, handleMouseMove, handleMouseLeave, file.filename]);
 
   useEffect(() => {
     if (!activeOverlay) return;
@@ -753,7 +811,7 @@ export function DiffEditor({
   // Get the position in the diff for a given editor line
   const getDiffPositionForEditorLine = useCallback(
     (editorLine: number, side: CommentSide): number | undefined => {
-      if (!file.patch || showFullFile) {
+      if (!file.patch) {
         return undefined;
       }
 
@@ -761,6 +819,31 @@ export function DiffEditor({
         return undefined;
       }
 
+      // In full file view, we need to map the editor line to a patch line first
+      if (showFullFile) {
+        const fileLine = editorLine; // In full file view, editor line = file line
+        // Find the corresponding row in patch mappings
+        const row = patchMappings.rows.find((r) => {
+          if (side === "LEFT") {
+            return r.originalLineNumber === fileLine;
+          } else {
+            return r.modifiedLineNumber === fileLine;
+          }
+        });
+
+        if (!row) {
+          return undefined;
+        }
+
+        const position =
+          side === "LEFT"
+            ? row.originalDiffPosition
+            : row.modifiedDiffPosition;
+
+        return position ?? undefined;
+      }
+
+      // In patch view, editor line directly maps to patch rows
       if (editorLine <= 0 || editorLine > patchMappings.rows.length) {
         return undefined;
       }
@@ -780,12 +863,7 @@ export function DiffEditor({
   const getDiffHunkForLine = useCallback((targetLine: number, side: CommentSide): string | undefined => {
     if (!file.patch) return undefined;
 
-    // When showFullFile is true, we're showing the full file content, not the patch
-    // In this case, we can't generate a proper diff hunk
-    if (showFullFile) {
-      console.warn('Cannot create comments when viewing full file - switch to diff view');
-      return undefined;
-    }
+    // Note: targetLine should be the file line number, not editor line number
 
     const lines = file.patch.split('\n');
     let currentHunkHeader = '';
@@ -857,7 +935,7 @@ export function DiffEditor({
 
     console.warn(`Could not find diff hunk for line ${targetLine} on ${side} side`);
     return undefined;
-  }, [file.patch, showFullFile]);
+  }, [file.patch]);
 
   const handleCommentSubmit = useCallback(async () => {
     if (!activeOverlay || !canSubmitComments || !token) return;
@@ -883,15 +961,27 @@ export function DiffEditor({
         const isMultiLineSelection = startLine !== endLine;
         const isMultiLineApi = startLineForApi !== endLineForApi;
 
-        // Try to use position-based API first (more reliable for patch view)
-        const position = getDiffPositionForEditorLine(endLine, side);
+        console.log('Comment submission debug:', {
+          showFullFile,
+          hasPatch: Boolean(file.patch),
+          editorLine: endLine,
+          fileLine: endLineForApi,
+          side,
+          isMultiLine: isMultiLineSelection,
+        });
 
-        if (!isMultiLineSelection && !isMultiLineApi && position !== undefined) {
-          // Use position-based API
+        // In full file view, always use line-based API
+        // In patch view, use position-based API for single-line comments
+        const position = !showFullFile ? getDiffPositionForEditorLine(endLine, side) : undefined;
+
+        // Use position-based API only in patch view for single-line comments
+        if (!showFullFile && !isMultiLineSelection && !isMultiLineApi && position !== undefined) {
+          // Use position-based API (only works in patch view)
           console.log('Creating comment with position:', {
             path: file.filename,
             position,
             editorLine: endLine,
+            fileLine: endLineForApi,
             side,
           });
 
@@ -921,12 +1011,30 @@ export function DiffEditor({
           });
           setCommentDraft("");
         } else {
-          // Fallback to line-based API when position not available (multi-line)
+          // Fallback to line-based API when position not available (multi-line or position undefined)
+
+          if (!file.patch) {
+            console.error('No patch available for file', file.filename);
+            setCommentError('No diff available for this file. Cannot create comment.');
+            setIsSubmittingComment(false);
+            return;
+          }
+
           const diffHunk = getDiffHunkForLine(endLineForApi, side);
 
           if (!diffHunk) {
-            console.error('Unable to get diff hunk for line', endLineForApi, 'side', side);
-            setCommentError('Cannot comment on this line. Make sure you are in diff view and commenting on a changed line.');
+            console.error('Unable to get diff hunk:', {
+              file: file.filename,
+              fileLine: endLineForApi,
+              editorLine: endLine,
+              side,
+              showFullFile,
+              patchPreview: file.patch?.slice(0, 200)
+            });
+            const errorMsg = showFullFile
+              ? `Cannot comment on line ${endLineForApi}. This line is not part of the diff changes. Only modified lines can be commented on.`
+              : `Cannot find diff hunk for line ${endLineForApi}. The line may not be part of the changes.`;
+            setCommentError(errorMsg);
             setIsSubmittingComment(false);
             return;
           }
@@ -1088,8 +1196,10 @@ export function DiffEditor({
               diffAlgorithm: "advanced",
             }}
             onMount={(editor) => {
+              console.log('🏗️ Monaco editor mounted for:', file.filename);
               diffEditorRef.current = editor;
               setDiffEditorReady(true);
+              console.log('✅ diffEditorReady set to true');
 
               try {
                 const originalModel = editor.getOriginalEditor().getModel();

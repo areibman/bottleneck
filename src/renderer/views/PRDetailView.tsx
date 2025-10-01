@@ -771,7 +771,6 @@ export default function PRDetailView() {
                   currentUser={currentUser}
                   onCommentAdded={(newComment) => {
                     setReviewComments((prev) => [...prev, newComment]);
-                    loadPRData();
                   }}
                 />
               )}
