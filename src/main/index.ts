@@ -319,3 +319,39 @@ ipcMain.handle("settings:clear", async () => {
     return { success: false, error: (error as Error).message };
   }
 });
+
+// Zoom IPC handlers
+ipcMain.handle("app:zoom-in", () => {
+  if (mainWindow) {
+    const currentZoom = mainWindow.webContents.getZoomLevel();
+    const newZoom = Math.min(currentZoom + 0.5, 5); // Max zoom level 5
+    mainWindow.webContents.setZoomLevel(newZoom);
+    return { success: true, zoomLevel: newZoom };
+  }
+  return { success: false, error: "No window available" };
+});
+
+ipcMain.handle("app:zoom-out", () => {
+  if (mainWindow) {
+    const currentZoom = mainWindow.webContents.getZoomLevel();
+    const newZoom = Math.max(currentZoom - 0.5, -5); // Min zoom level -5
+    mainWindow.webContents.setZoomLevel(newZoom);
+    return { success: true, zoomLevel: newZoom };
+  }
+  return { success: false, error: "No window available" };
+});
+
+ipcMain.handle("app:zoom-reset", () => {
+  if (mainWindow) {
+    mainWindow.webContents.setZoomLevel(0);
+    return { success: true, zoomLevel: 0 };
+  }
+  return { success: false, error: "No window available" };
+});
+
+ipcMain.handle("app:get-zoom-level", () => {
+  if (mainWindow) {
+    return { success: true, zoomLevel: mainWindow.webContents.getZoomLevel() };
+  }
+  return { success: false, error: "No window available" };
+});

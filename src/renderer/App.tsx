@@ -37,7 +37,8 @@ function App() {
       Promise.all([loadSettings(), checkAuth()]).finally(() =>
         setLoading(false),
       );
-      setupKeyboardShortcuts();
+      const cleanup = setupKeyboardShortcuts();
+      return cleanup;
     } else {
       console.error("window.electron is not available!");
       setLoading(false);
