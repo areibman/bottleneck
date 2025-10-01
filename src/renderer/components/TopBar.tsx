@@ -15,6 +15,8 @@ import {
   Activity,
   AlertTriangle,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useUIStore } from "../stores/uiStore";
@@ -46,6 +48,26 @@ export default function TopBar() {
   const [activeSection, setActiveSection] = React.useState<"recent" | "all">(
     "recent",
   );
+
+  const handleZoomIn = async () => {
+    console.log("Zoom In clicked");
+    try {
+      const result = await window.electron.app.zoomIn();
+      console.log("Zoom In result:", result);
+    } catch (error) {
+      console.error("Zoom In error:", error);
+    }
+  };
+
+  const handleZoomOut = async () => {
+    console.log("Zoom Out clicked");
+    try {
+      const result = await window.electron.app.zoomOut();
+      console.log("Zoom Out result:", result);
+    } catch (error) {
+      console.error("Zoom Out error:", error);
+    }
+  };
 
   // Group repositories by organization
   const groupedRepos = React.useMemo(() => {
@@ -492,6 +514,30 @@ export default function TopBar() {
 
       {/* Right side actions */}
       <div className="flex items-center space-x-3">
+        {/* Zoom controls */}
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={handleZoomOut}
+            className={cn(
+              "p-2 rounded transition-colors no-drag",
+              theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100",
+            )}
+            title="Zoom Out (⌘-)"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleZoomIn}
+            className={cn(
+              "p-2 rounded transition-colors no-drag",
+              theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100",
+            )}
+            title="Zoom In (⌘+)"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+        </div>
+
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}

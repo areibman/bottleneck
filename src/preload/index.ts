@@ -35,6 +35,10 @@ const electronAPI = {
   app: {
     selectDirectory: () => ipcRenderer.invoke("app:select-directory"),
     getVersion: () => ipcRenderer.invoke("app:get-version"),
+    zoomIn: () => ipcRenderer.invoke("app:zoom-in"),
+    zoomOut: () => ipcRenderer.invoke("app:zoom-out"),
+    zoomReset: () => ipcRenderer.invoke("app:zoom-reset"),
+    getZoomLevel: () => ipcRenderer.invoke("app:get-zoom-level"),
   },
 
   // Utility functions

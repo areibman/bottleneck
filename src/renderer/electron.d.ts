@@ -47,6 +47,10 @@ declare global {
       app: {
         selectDirectory: () => Promise<string | null>;
         getVersion: () => Promise<string>;
+        zoomIn: () => Promise<{ success: boolean; zoomLevel?: number; error?: string }>;
+        zoomOut: () => Promise<{ success: boolean; zoomLevel?: number; error?: string }>;
+        zoomReset: () => Promise<{ success: boolean; zoomLevel?: number; error?: string }>;
+        getZoomLevel: () => Promise<{ success: boolean; zoomLevel?: number; error?: string }>;
       };
 
       utils: {
