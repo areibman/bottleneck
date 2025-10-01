@@ -311,6 +311,7 @@ export default function PRDetailView() {
         [],
     };
     setPR(updatedPR);
+    updatePR(updatedPR);
 
     try {
       const api = new GitHubAPI(token);
@@ -327,17 +328,13 @@ export default function PRDetailView() {
       // Reload PR data to get the actual server state
       await loadPRData();
 
-      // Update the PR in the global store
-      if (pr) {
-        updatePR(updatedPR);
-      }
-
       console.log("Successfully approved PR #" + pr.number);
     } catch (error: any) {
       console.error("Failed to approve PR:", error);
 
       // Revert the optimistic update on error
       setPR(pr);
+      updatePR(pr);
 
       // Provide more detailed error message
       let errorMessage = "Failed to approve pull request.";
@@ -393,6 +390,7 @@ export default function PRDetailView() {
         pr.approvedBy?.filter((r) => r.login !== currentUser.login) || [],
     };
     setPR(updatedPR);
+    updatePR(updatedPR);
 
     try {
       const api = new GitHubAPI(token);
@@ -412,17 +410,13 @@ export default function PRDetailView() {
       // Reload PR data to get the actual server state
       await loadPRData();
 
-      // Update the PR in the global store
-      if (pr) {
-        updatePR(updatedPR);
-      }
-
       console.log("Successfully requested changes for PR #" + pr.number);
     } catch (error: any) {
       console.error("Failed to request changes:", error);
 
       // Revert the optimistic update on error
       setPR(pr);
+      updatePR(pr);
 
       let errorMessage = "Failed to request changes.";
 
@@ -450,7 +444,7 @@ export default function PRDetailView() {
     setIsMerging(true);
     try {
       const api = new GitHubAPI(token);
-      await api.mergePullRequest(
+      const mergeResult = await api.mergePullRequest(
         owner,
         repo,
         pr.number,
@@ -459,8 +453,22 @@ export default function PRDetailView() {
         pr.body || undefined,
       );
 
+      console.log("PR merged successfully:", mergeResult);
+
+      // Optimistically update the PR state immediately
+      const mergedPR = {
+        ...pr,
+        merged: true,
+        state: "closed" as const,
+        merged_at: new Date().toISOString(),
+        merge_commit_sha: mergeResult.sha || pr.merge_commit_sha,
+      };
+      setPR(mergedPR);
+      updatePR(mergedPR);
+
       setShowMergeConfirm(false);
-      // Reload PR data to reflect the merge
+
+      // Reload PR data to get the complete server state
       await loadPRData();
     } catch (error) {
       console.error("Failed to merge PR:", error);
@@ -499,6 +507,7 @@ export default function PRDetailView() {
       draft: targetDraftState,
     };
     setPR(updatedPR);
+    updatePR(updatedPR);
 
     try {
       const api = new GitHubAPI(token);
@@ -528,6 +537,7 @@ export default function PRDetailView() {
 
       // Revert the optimistic update on error
       setPR(pr);
+      updatePR(pr);
 
       let errorMessage = "Failed to update pull request draft status.";
 
