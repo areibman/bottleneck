@@ -1,7 +1,8 @@
 # Bottleneck
 
-Vim for Code Review. 
+Superhuman for Code Review. 
 <img width="1123" height="704" alt="image" src="https://github.com/user-attachments/assets/ca56ef76-f4d9-4ca2-ac6d-145a03c7e85d" />
+<img width="1503" height="843" alt="Screenshot 2025-10-01 at 3 15 05 PM" src="https://github.com/user-attachments/assets/6660d688-6633-4ec8-8310-28154052b61a" />
 
 A native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for power-review workflows. Fast GitHub PR and branch management optimized for teams building code with AI agents like Claude Code, Cursor, Devin, and Codex.
 
