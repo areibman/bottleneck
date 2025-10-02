@@ -91,13 +91,21 @@
       "node_modules/**/*"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {
-      "target": "AppImage"
+      "target": ["AppImage", "deb", "rpm", "snap", "tar.gz"]
     },
     "win": {
-      "target": "nsis"
-    }
+      "target": ["nsis", "msi", "zip"]
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "draft"
+      }
+    ]
   }
 }

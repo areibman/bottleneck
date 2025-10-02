@@ -11,6 +11,7 @@ import Store from "electron-store";
 import installExtension, {
   REACT_DEVELOPER_TOOLS,
 } from "electron-devtools-installer";
+import { autoUpdater } from "electron-updater";
 
 const isDev = process.env.NODE_ENV === "development";
 const store = new Store();
@@ -140,6 +141,16 @@ app.whenReady().then(async () => {
       "Chrome DevTools Performance Profiler is available in the Performance tab",
     );
   }
+
+  // Auto-updater configuration (GitHub provider is auto-detected from package.json publish)
+  autoUpdater.autoDownload = false; // manual download trigger
+  autoUpdater.on("update-available", () => {
+    mainWindow?.webContents.send("update:available");
+  });
+  autoUpdater.on("update-downloaded", () => {
+    mainWindow?.webContents.send("update:downloaded");
+  });
+  autoUpdater.checkForUpdates();
 
   // Initialize database
   database = new Database();
@@ -354,4 +365,18 @@ ipcMain.handle("app:get-zoom-level", () => {
     return { success: true, zoomLevel: mainWindow.webContents.getZoomLevel() };
   }
   return { success: false, error: "No window available" };
+});
+
+// IPC for triggering update download and install
+ipcMain.handle("update:download", async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("update:install", () => {
+  autoUpdater.quitAndInstall();
 });
