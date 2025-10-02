@@ -15,6 +15,9 @@
     "electron": "electron .",
     "start": "npm run build && npm run electron",
     "dist": "npm run build && electron-builder",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "npm run dist",
     "postinstall": "electron-rebuild",
     "rebuild": "electron-rebuild"
   },
@@ -41,10 +44,12 @@
     "electron-builder": "^24.9.1",
     "electron-devtools-installer": "^4.0.0",
     "electron-rebuild": "^3.2.9",
+    "electron-notarize": "^2.2.1",
     "eslint": "^8.56.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "postcss": "^8.5.6",
+    "@changesets/cli": "^2.27.8",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
@@ -63,6 +68,8 @@
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.3.9",
+    "electron-log": "^5.2.0",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
@@ -83,21 +90,62 @@
   "build": {
     "appId": "com.bottleneck.app",
     "productName": "Bottleneck",
+    "asar": true,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
       "node_modules/**/*"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "draft"
+      }
+    ],
+    "generateReleaseNotes": true,
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "gatekeeperAssess": false,
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "universalApp": true
     },
-    "linux": {
-      "target": "AppImage"
+    "dmg": {
+      "artifactName": "${productName}-${version}.dmg"
     },
     "win": {
-      "target": "nsis"
-    }
+      "target": [
+        "nsis",
+        "msi",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "snap",
+        "tar.gz"
+      ],
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+    },
+    "afterSign": "scripts/notarize.js"
   }
 }
