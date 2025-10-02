@@ -7,6 +7,7 @@ import { Database } from "./database";
 import { GitHubAuth } from "./auth";
 import { GitOperations } from "./git";
 import { createMenu } from "./menu";
+import { AppUpdater } from "./updater";
 import Store from "electron-store";
 import installExtension, {
   REACT_DEVELOPER_TOOLS,
@@ -19,6 +20,7 @@ let mainWindow: BrowserWindow | null = null;
 let database: Database;
 let githubAuth: GitHubAuth;
 let gitOps: GitOperations;
+let appUpdater: AppUpdater;
 
 function createWindow() {
   const preloadPath = path.resolve(path.join(__dirname, "../preload/index.js"));
@@ -158,6 +160,12 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  // Initialize auto-updater after window is created
+  if (mainWindow) {
+    appUpdater = new AppUpdater(mainWindow);
+    appUpdater.initialize(true);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -354,4 +362,59 @@ ipcMain.handle("app:get-zoom-level", () => {
     return { success: true, zoomLevel: mainWindow.webContents.getZoomLevel() };
   }
   return { success: false, error: "No window available" };
+});
+
+// Auto-updater IPC handlers
+ipcMain.handle("updater:check-for-updates", async () => {
+  try {
+    const result = await appUpdater.checkForUpdates();
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:download-update", async () => {
+  try {
+    await appUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:quit-and-install", () => {
+  try {
+    appUpdater.quitAndInstall();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:get-status", () => {
+  try {
+    const status = appUpdater.getStatus();
+    return { success: true, data: status };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:set-channel", async (_, channel: "stable" | "beta" | "alpha") => {
+  try {
+    appUpdater.setChannel(channel);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:set-auto-download", async (_, enabled: boolean) => {
+  try {
+    appUpdater.setAutoDownload(enabled);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
 });
