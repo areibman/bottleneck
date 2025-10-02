@@ -15,8 +15,26 @@
     "electron": "electron .",
     "start": "npm run build && npm run electron",
     "dist": "npm run build && electron-builder",
+    "dist:all": "npm run build && electron-builder -mwl",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
     "postinstall": "electron-rebuild",
-    "rebuild": "electron-rebuild"
+    "rebuild": "electron-rebuild",
+    "version": "node scripts/version.js",
+    "version:current": "node scripts/version.js current",
+    "version:patch": "node scripts/version.js bump patch",
+    "version:minor": "node scripts/version.js bump minor",
+    "version:major": "node scripts/version.js bump major",
+    "version:alpha": "node scripts/version.js bump alpha",
+    "version:beta": "node scripts/version.js bump beta",
+    "version:release": "node scripts/version.js bump release",
+    "version:tag": "node scripts/version.js tag",
+    "release": "npm run version:patch && npm run dist:all",
+    "release:minor": "npm run version:minor && npm run dist:all",
+    "release:major": "npm run version:major && npm run dist:all",
+    "release:beta": "npm run version:beta && npm run dist:all",
+    "release:alpha": "npm run version:alpha && npm run dist:all"
   },
   "keywords": [
     "electron",
@@ -62,7 +80,9 @@
     "clsx": "^2.1.0",
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
+    "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
@@ -81,23 +101,6 @@
     "zustand": "^4.4.7"
   },
   "build": {
-    "appId": "com.bottleneck.app",
-    "productName": "Bottleneck",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "node_modules/**/*"
-    ],
-    "mac": {
-      "category": "public.app-category.developer-tools"
-    },
-    "linux": {
-      "target": "AppImage"
-    },
-    "win": {
-      "target": "nsis"
-    }
+    "extends": "./electron-builder.yml"
   }
 }
