@@ -3,7 +3,8 @@ import { persist } from "zustand/middleware";
 
 import type { SortByType } from "../types/prList";
 
-type PRStatusFilter = "open" | "draft" | "merged" | "closed";
+export type PRStatusFilter = "open" | "draft" | "merged" | "closed";
+export type LabelFilterMode = "or" | "and" | "not" | "only";
 
 interface UIState {
   sidebarOpen: boolean;
@@ -30,6 +31,9 @@ interface UIState {
     sortBy: SortByType;
     selectedAuthors: string[];
     selectedStatuses: PRStatusFilter[];
+    selectedLabels: string[];
+    labelFilterMode: LabelFilterMode;
+    includeNoLabels: boolean;
   };
 
   toggleSidebar: () => void;
@@ -73,6 +77,9 @@ export const useUIStore = create<UIState>()(
         sortBy: "updated",
         selectedAuthors: [],
         selectedStatuses: ["open", "draft"],
+        selectedLabels: [],
+        labelFilterMode: "or",
+        includeNoLabels: false,
       },
 
       toggleSidebar: () =>
@@ -131,6 +138,9 @@ export const useUIStore = create<UIState>()(
             sortBy: "updated",
             selectedAuthors: [],
             selectedStatuses: ["open", "draft"],
+            selectedLabels: [],
+            labelFilterMode: "or",
+            includeNoLabels: false,
           },
         }),
     }),
@@ -140,7 +150,8 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         sidebarWidth: state.sidebarWidth,
         sidebarOpen: state.sidebarOpen,
-      }), // Persist theme, sidebar width and open state
+        prListFilters: state.prListFilters,
+      }), // Persist theme, sidebar, and filter state
     },
   ),
 );
