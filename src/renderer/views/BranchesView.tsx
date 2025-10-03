@@ -13,6 +13,10 @@ import {
   Shield,
   GitPullRequest,
   X,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Minus,
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useUIStore } from "../stores/uiStore";
@@ -40,6 +44,7 @@ interface Branch {
   ahead: number;
   behind: number;
   current?: boolean;
+  checkStatus?: import("../services/github").BranchCheckStatus;
 }
 
 type SortByType = "updated" | "name" | "ahead-behind";
@@ -111,6 +116,21 @@ export default function BranchesView() {
         selectedRepo.default_branch,
       );
     }
+  }, [selectedRepo, token, fetchBranches]);
+
+  // Auto-refresh every 3 minutes (configurable later)
+  useEffect(() => {
+    if (!selectedRepo || !token) return;
+    const interval = setInterval(() => {
+      fetchBranches(
+        selectedRepo.owner,
+        selectedRepo.name,
+        token,
+        selectedRepo.default_branch,
+        true,
+      );
+    }, 180_000);
+    return () => clearInterval(interval);
   }, [selectedRepo, token, fetchBranches]);
 
   const handleRefresh = useCallback(() => {
@@ -474,6 +494,51 @@ export default function BranchesView() {
     const isSelected = selectedBranches.has(branch.name);
     const status = getBranchStatus(branch);
     const existingPR = branchToPRMap.get(branch.name);
+
+    // Determine check status icon and color
+    const renderCheckStatus = () => {
+      const status = branch.checkStatus;
+      if (!status || status.state === "none") {
+        return (
+          <Minus className="w-3 h-3 text-gray-400" title="No checks" />
+        );
+      }
+      if (status.state === "success") {
+        return (
+          <CheckCircle2
+            className="w-3 h-3 text-green-500"
+            title={`Checks passed • Updated ${formatDistanceToNow(new Date(status.updated_at), { addSuffix: true })}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(status.url, "_blank");
+            }}
+          />
+        );
+      }
+      if (status.state === "failure") {
+        return (
+          <XCircle
+            className="w-3 h-3 text-red-500"
+            title={`Checks failed • Updated ${formatDistanceToNow(new Date(status.updated_at), { addSuffix: true })}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(status.url, "_blank");
+            }}
+          />
+        );
+      }
+      // running / queued
+      return (
+        <Loader2
+          className="w-3 h-3 text-yellow-500 animate-spin"
+          title="Checks running"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (status.url) window.open(status.url, "_blank");
+          }}
+        />
+      );
+    };
 
     const handleBranchClick = () => {
       // If branch has a PR, navigate to PR details
