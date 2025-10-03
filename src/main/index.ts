@@ -7,6 +7,7 @@ import { Database } from "./database";
 import { GitHubAuth } from "./auth";
 import { GitOperations } from "./git";
 import { createMenu } from "./menu";
+import { appUpdater } from "./updater";
 import Store from "electron-store";
 import installExtension, {
   REACT_DEVELOPER_TOOLS,
@@ -120,6 +121,13 @@ function createWindow() {
   // Set up application menu
   const menu = createMenu(mainWindow);
   Menu.setApplicationMenu(menu);
+
+  // Initialize auto-updater
+  if (!isDev) {
+    appUpdater.setMainWindow(mainWindow);
+    // Start checking for updates every hour
+    appUpdater.startAutoUpdateCheck(60);
+  }
 }
 
 // App event handlers
@@ -354,4 +362,48 @@ ipcMain.handle("app:get-zoom-level", () => {
     return { success: true, zoomLevel: mainWindow.webContents.getZoomLevel() };
   }
   return { success: false, error: "No window available" };
+});
+
+// Auto-updater IPC handlers
+ipcMain.handle("updater:check-for-updates", async () => {
+  try {
+    appUpdater.checkForUpdates(true);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:download-update", async () => {
+  try {
+    appUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:quit-and-install", async () => {
+  try {
+    appUpdater.quitAndInstall();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:get-version", () => {
+  return {
+    current: appUpdater.getCurrentVersion(),
+    channel: appUpdater.getUpdateChannel(),
+  };
+});
+
+ipcMain.handle("updater:set-channel", async (_, channel: 'latest' | 'beta' | 'alpha') => {
+  try {
+    appUpdater.setUpdateChannel(channel);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
 });

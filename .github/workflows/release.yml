@@ -1,0 +1,389 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-beta*'
+      - 'v*.*.*-alpha*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+          - draft
+          - prerelease
+          - release
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  NODE_VERSION: '18'
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Generate changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: ".github/changelog-config.json"
+          toTag: ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            ## What's Changed
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Installation
+            
+            Download the appropriate installer for your platform below:
+            
+            ### Windows
+            - **Installer**: `Bottleneck-Setup-*.exe` (Recommended)
+            - **MSI**: `Bottleneck-*.msi` (For enterprise deployment)
+            - **Portable**: `Bottleneck-*-portable.zip` (No installation required)
+            
+            ### macOS
+            - **DMG**: `Bottleneck-*.dmg` (Recommended)
+            - **ZIP**: `Bottleneck-*.zip` (Alternative)
+            
+            ### Linux
+            - **AppImage**: `Bottleneck-*.AppImage` (Universal, recommended)
+            - **DEB**: `Bottleneck-*.deb` (Debian/Ubuntu)
+            - **RPM**: `Bottleneck-*.rpm` (Fedora/RHEL)
+            - **Snap**: `Bottleneck-*.snap` (Snap Store)
+            
+            ### Checksums
+            SHA256 checksums are provided for all artifacts in `checksums.txt`
+          draft: ${{ github.event.inputs.release_type == 'draft' || true }}
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || github.event.inputs.release_type == 'prerelease' }}
+
+  build:
+    name: Build - ${{ matrix.os }}
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows builds
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            node-arch: x64
+          - os: windows-latest
+            platform: windows
+            arch: ia32
+            node-arch: ia32
+          
+          # macOS builds
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            node-arch: x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            node-arch: arm64
+          
+          # Linux builds
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            node-arch: x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            node-arch: arm64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          architecture: ${{ matrix.node-arch }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install platform-specific dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm fakeroot dpkg
+
+      - name: Setup code signing (Windows)
+        if: runner.os == 'Windows' && env.WINDOWS_CERT_BASE64 != ''
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $cert = [System.Convert]::FromBase64String($env:WINDOWS_CERT_BASE64)
+          $certPath = "cert.pfx"
+          [System.IO.File]::WriteAllBytes($certPath, $cert)
+          echo "CSC_LINK=$certPath" >> $env:GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=$env:WINDOWS_CERT_PASSWORD" >> $env:GITHUB_ENV
+
+      - name: Setup code signing (macOS)
+        if: runner.os == 'macOS' && env.APPLE_CERT_BASE64 != ''
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_NAME="build.keychain"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          
+          # Decode certificate
+          echo "$APPLE_CERT_BASE64" | base64 --decode > certificate.p12
+          
+          # Create and configure keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          
+          # Import certificate
+          security import certificate.p12 -k "$KEYCHAIN_NAME" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          
+          # Set environment variables for electron-builder
+          echo "CSC_LINK=certificate.p12" >> $GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=$APPLE_CERT_PASSWORD" >> $GITHUB_ENV
+          echo "APPLE_ID=$APPLE_ID" >> $GITHUB_ENV
+          echo "APPLE_ID_PASSWORD=$APPLE_ID_PASSWORD" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> $GITHUB_ENV
+
+      - name: Build application
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          USE_HARD_LINKS: false
+        run: |
+          npm run build
+          
+      - name: Build and package Electron app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          USE_HARD_LINKS: false
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            npm run dist -- --win --${{ matrix.arch }}
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            npm run dist -- --mac --${{ matrix.arch }}
+          else
+            npm run dist -- --linux --${{ matrix.arch }}
+          fi
+        shell: bash
+
+      - name: Generate checksums
+        run: |
+          cd release
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            Get-FileHash -Algorithm SHA256 *.* | ForEach-Object { "$($_.Hash)  $($_.Path | Split-Path -Leaf)" } | Out-File -FilePath checksums-${{ matrix.platform }}-${{ matrix.arch }}.txt
+          else
+            shasum -a 256 * > checksums-${{ matrix.platform }}-${{ matrix.arch }}.txt
+          fi
+        shell: pwsh
+
+      - name: Upload artifacts to GitHub Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const releaseId = '${{ needs.create-release.outputs.release_id }}';
+            const releaseDir = 'release';
+            
+            // Get all files in release directory
+            const files = fs.readdirSync(releaseDir);
+            
+            for (const file of files) {
+              const filePath = path.join(releaseDir, file);
+              const stats = fs.statSync(filePath);
+              
+              if (stats.isFile()) {
+                console.log(`Uploading ${file}...`);
+                
+                const data = fs.readFileSync(filePath);
+                
+                // Determine content type
+                let contentType = 'application/octet-stream';
+                if (file.endsWith('.dmg')) contentType = 'application/x-apple-diskimage';
+                else if (file.endsWith('.exe')) contentType = 'application/x-msdownload';
+                else if (file.endsWith('.msi')) contentType = 'application/x-msi';
+                else if (file.endsWith('.deb')) contentType = 'application/x-debian-package';
+                else if (file.endsWith('.rpm')) contentType = 'application/x-rpm';
+                else if (file.endsWith('.AppImage')) contentType = 'application/x-executable';
+                else if (file.endsWith('.snap')) contentType = 'application/x-snap';
+                else if (file.endsWith('.zip')) contentType = 'application/zip';
+                else if (file.endsWith('.tar.gz')) contentType = 'application/gzip';
+                else if (file.endsWith('.txt')) contentType = 'text/plain';
+                
+                try {
+                  await github.rest.repos.uploadReleaseAsset({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    release_id: releaseId,
+                    name: file,
+                    data: data,
+                    headers: {
+                      'content-type': contentType,
+                      'content-length': stats.size
+                    }
+                  });
+                  console.log(`✓ Uploaded ${file}`);
+                } catch (error) {
+                  console.error(`✗ Failed to upload ${file}: ${error.message}`);
+                }
+              }
+            }
+
+      - name: Upload artifacts to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
+          path: release/
+          retention-days: 7
+
+  finalize-release:
+    name: Finalize Release
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Combine checksums
+        run: |
+          cat artifacts/*/checksums-*.txt > combined-checksums.txt
+          echo "Combined checksums:"
+          cat combined-checksums.txt
+
+      - name: Upload combined checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: combined-checksums.txt
+          asset_name: checksums.txt
+          asset_content_type: text/plain
+
+      - name: Publish release (if not draft)
+        if: github.event.inputs.release_type == 'release' || (!contains(github.ref_name, 'beta') && !contains(github.ref_name, 'alpha') && github.event_name == 'push')
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: '${{ needs.create-release.outputs.release_id }}',
+              draft: false
+            });
+            console.log('Release published!');
+
+  cleanup:
+    name: Cleanup
+    needs: [finalize-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Clean up old releases
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Keep only the latest 5 releases per channel
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+            
+            const channels = {
+              stable: [],
+              beta: [],
+              alpha: []
+            };
+            
+            for (const release of releases.data) {
+              if (release.tag_name.includes('beta')) {
+                channels.beta.push(release);
+              } else if (release.tag_name.includes('alpha')) {
+                channels.alpha.push(release);
+              } else {
+                channels.stable.push(release);
+              }
+            }
+            
+            for (const [channel, channelReleases] of Object.entries(channels)) {
+              if (channelReleases.length > 5) {
+                console.log(`Cleaning up old ${channel} releases...`);
+                const toDelete = channelReleases.slice(5);
+                
+                for (const release of toDelete) {
+                  if (!release.draft) {
+                    console.log(`Deleting ${release.tag_name}...`);
+                    await github.rest.repos.deleteRelease({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      release_id: release.id
+                    });
+                  }
+                }
+              }
+            }

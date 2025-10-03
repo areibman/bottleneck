@@ -1,0 +1,114 @@
+{
+  "categories": [
+    {
+      "title": "## 🚀 Features",
+      "labels": ["feature", "enhancement"]
+    },
+    {
+      "title": "## 🐛 Bug Fixes",
+      "labels": ["fix", "bug", "bugfix"]
+    },
+    {
+      "title": "## 🔧 Maintenance",
+      "labels": ["chore", "maintenance", "dependencies"]
+    },
+    {
+      "title": "## 📦 Dependencies",
+      "labels": ["dependencies"]
+    },
+    {
+      "title": "## 📝 Documentation",
+      "labels": ["documentation", "docs"]
+    },
+    {
+      "title": "## 🎨 UI/UX",
+      "labels": ["ui", "ux", "design"]
+    },
+    {
+      "title": "## ⚡ Performance",
+      "labels": ["performance", "optimization"]
+    },
+    {
+      "title": "## 🔒 Security",
+      "labels": ["security"]
+    },
+    {
+      "title": "## 🧪 Testing",
+      "labels": ["test", "testing"]
+    },
+    {
+      "title": "## 🏗️ Refactoring",
+      "labels": ["refactor", "refactoring"]
+    }
+  ],
+  "ignore_labels": [
+    "ignore",
+    "skip-changelog"
+  ],
+  "sort": "ASC",
+  "template": "${{CHANGELOG}}\n\n**Full Changelog**: ${{OWNER}}/${{REPO}}/compare/${{PREVIOUS_TAG}}...${{CURRENT_TAG}}",
+  "pr_template": "- ${{TITLE}} by @${{AUTHOR}} in #${{NUMBER}}",
+  "empty_template": "- No changes",
+  "label_extractor": [
+    {
+      "pattern": "^(feat|feature)",
+      "target": "feature"
+    },
+    {
+      "pattern": "^fix",
+      "target": "bug"
+    },
+    {
+      "pattern": "^docs",
+      "target": "documentation"
+    },
+    {
+      "pattern": "^chore",
+      "target": "chore"
+    },
+    {
+      "pattern": "^perf",
+      "target": "performance"
+    },
+    {
+      "pattern": "^refactor",
+      "target": "refactor"
+    },
+    {
+      "pattern": "^test",
+      "target": "test"
+    },
+    {
+      "pattern": "^security",
+      "target": "security"
+    }
+  ],
+  "duplicate_filter": {
+    "pattern": "^(Merge pull request|Merge branch)",
+    "on": "title"
+  },
+  "transformers": [
+    {
+      "pattern": "^(.+?)(?:\\s*\\(#(\\d+)\\))?$",
+      "target": "$1"
+    }
+  ],
+  "max_tags_to_fetch": 100,
+  "max_pull_requests": 200,
+  "max_back_track_time_days": 365,
+  "exclude_merge_branches": [
+    "main",
+    "master",
+    "develop"
+  ],
+  "tag_resolver": {
+    "method": "semver",
+    "filter": {
+      "pattern": "^v?\\d+\\.\\d+\\.\\d+.*$"
+    }
+  },
+  "base_branches": [
+    "main",
+    "master"
+  ]
+}
