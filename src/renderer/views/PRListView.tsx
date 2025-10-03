@@ -13,6 +13,9 @@ import WelcomeView from "./WelcomeView";
 import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
+import { useTeamStore } from "../stores/teamStore";
+import TeamModal from "../components/teams/TeamModal";
+import TeamsManagerModal from "../components/teams/TeamsManagerModal";
 
 type StatusType = PRStatusType; // Use the centralized type
 
@@ -55,6 +58,9 @@ export default function PRListView() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const { teams, addTeam, updateTeam, markTeamUsed } = useTeamStore();
+  const [showTeamCreateModal, setShowTeamCreateModal] = useState(false);
+  const [showTeamsManager, setShowTeamsManager] = useState(false);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -184,6 +190,46 @@ export default function PRListView() {
     });
     return Array.from(authorMap.values());
   }, [pullRequests]);
+
+  const handleTeamToggle = useCallback(
+    (teamId: string) => {
+      const team = teams.find((t) => t.id === teamId);
+      if (!team) return;
+      const members = team.members;
+      setPRListFilters((prev) => {
+        const newSet = new Set(prev.selectedAuthors);
+        const allSelected = members.every((m) => newSet.has(m));
+        if (allSelected) {
+          members.forEach((m) => newSet.delete(m));
+          newSet.delete("all");
+        } else {
+          members.forEach((m) => newSet.add(m));
+          // If we ended up selecting all available authors, mark as all
+          const allAuthorLogins = authors.map((a) => a.login);
+          if (allAuthorLogins.length > 0 && allAuthorLogins.every((login) => newSet.has(login))) {
+            newSet.add("all");
+          }
+        }
+        return {
+          ...prev,
+          selectedAuthors: Array.from(newSet),
+        };
+      });
+      markTeamUsed(teamId);
+    },
+    [teams, authors, setPRListFilters, markTeamUsed],
+  );
+
+  const handleCreateTeamSave = useCallback(
+    async (input: { id?: string; name: string; members: string[]; color?: string; icon?: string; description?: string; }) => {
+      if (input.id) {
+        await updateTeam(input.id, input);
+      } else {
+        await addTeam(input);
+      }
+    },
+    [addTeam, updateTeam],
+  );
 
   const handleAuthorToggle = useCallback(
     (authorLogin: string) => {
@@ -851,6 +897,74 @@ export default function PRListView() {
                         theme === "dark" ? "border-gray-700" : "border-gray-200"
                       )} />
 
+                      {/* Teams section */}
+                      {teams.length > 0 && (
+                        <div className="mb-1">
+                          <div className={cn(
+                            "px-2 py-1 text-[10px] uppercase tracking-wide font-semibold",
+                            theme === "dark" ? "text-gray-400" : "text-gray-500",
+                          )}>
+                            Teams
+                          </div>
+                          {teams.map((team) => {
+                            const allSelected = team.members.every((m) => selectedAuthors.has(m));
+                            const selectedCount = team.members.filter((m) => selectedAuthors.has(m)).length;
+                            const title = `${team.name}: ${team.members.join(", ")}`;
+                            return (
+                              <label
+                                key={team.id}
+                                title={title}
+                                className={cn(
+                                  "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                                  theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50",
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={allSelected}
+                                  onChange={() => handleTeamToggle(team.id)}
+                                  className="rounded"
+                                />
+                                {team.color && (
+                                  <span className="w-3 h-3 rounded" style={{ backgroundColor: team.color }} />
+                                )}
+                                <span className="text-sm truncate">
+                                  {team.icon ? `${team.icon} ` : ""}{team.name}
+                                  <span className={cn(
+                                    "ml-1 text-[11px]",
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600",
+                                  )}>
+                                    ({team.members.length}{selectedCount > 0 && !allSelected ? ` · ${selectedCount} selected` : ""})
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Teams actions */}
+                      <div className="flex items-center gap-2 px-2 py-1">
+                        <button
+                          onClick={() => setShowTeamCreateModal(true)}
+                          className={cn(
+                            "px-2 py-1 text-[11px] rounded border",
+                            theme === "dark" ? "border-gray-600 hover:bg-gray-700" : "border-gray-300 hover:bg-gray-100",
+                          )}
+                        >
+                          + Create New Team
+                        </button>
+                        <button
+                          onClick={() => setShowTeamsManager(true)}
+                          className={cn(
+                            "px-2 py-1 text-[11px] rounded border",
+                            theme === "dark" ? "border-gray-600 hover:bg-gray-700" : "border-gray-300 hover:bg-gray-100",
+                          )}
+                        >
+                          Manage Teams…
+                        </button>
+                      </div>
+
                       {/* Individual authors */}
                       {authors.map(author => (
                         <label
@@ -884,7 +998,7 @@ export default function PRListView() {
           )}
         </div>
       </div>
-
+      
       {/* PR List */}
       <div className="flex-1 overflow-y-auto">
         {showLoadingPlaceholder ? (
@@ -928,6 +1042,22 @@ export default function PRListView() {
           />
         )}
       </div>
+
+      {/* Modals */}
+      <TeamModal
+        isOpen={showTeamCreateModal}
+        onClose={() => setShowTeamCreateModal(false)}
+        onSave={handleCreateTeamSave}
+        initialTeam={null}
+        availableAuthors={authors}
+        theme={theme}
+      />
+      <TeamsManagerModal
+        isOpen={showTeamsManager}
+        onClose={() => setShowTeamsManager(false)}
+        theme={theme}
+        availableAuthors={authors}
+      />
     </div>
   );
 }
