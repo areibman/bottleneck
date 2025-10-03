@@ -20,6 +20,11 @@ interface Settings {
   notifyOnReview: boolean;
   notifyOnMention: boolean;
   notifyOnMerge: boolean;
+  notifyOnCheckStatusChange: boolean;
+
+  // GitHub Actions
+  autoRefreshChecks: boolean;
+  checkRefreshInterval: number; // in seconds
 
   // Advanced
   maxConcurrentRequests: number;
@@ -56,6 +61,11 @@ const defaultSettings: Settings = {
   notifyOnReview: true,
   notifyOnMention: true,
   notifyOnMerge: true,
+  notifyOnCheckStatusChange: true,
+
+  // GitHub Actions
+  autoRefreshChecks: true,
+  checkRefreshInterval: 30, // 30 seconds
 
   // Advanced
   maxConcurrentRequests: 10,
