@@ -1,0 +1,300 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-beta.*'
+      - 'v*.*.*-alpha.*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Check if pre-release
+        id: check_prerelease
+        run: |
+          if [[ "${{ steps.get_version.outputs.version }}" =~ (alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"* %s (%h)" --no-merges)
+          else
+            CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"* %s (%h)" --no-merges)
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            ## What's Changed
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Installation
+            
+            ### Windows
+            - **Installer**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-win-x64.exe`
+            - **MSI**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-win-x64.msi`
+            - **Portable**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-win-x64.zip`
+            
+            ### macOS
+            - **DMG**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-mac-universal.dmg`
+            - **ZIP**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-mac-universal.zip`
+            - Supports both Intel and Apple Silicon
+            
+            ### Linux
+            - **AppImage**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-linux-x64.AppImage`
+            - **Debian/Ubuntu**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-linux-x64.deb`
+            - **RedHat/Fedora**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-linux-x64.rpm`
+            - **Snap**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-linux-x64.snap`
+            - **Archive**: Download `Bottleneck-${{ steps.get_version.outputs.version }}-linux-x64.tar.gz`
+            
+            ## Checksums
+            
+            See `checksums.txt` for SHA256 checksums of all release files.
+            
+            ---
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREVIOUS_TAG...v${{ steps.get_version.outputs.version }}
+          draft: true
+          prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
+
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: universal
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools rpm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build Electron app (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Electron app (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Build Electron app (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate checksums (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path release/*.exe, release/*.msi, release/*.zip | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
+            "$hash  $($_.Name)" | Out-File -Append -FilePath release/checksums-win.txt
+          }
+
+      - name: Generate checksums (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd release
+          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+            shasum -a 256 *.dmg *.zip > checksums-mac.txt 2>/dev/null || true
+          else
+            sha256sum *.AppImage *.deb *.rpm *.snap *.tar.gz > checksums-linux.txt 2>/dev/null || true
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.msi
+            release/*.zip
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.snap
+            release/*.tar.gz
+            release/checksums-*.txt
+          retention-days: 5
+
+      - name: Upload release assets (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs').promises;
+            const path = require('path');
+            
+            const releaseId = ${{ needs.create-release.outputs.release_id }};
+            const releaseDir = 'release';
+            const files = await fs.readdir(releaseDir);
+            
+            const uploadFile = async (filePath, name) => {
+              const data = await fs.readFile(filePath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: releaseId,
+                name: name,
+                data: data
+              });
+            };
+            
+            for (const file of files) {
+              if (file.match(/\.(exe|msi|zip|txt)$/)) {
+                const filePath = path.join(releaseDir, file);
+                console.log(`Uploading ${file}...`);
+                await uploadFile(filePath, file);
+              }
+            }
+
+      - name: Upload release assets (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs').promises;
+            const path = require('path');
+            
+            const releaseId = ${{ needs.create-release.outputs.release_id }};
+            const releaseDir = 'release';
+            const files = await fs.readdir(releaseDir);
+            
+            const uploadFile = async (filePath, name) => {
+              const data = await fs.readFile(filePath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: releaseId,
+                name: name,
+                data: data
+              });
+            };
+            
+            for (const file of files) {
+              if (file.match(/\.(dmg|zip|txt)$/)) {
+                const filePath = path.join(releaseDir, file);
+                console.log(`Uploading ${file}...`);
+                await uploadFile(filePath, file);
+              }
+            }
+
+      - name: Upload release assets (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs').promises;
+            const path = require('path');
+            
+            const releaseId = ${{ needs.create-release.outputs.release_id }};
+            const releaseDir = 'release';
+            const files = await fs.readdir(releaseDir);
+            
+            const uploadFile = async (filePath, name) => {
+              const data = await fs.readFile(filePath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: releaseId,
+                name: name,
+                data: data
+              });
+            };
+            
+            for (const file of files) {
+              if (file.match(/\.(AppImage|deb|rpm|snap|tar\.gz|txt)$/)) {
+                const filePath = path.join(releaseDir, file);
+                console.log(`Uploading ${file}...`);
+                await uploadFile(filePath, file);
+              }
+            }
+
+  finalize-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            });

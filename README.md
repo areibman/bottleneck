@@ -69,6 +69,47 @@ npm run build
 npm run dist
 ```
 
+## Distribution & Releases
+
+Bottleneck includes a comprehensive automated release system that builds and distributes the app for all platforms through GitHub Releases.
+
+### Quick Start
+
+Create a release in 3 steps:
+
+```bash
+# 1. Install dependencies (first time only)
+npm install
+
+# 2. Bump version and create tag
+npm run version:patch  # or version:minor, version:major
+
+# 3. Push to trigger release workflow
+git push origin main --tags
+```
+
+The GitHub Actions workflow will automatically:
+- Build for Windows, macOS, and Linux
+- Create a GitHub Release with all binaries
+- Generate checksums for security verification
+- Enable auto-updates for users
+
+### Auto-Updates
+
+Users automatically receive update notifications when new versions are released. Updates download in the background and install on restart.
+
+### Documentation
+
+- **Quick Start**: [RELEASE_QUICKSTART.md](./RELEASE_QUICKSTART.md) - Get your first release published in 5 minutes
+- **Full Guide**: [RELEASE.md](./RELEASE.md) - Comprehensive release system documentation
+- **Setup Summary**: [SETUP_SUMMARY.md](./SETUP_SUMMARY.md) - Overview of what's included
+
+### Supported Platforms
+
+- **Windows**: `.exe`, `.msi`, `.zip`
+- **macOS**: `.dmg`, `.zip` (Universal binaries for Intel & Apple Silicon)
+- **Linux**: `.AppImage`, `.deb`, `.rpm`, `.snap`, `.tar.gz`
+
 ## Development
 
 ### Project Structure
@@ -94,10 +135,22 @@ bottleneck/
 
 ### Available Scripts
 
+**Development:**
 - `npm run dev` - Start development server with hot reload
 - `npm run build` - Build for production
-- `npm run dist` - Package the app for distribution
 - `npm run electron` - Run the built app
+
+**Distribution:**
+- `npm run dist` - Package for current platform
+- `npm run dist:win` - Build for Windows
+- `npm run dist:mac` - Build for macOS
+- `npm run dist:linux` - Build for Linux
+- `npm run dist:all` - Build for all platforms
+
+**Version Management:**
+- `npm run version:patch` - Bump patch version (0.1.5 → 0.1.6)
+- `npm run version:minor` - Bump minor version (0.1.5 → 0.2.0)
+- `npm run version:major` - Bump major version (0.1.5 → 1.0.0)
 
 ### React DevTools Profiler
 
@@ -168,7 +221,7 @@ If the React DevTools Profiler tab is missing inside Electron DevTools, walk thr
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) for details on our development workflow and how to submit Pull Requests.
 
 ## License
 

@@ -54,6 +54,18 @@ const electronAPI = {
     clear: () => ipcRenderer.invoke("settings:clear"),
   },
 
+  // Auto-updater operations
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke("updater:check-for-updates"),
+    downloadUpdate: () => ipcRenderer.invoke("updater:download-update"),
+    quitAndInstall: () => ipcRenderer.invoke("updater:quit-and-install"),
+    getStatus: () => ipcRenderer.invoke("updater:get-status"),
+    setChannel: (channel: "stable" | "beta" | "alpha") =>
+      ipcRenderer.invoke("updater:set-channel", channel),
+    setAutoDownload: (enabled: boolean) =>
+      ipcRenderer.invoke("updater:set-auto-download", enabled),
+  },
+
   // IPC event listeners
   on: (
     channel: string,
@@ -82,6 +94,7 @@ const electronAPI = {
       "toggle-diff-view",
       "toggle-whitespace",
       "show-shortcuts",
+      "update-status",
     ];
 
     if (validChannels.includes(channel)) {
