@@ -15,8 +15,7 @@
     "electron": "electron .",
     "start": "npm run build && npm run electron",
     "dist": "npm run build && electron-builder",
-    "postinstall": "electron-rebuild",
-    "rebuild": "electron-rebuild"
+    "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
     "electron",
@@ -28,6 +27,7 @@
   "license": "MIT",
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
@@ -59,6 +59,7 @@
     "@octokit/rest": "^20.0.2",
     "@tanstack/react-query": "^5.17.9",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "better-sqlite3": "^12.4.1",
     "clsx": "^2.1.0",
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
@@ -77,7 +78,6 @@
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "simple-git": "^3.22.0",
-    "sqlite3": "^5.1.7",
     "zustand": "^4.4.7"
   },
   "build": {
@@ -88,15 +88,42 @@
     },
     "files": [
       "dist/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/electron-devtools-installer/**/*",
+      "!node_modules/**/test/**/*",
+      "!node_modules/**/tests/**/*",
+      "!node_modules/**/*.md",
+      "!node_modules/**/.bin/**/*",
+      "!node_modules/monaco-editor/**/*",
+      "!node_modules/@monaco-editor/**/*",
+      "!node_modules/date-fns/locale/**/*",
+      "!node_modules/date-fns/esm/**/*",
+      "!node_modules/lucide-react/dist/esm/**/*",
+      "!node_modules/react-syntax-highlighter/node_modules/**/*",
+      "!node_modules/prismjs/**/*",
+      "!node_modules/highlight.js/**/*",
+      "!node_modules/refractor/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "icon": "icon.icns",
+      "category": "public.app-category.developer-tools",
+      "target": {
+        "target": "default",
+        "arch": [
+          "arm64",
+          "x64"
+        ]
+      }
     },
     "linux": {
+      "icon": "1024.png",
       "target": "AppImage"
     },
     "win": {
+      "icon": "icon.ico",
       "target": "nsis"
     }
   }

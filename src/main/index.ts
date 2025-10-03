@@ -8,9 +8,6 @@ import { GitHubAuth } from "./auth";
 import { GitOperations } from "./git";
 import { createMenu } from "./menu";
 import Store from "electron-store";
-import installExtension, {
-  REACT_DEVELOPER_TOOLS,
-} from "electron-devtools-installer";
 
 const isDev = process.env.NODE_ENV === "development";
 const store = new Store();
@@ -124,46 +121,56 @@ function createWindow() {
 
 // App event handlers
 app.whenReady().then(async () => {
-  // Install DevTools Extensions
-  if (isDev) {
-    // Install React Developer Tools
-    try {
-      const name = await installExtension(REACT_DEVELOPER_TOOLS);
-      console.log(`Added Extension: ${name}`);
-    } catch (err) {
-      console.log("An error occurred installing extensions: ", err);
+  try {
+    // Install DevTools Extensions
+    if (isDev) {
+      // Install React Developer Tools
+      try {
+        const { default: installExtension, REACT_DEVELOPER_TOOLS } = await import("electron-devtools-installer");
+        const name = await installExtension(REACT_DEVELOPER_TOOLS);
+        console.log(`Added Extension: ${name}`);
+      } catch (err) {
+        console.log("An error occurred installing extensions: ", err);
+      }
+
+      // The Chrome DevTools Performance Profiler is built-in
+      // It will be available in the Performance tab of DevTools
+      console.log(
+        "Chrome DevTools Performance Profiler is available in the Performance tab",
+      );
     }
 
-    // The Chrome DevTools Performance Profiler is built-in
-    // It will be available in the Performance tab of DevTools
-    console.log(
-      "Chrome DevTools Performance Profiler is available in the Performance tab",
+    // Initialize database
+    database = new Database();
+    await database.initialize();
+
+    // Initialize GitHub auth
+    githubAuth = new GitHubAuth(store);
+
+    // Initialize Git operations
+    gitOps = new GitOperations();
+
+    // Set default settings if they don't exist
+    if (!store.has("cloneLocation")) {
+      store.set("cloneLocation", "~/repos");
+      console.log("[Settings] Set default clone location to ~/repos");
+    }
+
+    createWindow();
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  } catch (error) {
+    console.error("Fatal error during app initialization:", error);
+    dialog.showErrorBox(
+      "Initialization Error",
+      `Failed to initialize application: ${(error as Error).message}\n\nStack: ${(error as Error).stack}`,
     );
+    app.quit();
   }
-
-  // Initialize database
-  database = new Database();
-  await database.initialize();
-
-  // Initialize GitHub auth
-  githubAuth = new GitHubAuth(store);
-
-  // Initialize Git operations
-  gitOps = new GitOperations();
-
-  // Set default settings if they don't exist
-  if (!store.has("cloneLocation")) {
-    store.set("cloneLocation", "~/repos");
-    console.log("[Settings] Set default clone location to ~/repos");
-  }
-
-  createWindow();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
 });
 
 app.on("window-all-closed", () => {

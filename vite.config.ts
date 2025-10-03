@@ -22,6 +22,9 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/renderer"),
     emptyOutDir: true,
+    rollupOptions: {
+      external: [],
+    },
   },
   resolve: {
     alias: {
@@ -34,6 +37,6 @@ export default defineConfig({
     port: 3000,
   },
   optimizeDeps: {
-    include: ["monaco-editor"],
+    include: ["monaco-editor", "react-complex-tree"],
   },
 });

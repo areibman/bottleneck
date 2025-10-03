@@ -1,10 +1,10 @@
-import * as sqlite3 from "sqlite3";
 import path from "path";
 import { app } from "electron";
 import fs from "fs";
+import BetterSqlite3 from "better-sqlite3";
 
 export class Database {
-  private db: sqlite3.Database | null = null;
+  private db: BetterSqlite3.Database | null = null;
   private dbPath: string;
 
   constructor() {
@@ -20,31 +20,30 @@ export class Database {
   }
 
   async initialize(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db = new sqlite3.Database(this.dbPath, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          // Enable foreign keys
-          this.db!.run("PRAGMA foreign_keys = ON");
+    try {
+      this.db = new BetterSqlite3(this.dbPath);
 
-          // Create tables
-          this.createTables();
+      // Enable foreign keys
+      this.db.pragma("foreign_keys = ON");
 
-          // Create indexes
-          this.createIndexes();
+      // Create tables
+      this.createTables();
 
-          resolve();
-        }
-      });
-    });
+      // Create indexes
+      this.createIndexes();
+
+      console.log("Database initialized successfully at:", this.dbPath);
+    } catch (err) {
+      console.error("Database initialization error:", err);
+      throw err;
+    }
   }
 
   private createTables(): void {
     if (!this.db) throw new Error("Database not initialized");
 
     // Repositories table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS repositories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         owner TEXT NOT NULL,
@@ -62,7 +61,7 @@ export class Database {
     `);
 
     // Pull requests table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS pull_requests (
         id INTEGER PRIMARY KEY,
         repository_id INTEGER NOT NULL,
@@ -95,7 +94,7 @@ export class Database {
     `);
 
     // Comments table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS comments (
         id INTEGER PRIMARY KEY,
         pull_request_id INTEGER NOT NULL,
@@ -116,7 +115,7 @@ export class Database {
     `);
 
     // Reviews table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS reviews (
         id INTEGER PRIMARY KEY,
         pull_request_id INTEGER NOT NULL,
@@ -131,7 +130,7 @@ export class Database {
     `);
 
     // Files table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pull_request_id INTEGER NOT NULL,
@@ -149,7 +148,7 @@ export class Database {
     `);
 
     // Branches table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS branches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         repository_id INTEGER NOT NULL,
@@ -169,7 +168,7 @@ export class Database {
     `);
 
     // PR groups table for prefix-based grouping
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS pr_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         repository_id INTEGER NOT NULL,
@@ -186,7 +185,7 @@ export class Database {
     `);
 
     // User preferences table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS preferences (
         key TEXT PRIMARY KEY,
         value TEXT,
@@ -195,7 +194,7 @@ export class Database {
     `);
 
     // Saved filters table
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS saved_filters (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -207,7 +206,7 @@ export class Database {
     `);
 
     // Draft reviews table for local autosave
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS draft_reviews (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pull_request_id INTEGER NOT NULL,
@@ -224,7 +223,7 @@ export class Database {
     if (!this.db) throw new Error("Database not initialized");
 
     // Indexes for performance
-    this.db.run(`
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_pr_repository ON pull_requests(repository_id);
       CREATE INDEX IF NOT EXISTS idx_pr_state ON pull_requests(state);
       CREATE INDEX IF NOT EXISTS idx_pr_author ON pull_requests(author_login);
@@ -239,86 +238,37 @@ export class Database {
   }
 
   async query(sql: string, params?: any[]): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        reject(new Error("Database not initialized"));
-        return;
-      }
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
 
-      this.db.all(sql, params || [], (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
-        }
-      });
-    });
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...(params || []));
   }
 
   async execute(sql: string, params?: any[]): Promise<any> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        reject(new Error("Database not initialized"));
-        return;
-      }
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
 
-      this.db.run(sql, params || [], function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ changes: this.changes, lastID: this.lastID });
-        }
-      });
-    });
+    const stmt = this.db.prepare(sql);
+    const result = stmt.run(...(params || []));
+    return { changes: result.changes, lastID: result.lastInsertRowid };
   }
 
   async transaction(fn: () => void): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        reject(new Error("Database not initialized"));
-        return;
-      }
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
 
-      this.db.serialize(() => {
-        this.db!.run("BEGIN TRANSACTION", (err) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-
-          try {
-            fn();
-            this.db!.run("COMMIT", (err) => {
-              if (err) {
-                this.db!.run("ROLLBACK");
-                reject(err);
-              } else {
-                resolve();
-              }
-            });
-          } catch (error) {
-            this.db!.run("ROLLBACK");
-            reject(error);
-          }
-        });
-      });
-    });
+    const transactionFn = this.db.transaction(fn);
+    transactionFn();
   }
 
   async close(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.db) {
-        this.db.close((err) => {
-          if (err) {
-            reject(err);
-          } else {
-            this.db = null;
-            resolve();
-          }
-        });
-      } else {
-        resolve();
-      }
-    });
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
   }
 }
