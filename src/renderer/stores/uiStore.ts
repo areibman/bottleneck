@@ -30,6 +30,7 @@ interface UIState {
     sortBy: SortByType;
     selectedAuthors: string[];
     selectedStatuses: PRStatusFilter[];
+    selectedLabels: string[];
   };
 
   toggleSidebar: () => void;
@@ -73,6 +74,7 @@ export const useUIStore = create<UIState>()(
         sortBy: "updated",
         selectedAuthors: [],
         selectedStatuses: ["open", "draft"],
+        selectedLabels: [],
       },
 
       toggleSidebar: () =>
@@ -131,6 +133,7 @@ export const useUIStore = create<UIState>()(
             sortBy: "updated",
             selectedAuthors: [],
             selectedStatuses: ["open", "draft"],
+            selectedLabels: [],
           },
         }),
     }),

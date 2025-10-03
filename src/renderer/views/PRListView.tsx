@@ -5,6 +5,7 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { getLabelColors } from "../utils/labelColors";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
@@ -55,6 +56,8 @@ export default function PRListView() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [showLabelDropdown, setShowLabelDropdown] = useState(false);
+  const labelDropdownRef = useRef<HTMLDivElement>(null);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -64,6 +67,10 @@ export default function PRListView() {
   const selectedStatuses = useMemo(
     () => new Set<StatusType>(prListFilters.selectedStatuses),
     [prListFilters.selectedStatuses],
+  );
+  const selectedLabels = useMemo(
+    () => new Set<string>(prListFilters.selectedLabels),
+    [prListFilters.selectedLabels],
   );
 
   // Close dropdown when clicking outside
@@ -75,16 +82,19 @@ export default function PRListView() {
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setShowStatusDropdown(false);
       }
+      if (labelDropdownRef.current && !labelDropdownRef.current.contains(event.target as Node)) {
+        setShowLabelDropdown(false);
+      }
     };
 
-    if (showAuthorDropdown || showStatusDropdown) {
+    if (showAuthorDropdown || showStatusDropdown || showLabelDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAuthorDropdown, showStatusDropdown]);
+  }, [showAuthorDropdown, showStatusDropdown, showLabelDropdown]);
 
 
   // Removed automatic stats fetching - was causing performance issues
@@ -265,6 +275,43 @@ export default function PRListView() {
     [setPRListFilters],
   );
 
+  const allLabels = useMemo(() => {
+    const map = new Map<string, { name: string; color?: string }>();
+    pullRequests.forEach((pr) => {
+      pr.labels?.forEach((label: any) => {
+        if (label?.name) {
+          map.set(label.name, { name: label.name, color: label.color });
+        }
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [pullRequests]);
+
+  const handleLabelToggle = useCallback(
+    (labelName: string) => {
+      setPRListFilters(prev => {
+        const newSet = new Set(prev.selectedLabels);
+        if (labelName === "all") {
+          if (newSet.size === 0 || !newSet.has("all")) {
+            const all = new Set(["all", ...allLabels.map(l => l.name)]);
+            return { ...prev, selectedLabels: Array.from(all) };
+          }
+          return { ...prev, selectedLabels: [] };
+        }
+        if (newSet.has(labelName)) {
+          newSet.delete(labelName);
+          newSet.delete("all");
+        } else {
+          newSet.add(labelName);
+          if (allLabels.every(l => newSet.has(l.name))) {
+            newSet.add("all");
+          }
+        }
+        return { ...prev, selectedLabels: Array.from(newSet) };
+      });
+    },
+    [allLabels, setPRListFilters],
+  );
 
   // Simplified filtering logic - cleaner and more maintainable
   const getFilteredPRs = useMemo(() => {
@@ -291,8 +338,14 @@ export default function PRListView() {
       const statusMatches = selectedStatuses.size === 0 ||
         selectedStatuses.has(prStatus);
 
-      // Both filters must pass
-      return authorMatches && statusMatches;
+      // Label filter (OR logic)
+      const labelNames = (pr.labels ?? []).map((l: any) => l?.name).filter(Boolean);
+      const labelMatches = selectedLabels.size === 0 ||
+        selectedLabels.has("all") ||
+        labelNames.some((name: string) => selectedLabels.has(name));
+
+      // All filters must pass
+      return authorMatches && statusMatches && labelMatches;
     });
 
     // Step 3: Sort PRs
@@ -312,6 +365,7 @@ export default function PRListView() {
     pullRequests,
     selectedAuthors,
     selectedStatuses,
+    selectedLabels,
     sortBy,
     selectedRepo,
     getPRStatus,
@@ -876,6 +930,83 @@ export default function PRListView() {
                           <span className="text-sm">{author.login}</span>
                         </label>
                       ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Label filter dropdown */}
+              <div className="relative" ref={labelDropdownRef}>
+                <button
+                  onClick={() => setShowLabelDropdown(!showLabelDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[150px] max-w-[250px]",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100",
+                  )}
+                >
+                  <span>Labels:</span>
+                  <span className={cn("truncate", theme === "dark" ? "text-gray-300" : "text-gray-700")}> 
+                    {selectedLabels.size === 0 || selectedLabels.has("all")
+                      ? "All"
+                      : `${selectedLabels.size} selected`}
+                  </span>
+                </button>
+
+                {showLabelDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[220px] max-h-80 overflow-y-auto rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200",
+                    )}
+                  >
+                    <div className="p-2">
+                      {/* All Labels option */}
+                      <label
+                        className={cn(
+                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                          theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedLabels.size === 0 || selectedLabels.has("all")}
+                          onChange={() => handleLabelToggle("all")}
+                          className="rounded"
+                        />
+                        <span className="text-sm font-medium">All Labels</span>
+                      </label>
+
+                      <div className={cn("my-1 border-t", theme === "dark" ? "border-gray-700" : "border-gray-200")} />
+
+                      {allLabels.map((label) => {
+                        const colors = getLabelColors(label.color || "#cccccc", theme);
+                        return (
+                          <label
+                            key={label.name}
+                            className={cn(
+                              "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                              theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedLabels.has(label.name)}
+                              onChange={() => handleLabelToggle(label.name)}
+                              className="rounded"
+                            />
+                            <span
+                              className="px-1.5 py-0.5 text-xs font-medium rounded"
+                              style={{ backgroundColor: colors.backgroundColor, color: colors.color }}
+                            >
+                              {label.name}
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
