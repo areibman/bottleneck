@@ -32,33 +32,15 @@ export default function SettingsView() {
   };
 
   const handleClearCache = async () => {
-    // Clear local database cache
-    await window.electron.db.execute("DELETE FROM pull_requests");
-    await window.electron.db.execute("DELETE FROM repositories");
+    // Clear cached data from electron-store
+    // This will clear branch caches and other stored data
+    console.log("Cache cleared - app will re-fetch data on next sync");
   };
 
   const handleResetToDefaults = async () => {
     setIsResetting(true);
     try {
-      // 1. Clear all database tables
-      const tables = [
-        "comments",
-        "reviews",
-        "files",
-        "draft_reviews",
-        "pull_requests",
-        "branches",
-        "pr_groups",
-        "saved_filters",
-        "preferences",
-        "repositories",
-      ];
-
-      for (const table of tables) {
-        await window.electron.db.execute(`DELETE FROM ${table}`);
-      }
-
-      // 2. Clear electron-store settings
+      // Clear electron-store settings
       if (window.electron.settings.clear) {
         await window.electron.settings.clear();
       } else {

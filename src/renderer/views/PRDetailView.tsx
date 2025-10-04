@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { useParams } from "react-router-dom";
-import { DiffEditor } from "../components/DiffEditor";
+// Lazy load DiffEditor to avoid loading Monaco on app startup
+const DiffEditor = lazy(() => import("../components/DiffEditor").then(module => ({ default: module.DiffEditor })));
 import { ConversationTab } from "../components/ConversationTab";
 import { useAuthStore } from "../stores/authStore";
 import { usePRStore } from "../stores/prStore";
@@ -269,13 +270,9 @@ export default function PRDetailView() {
       throw new Error("Sign in with GitHub to resolve review comments.");
     }
 
-    const { repoOwner, repoName, pullNumber } = resolveRepoContext();
     const api = new GitHubAPI(token);
 
     const updated = await api.updateReviewThreadResolution(
-      repoOwner,
-      repoName,
-      pullNumber,
       threadId,
       true,
     );
@@ -755,24 +752,32 @@ export default function PRDetailView() {
             {/* Diff viewer */}
             <div className="flex-1 overflow-hidden">
               {selectedFile && (
-                <DiffEditor
-                  file={selectedFile}
-                  originalContent={fileContent?.original}
-                  modifiedContent={fileContent?.modified}
-                  comments={reviewComments.filter(
-                    (c) => c.path === selectedFile.filename,
-                  )}
-                  onMarkViewed={() => toggleFileViewed(selectedFile.filename)}
-                  isViewed={viewedFiles.has(selectedFile.filename)}
-                  repoOwner={owner || pr?.base.repo.owner.login || ""}
-                  repoName={repo || pr?.base.repo.name || ""}
-                  pullNumber={pr?.number ?? parseInt(number || "0", 10)}
-                  token={token}
-                  currentUser={currentUser}
-                  onCommentAdded={(newComment) => {
-                    setReviewComments((prev) => [...prev, newComment]);
-                  }}
-                />
+                <Suspense fallback={
+                  <div className="flex items-center justify-center h-full">
+                    <div className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
+                      Loading editor...
+                    </div>
+                  </div>
+                }>
+                  <DiffEditor
+                    file={selectedFile}
+                    originalContent={fileContent?.original}
+                    modifiedContent={fileContent?.modified}
+                    comments={reviewComments.filter(
+                      (c) => c.path === selectedFile.filename,
+                    )}
+                    onMarkViewed={() => toggleFileViewed(selectedFile.filename)}
+                    isViewed={viewedFiles.has(selectedFile.filename)}
+                    repoOwner={owner || pr?.base.repo.owner.login || ""}
+                    repoName={repo || pr?.base.repo.name || ""}
+                    pullNumber={pr?.number ?? parseInt(number || "0", 10)}
+                    token={token}
+                    currentUser={currentUser}
+                    onCommentAdded={(newComment) => {
+                      setReviewComments((prev) => [...prev, newComment]);
+                    }}
+                  />
+                </Suspense>
               )}
             </div>
           </>

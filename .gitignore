@@ -30,6 +30,9 @@ lerna-debug.log*
 *.swo
 *~
 
+# Monaco Editor workers (prevent absolute path issues)
+src/renderer/Users/
+
 # OS files
 Thumbs.db
 

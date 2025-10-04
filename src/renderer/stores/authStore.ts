@@ -22,7 +22,7 @@ interface AuthState {
   setUser: (user: User) => void;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   token: null,
   user: null,
@@ -40,9 +40,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const result = await window.electron.auth.login();
 
-      if (result.success) {
+      if (result.success && result.token) {
         const api = new GitHubAPI(result.token);
-        const user = await api.getCurrentUser();
+        const apiUser = await api.getCurrentUser();
+
+        // Map GitHub API user to our User type
+        const user: User = {
+          login: apiUser.login,
+          name: apiUser.name || apiUser.login,
+          email: apiUser.email || "",
+          avatar_url: apiUser.avatar_url,
+          id: apiUser.id,
+        };
 
         set({
           isAuthenticated: true,
@@ -93,6 +102,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   checkAuth: async () => {
+    const start = performance.now();
+    console.log("⏱️ [AUTH] checkAuth started");
+
     if (!window.electron) {
       console.warn("window.electron not available");
       set({
@@ -103,12 +115,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
+    const tokenStart = performance.now();
     const token = await window.electron.auth.getToken();
+    console.log(`⏱️ [AUTH] Token retrieved in ${(performance.now() - tokenStart).toFixed(2)}ms`);
 
     if (token) {
       try {
+        const apiStart = performance.now();
         const api = new GitHubAPI(token);
-        const user = await api.getCurrentUser();
+        const apiUser = await api.getCurrentUser();
+        console.log(`⏱️ [AUTH] User fetched in ${(performance.now() - apiStart).toFixed(2)}ms`);
+
+        // Map GitHub API user to our User type
+        const user: User = {
+          login: apiUser.login,
+          name: apiUser.name || apiUser.login,
+          email: apiUser.email || "",
+          avatar_url: apiUser.avatar_url,
+          id: apiUser.id,
+        };
 
         set({
           isAuthenticated: true,
@@ -117,6 +142,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
       } catch (error) {
         // Token might be invalid
+        console.warn("⏱️ [AUTH] Token invalid");
         set({
           isAuthenticated: false,
           token: null,
@@ -124,12 +150,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
       }
     } else {
+      console.log("⏱️ [AUTH] No token found");
       set({
         isAuthenticated: false,
         token: null,
         user: null,
       });
     }
+
+    console.log(`⏱️ [AUTH] checkAuth completed in ${(performance.now() - start).toFixed(2)}ms`);
   },
 
   setUser: (user) => {

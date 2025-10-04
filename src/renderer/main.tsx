@@ -4,8 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles/global.css";
-import "monaco-editor/min/vs/editor/editor.main.css";
+// Monaco CSS is handled by @monaco-editor/react lazy loading
+import { PerfLogger } from "./utils/perfLogger";
 
+PerfLogger.mark("main.tsx execution started");
+
+const beforeQueryClient = performance.now();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -14,6 +18,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+PerfLogger.mark("QueryClient created");
+
+const beforeGlobalCSS = performance.now();
+console.log(`⏱️ [RENDER] Global CSS loaded in ${(performance.now() - beforeGlobalCSS).toFixed(2)}ms`);
+
+PerfLogger.mark("Starting React render");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -24,3 +34,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+PerfLogger.mark("ReactDOM.render called");

@@ -46,54 +46,14 @@ const loadBranchesFromStorage = async (
   if (!electron) return null;
 
   try {
-    const repoResult = await electron.db.query(
-      "SELECT id FROM repositories WHERE owner = ? AND name = ?",
-      [owner, repo],
-    );
+    const repoKey = `${owner}/${repo}`;
+    const storageKey = `branches_${repoKey}`;
 
-    if (!repoResult.success || !repoResult.data || repoResult.data.length === 0)
-      return null;
+    const result = await electron.settings.get(storageKey);
+    if (!result.success || !result.value) return null;
 
-    const repoId = repoResult.data[0].id;
-
-    const branchResult = await electron.db.query(
-      `SELECT name, commit_sha, commit_message, commit_author, commit_date, ahead_by, behind_by, is_remote, last_synced
-       FROM branches
-       WHERE repository_id = ?
-       ORDER BY name`,
-      [repoId],
-    );
-
-    if (!branchResult.success || !branchResult.data) return null;
-
-    const branches: Branch[] = branchResult.data.map((row: any) => ({
-      name: row.name,
-      commit: {
-        sha: row.commit_sha ?? "",
-        author: row.commit_author ?? "Unknown",
-        authorEmail: "",
-        message: row.commit_message ?? "",
-        date:
-          row.commit_date ??
-          (row.last_synced
-            ? new Date(row.last_synced).toISOString()
-            : new Date().toISOString()),
-      },
-      protected: Boolean(row.is_remote),
-      ahead: row.ahead_by ?? 0,
-      behind: row.behind_by ?? 0,
-    }));
-
-    const lastSynced = branchResult.data.reduce((latest: number, row: any) => {
-      if (!row.last_synced) return latest;
-      const timestamp = new Date(row.last_synced).getTime();
-      return Number.isNaN(timestamp) ? latest : Math.max(latest, timestamp);
-    }, 0);
-
-    return {
-      branches,
-      lastSynced: lastSynced || undefined,
-    };
+    const storedData = result.value as { branches: Branch[]; lastSynced: number };
+    return storedData;
   } catch (error) {
     console.error("Failed to load branches from storage:", error);
     return null;
@@ -109,51 +69,13 @@ const persistBranchesToStorage = async (
   if (!electron) return;
 
   try {
-    const repoResult = await electron.db.query(
-      "SELECT id FROM repositories WHERE owner = ? AND name = ?",
-      [owner, repo],
-    );
+    const repoKey = `${owner}/${repo}`;
+    const storageKey = `branches_${repoKey}`;
 
-    if (!repoResult.success || !repoResult.data || repoResult.data.length === 0)
-      return;
-
-    const repoId = repoResult.data[0].id;
-
-    // Replace existing branches for this repository
-    await electron.db.execute(
-      "DELETE FROM branches WHERE repository_id = ?",
-      [repoId],
-    );
-
-    for (const branch of branches) {
-      await electron.db.execute(
-        `INSERT OR REPLACE INTO branches (
-           repository_id,
-           name,
-           commit_sha,
-           commit_message,
-           commit_author,
-           commit_date,
-           ahead_by,
-           behind_by,
-           is_remote,
-           is_local,
-           last_synced
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        [
-          repoId,
-          branch.name,
-          branch.commit.sha,
-          branch.commit.message,
-          branch.commit.author,
-          branch.commit.date,
-          branch.ahead,
-          branch.behind,
-          branch.protected ? 1 : 0,
-          0,
-        ],
-      );
-    }
+    await electron.settings.set(storageKey, {
+      branches,
+      lastSynced: Date.now(),
+    });
   } catch (error) {
     console.error("Failed to persist branches to storage:", error);
   }

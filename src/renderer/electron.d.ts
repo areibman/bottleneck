@@ -13,17 +13,6 @@ declare global {
         getToken: () => Promise<string | null>;
       };
 
-      db: {
-        query: (
-          sql: string,
-          params?: any[],
-        ) => Promise<{ success: boolean; data?: any[]; error?: string }>;
-        execute: (
-          sql: string,
-          params?: any[],
-        ) => Promise<{ success: boolean; data?: any; error?: string }>;
-      };
-
       git: {
         clone: (
           repoUrl: string,

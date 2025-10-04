@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Check, X, Tag, Plus } from "lucide-react";
 import { cn } from "../utils/cn";
 import { getLabelColors } from "../utils/labelColors";
