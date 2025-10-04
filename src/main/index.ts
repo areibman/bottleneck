@@ -3,26 +3,44 @@ import path from "path";
 import * as dotenv from "dotenv";
 dotenv.config();
 
-import { Database } from "./database";
 import { GitHubAuth } from "./auth";
 import { GitOperations } from "./git";
 import { createMenu } from "./menu";
 import Store from "electron-store";
 
+// Performance logging
+const APP_START = Date.now();
+function perfLog(label: string, startTime?: number) {
+  const now = Date.now();
+  const elapsed = now - APP_START;
+  const delta = startTime ? now - startTime : 0;
+  console.log(
+    `⏱️ [MAIN PERF] ${label.padEnd(35)} | ${delta ? `+${delta}ms | ` : ""}Total: ${elapsed}ms`
+  );
+  return now;
+}
+
+perfLog("Main process started");
+
 const isDev = process.env.NODE_ENV === "development";
+perfLog("Environment loaded (isDev=" + isDev + ")");
+
 const store = new Store();
+perfLog("Electron store initialized");
 
 let mainWindow: BrowserWindow | null = null;
-let database: Database;
 let githubAuth: GitHubAuth;
 let gitOps: GitOperations;
 
 function createWindow() {
+  const start = perfLog("createWindow called");
+
   const preloadPath = path.resolve(path.join(__dirname, "../preload/index.js"));
   console.log("Preload path:", preloadPath);
   console.log("Preload exists:", require("fs").existsSync(preloadPath));
   console.log("__dirname:", __dirname);
 
+  const beforeWindow = Date.now();
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
@@ -38,6 +56,8 @@ function createWindow() {
     backgroundColor: "#1e1e1e",
     show: false,
   });
+
+  perfLog("BrowserWindow created", beforeWindow);
 
   // Disable Content Security Policy in development mode to allow API calls
   if (!isDev) {
@@ -74,23 +94,33 @@ function createWindow() {
 
   // Show window when ready
   mainWindow.once("ready-to-show", () => {
+    perfLog("Window ready-to-show event fired");
     mainWindow?.show();
-
-    // Debug: Check if preload was set
-    console.log("Window created and shown");
+    perfLog("Window shown");
   });
 
   // Debug: Log when page loads
+  mainWindow.webContents.on("did-start-loading", () => {
+    perfLog("Renderer started loading");
+  });
+
   mainWindow.webContents.on("did-finish-load", () => {
-    console.log("Page loaded, checking preload...");
+    perfLog("Renderer finished loading");
     mainWindow?.webContents.executeJavaScript(
       'console.log("window.electron:", window.electron)',
     );
   });
 
+  mainWindow.webContents.on("dom-ready", () => {
+    perfLog("DOM ready");
+  });
+
   // Load the app
+  const beforeLoad = Date.now();
   if (isDev) {
+    perfLog("Loading dev server URL");
     mainWindow.loadURL("http://localhost:3000");
+    perfLog("Dev URL loaded", beforeLoad);
     mainWindow.webContents.openDevTools();
 
     // Enable additional DevTools features
@@ -100,8 +130,12 @@ function createWindow() {
       // You can access it via the "Performance" tab in DevTools
     });
   } else {
+    perfLog("Loading production HTML");
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+    perfLog("Production HTML loaded", beforeLoad);
   }
+
+  perfLog("createWindow completed", start);
 
   // Handle window closed
   mainWindow.on("closed", () => {
@@ -121,17 +155,45 @@ function createWindow() {
 
 // App event handlers
 app.whenReady().then(async () => {
+  const readyTime = perfLog("App ready event fired");
+
   try {
-    // Install DevTools Extensions
+    // Initialize GitHub auth
+    const authStart = Date.now();
+    githubAuth = new GitHubAuth(store);
+    perfLog("GitHub auth initialized", authStart);
+
+    // Initialize Git operations
+    const gitStart = Date.now();
+    gitOps = new GitOperations();
+    perfLog("Git operations initialized", gitStart);
+
+    // Set default settings if they don't exist
+    const settingsStart = Date.now();
+    if (!store.has("cloneLocation")) {
+      store.set("cloneLocation", "~/repos");
+      console.log("[Settings] Set default clone location to ~/repos");
+    }
+    perfLog("Settings checked", settingsStart);
+
+    createWindow();
+    perfLog("Main process initialization complete", readyTime);
+
+    // Install DevTools Extensions AFTER window creation (non-blocking)
     if (isDev) {
-      // Install React Developer Tools
-      try {
-        const { default: installExtension, REACT_DEVELOPER_TOOLS } = await import("electron-devtools-installer");
-        const name = await installExtension(REACT_DEVELOPER_TOOLS);
-        console.log(`Added Extension: ${name}`);
-      } catch (err) {
-        console.log("An error occurred installing extensions: ", err);
-      }
+      const devToolsStart = Date.now();
+      // Install React Developer Tools asynchronously without blocking
+      import("electron-devtools-installer")
+        .then(({ default: installExtension, REACT_DEVELOPER_TOOLS }) => {
+          return installExtension(REACT_DEVELOPER_TOOLS);
+        })
+        .then((name) => {
+          console.log(`Added Extension: ${name}`);
+          perfLog("DevTools extensions installed", devToolsStart);
+        })
+        .catch((err) => {
+          console.log("An error occurred installing extensions: ", err);
+        });
 
       // The Chrome DevTools Performance Profiler is built-in
       // It will be available in the Performance tab of DevTools
@@ -139,24 +201,6 @@ app.whenReady().then(async () => {
         "Chrome DevTools Performance Profiler is available in the Performance tab",
       );
     }
-
-    // Initialize database
-    database = new Database();
-    await database.initialize();
-
-    // Initialize GitHub auth
-    githubAuth = new GitHubAuth(store);
-
-    // Initialize Git operations
-    gitOps = new GitOperations();
-
-    // Set default settings if they don't exist
-    if (!store.has("cloneLocation")) {
-      store.set("cloneLocation", "~/repos");
-      console.log("[Settings] Set default clone location to ~/repos");
-    }
-
-    createWindow();
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -177,10 +221,6 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
-});
-
-app.on("before-quit", async () => {
-  await database?.close();
 });
 
 // IPC Handlers
@@ -208,24 +248,6 @@ ipcMain.handle("auth:logout", async () => {
 
 ipcMain.handle("auth:get-token", async () => {
   return githubAuth.getToken();
-});
-
-ipcMain.handle("db:query", async (_event, query: string, params?: any[]) => {
-  try {
-    const result = await database.query(query, params);
-    return { success: true, data: result };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-});
-
-ipcMain.handle("db:execute", async (_event, query: string, params?: any[]) => {
-  try {
-    const result = await database.execute(query, params);
-    return { success: true, data: result };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
 });
 
 ipcMain.handle(

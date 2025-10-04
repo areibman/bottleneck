@@ -26,8 +26,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
     "@tailwindcss/typography": "^0.5.16",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
@@ -49,8 +49,7 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
     "vite-plugin-electron": "^0.15.5",
-    "vite-plugin-electron-renderer": "^0.14.5",
-    "vite-plugin-monaco-editor": "^1.1.0"
+    "vite-plugin-electron-renderer": "^0.14.5"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -58,8 +57,6 @@
     "@octokit/auth-oauth-device": "^6.0.1",
     "@octokit/rest": "^20.0.2",
     "@tanstack/react-query": "^5.17.9",
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "better-sqlite3": "^12.4.1",
     "clsx": "^2.1.0",
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
@@ -72,7 +69,6 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.21.2",
-    "react-syntax-highlighter": "^15.6.6",
     "react-virtualized-auto-sizer": "^1.0.26",
     "react-window": "^2.1.0",
     "rehype-raw": "^7.0.0",
@@ -103,9 +99,6 @@
       "!node_modules/prismjs/**/*",
       "!node_modules/highlight.js/**/*",
       "!node_modules/refractor/**/*"
-    ],
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**/*"
     ],
     "mac": {
       "icon": "icon.icns",

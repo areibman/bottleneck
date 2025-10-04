@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 
-console.log("Preload script is running!");
+const PRELOAD_START = performance.now();
+console.log(`⏱️ [PRELOAD] Preload script started at ${PRELOAD_START.toFixed(2)}ms`);
 
 // Define the API that will be exposed to the renderer process
 const electronAPI = {
@@ -9,14 +10,6 @@ const electronAPI = {
     login: () => ipcRenderer.invoke("auth:login"),
     logout: () => ipcRenderer.invoke("auth:logout"),
     getToken: () => ipcRenderer.invoke("auth:get-token"),
-  },
-
-  // Database operations
-  db: {
-    query: (sql: string, params?: any[]) =>
-      ipcRenderer.invoke("db:query", sql, params),
-    execute: (sql: string, params?: any[]) =>
-      ipcRenderer.invoke("db:execute", sql, params),
   },
 
   // Git operations
@@ -105,9 +98,12 @@ const electronAPI = {
 };
 
 // Expose the API to the renderer process
+const beforeExpose = performance.now();
 contextBridge.exposeInMainWorld("electron", electronAPI);
 
-console.log("Electron API exposed to window.electron");
+const elapsed = performance.now() - PRELOAD_START;
+console.log(`⏱️ [PRELOAD] Context bridge exposed (took ${(performance.now() - beforeExpose).toFixed(2)}ms)`);
+console.log(`⏱️ [PRELOAD] Preload complete in ${elapsed.toFixed(2)}ms`);
 
 // Type definitions for TypeScript
 export type ElectronAPI = typeof electronAPI;

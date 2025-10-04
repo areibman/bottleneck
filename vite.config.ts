@@ -1,21 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import monacoEditorPlugin from "vite-plugin-monaco-editor";
 import path from "path";
 
 export default defineConfig({
   plugins: [
     react(),
-    monacoEditorPlugin({
-      languageWorkers: [
-        "editorWorkerService",
-        "typescript",
-        "json",
-        "css",
-        "html",
-      ],
-      customWorkers: [],
-    }),
+    // Monaco is now loaded via @monaco-editor/react lazy loading
+    // No need for vite-plugin-monaco-editor
   ],
   base: "./",
   root: path.resolve(__dirname, "src/renderer"),
@@ -37,6 +28,21 @@ export default defineConfig({
     port: 3000,
   },
   optimizeDeps: {
-    include: ["monaco-editor", "react-complex-tree"],
+    include: [
+      "react",
+      "react-dom",
+      "react-router-dom",
+      "zustand",
+      "@tanstack/react-query",
+      "framer-motion",
+      "lucide-react",
+      "clsx",
+      "react-markdown",
+      "remark-gfm",
+      "rehype-raw",
+      "react-complex-tree",
+      "date-fns",
+    ],
+    exclude: ["monaco-editor", "@monaco-editor/react"], // Monaco is lazy-loaded, don't pre-bundle it
   },
 });

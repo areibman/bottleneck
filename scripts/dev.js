@@ -66,7 +66,7 @@ vite.stdout.on("data", (data) => {
         preloadWatcher.kill();
         process.exit();
       });
-    }, 2000);
+    }, 500); // Reduced from 2000ms to 500ms
   }
 });
 

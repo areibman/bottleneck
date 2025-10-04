@@ -12,7 +12,7 @@ import type {
 } from "monaco-editor";
 import { File, Comment, GitHubAPI } from "../services/github";
 import { useUIStore } from "../stores/uiStore";
-import { monaco } from "../utils/monaco-loader";
+import type { Monaco } from "@monaco-editor/react";
 import {
   buildThreads,
   CommentSide,
@@ -68,6 +68,7 @@ export function DiffEditor({
 
   const diffEditorRef =
     useRef<MonacoEditorType.IStandaloneDiffEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const disposablesRef = useRef<IDisposable[]>([]);
   const commentDecorationsRef = useRef<{ original: string[]; modified: string[] }>(
@@ -303,7 +304,7 @@ export function DiffEditor({
     const lineDecoration = (thread: InlineCommentThread) => {
       const startLine = thread.startLineNumber ?? thread.lineNumber;
       const endLine = thread.endLineNumber ?? thread.lineNumber;
-      const decorations = [] as monaco.editor.IModelDeltaDecoration[];
+      const decorations = [] as Monaco["editor"]["IModelDeltaDecoration"][];
       for (let current = startLine; current <= endLine; current++) {
         const isStart = current === startLine;
         const isEnd = current === endLine;
@@ -318,7 +319,7 @@ export function DiffEditor({
           classNames.push("comment-thread-decoration-end");
         }
         decorations.push({
-          range: new monaco.Range(current, 1, current, 1),
+          range: new monacoRef.current!.Range(current, 1, current, 1),
           options: {
             isWholeLine: true,
             linesDecorationsClassName: classNames.join(" "),
@@ -419,10 +420,10 @@ export function DiffEditor({
         });
 
         if (
-          e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
+          e.target.type !== monacoRef.current!.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
           e.target.type !==
-          monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
-          e.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
+          monacoRef.current!.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
+          e.target.type !== monacoRef.current!.editor.MouseTargetType.GUTTER_LINE_NUMBERS
         ) {
           console.log('❌ Ignoring click - not in gutter area');
           return;
@@ -497,13 +498,13 @@ export function DiffEditor({
     (side: CommentSide) =>
       (e: MonacoEditorType.IEditorMouseEvent) => {
         const diffEditor = diffEditorRef.current;
-        if (!diffEditor || !monaco) return;
+        if (!diffEditor || !monacoRef.current) return;
 
         if (
-          e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
+          e.target.type !== monacoRef.current!.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
           e.target.type !==
-          monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
-          e.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
+          monacoRef.current!.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
+          e.target.type !== monacoRef.current!.editor.MouseTargetType.GUTTER_LINE_NUMBERS
         ) {
           clearHoverDecoration(side);
           return;
@@ -534,7 +535,7 @@ export function DiffEditor({
           hoverDecorationsRef.current[key],
           [
             {
-              range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+              range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
               options: {
                 isWholeLine: true,
                 linesDecorationsClassName: "comment-hover-decoration",
@@ -622,7 +623,7 @@ export function DiffEditor({
     const lineTop =
       editor.getTopForLineNumber(anchorLine) - editor.getScrollTop();
     const lineHeight =
-      (editor.getOption(monaco.editor.EditorOption.lineHeight) as number) || 18;
+      (editor.getOption(monacoRef.current!.editor.EditorOption.lineHeight) as number) || 18;
 
     const desiredTop =
       editorRect.top - containerRect.top + lineTop + lineHeight / 2 - 24;
@@ -686,7 +687,7 @@ export function DiffEditor({
     const modifiedEditor = diffEditor.getModifiedEditor();
 
     const decorationForLine = (lineNumber: number) => ({
-      range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+      range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
       options: {
         isWholeLine: true,
         className: "comment-line-highlight",
@@ -697,8 +698,8 @@ export function DiffEditor({
     const buildDecorations = (
       startLine: number,
       endLine: number,
-    ): monaco.editor.IModelDeltaDecoration[] => {
-      const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+    ): Monaco["editor"]["IModelDeltaDecoration"][] => {
+      const decorations: Monaco["editor"]["IModelDeltaDecoration"][] = [];
       for (let current = startLine; current <= endLine; current++) {
         decorations.push(decorationForLine(current));
       }
@@ -1195,9 +1196,10 @@ export function DiffEditor({
               },
               diffAlgorithm: "advanced",
             }}
-            onMount={(editor) => {
+            onMount={(editor, monaco) => {
               console.log('🏗️ Monaco editor mounted for:', file.filename);
               diffEditorRef.current = editor;
+              monacoRef.current = monaco;
               setDiffEditorReady(true);
               console.log('✅ diffEditorReady set to true');
 

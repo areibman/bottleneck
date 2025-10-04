@@ -64,12 +64,6 @@ interface PRState {
   updatePR: (pr: PullRequest) => void;
   bulkUpdatePRs: (prs: PullRequest[]) => void;
   fetchPRStats: (owner: string, repo: string, prNumbers: number[]) => Promise<void>;
-  storePRsInDB: (
-    prs: PullRequest[],
-    owner: string,
-    repo: string,
-  ) => Promise<void>;
-  storeReposInDB: (repos: Repository[]) => Promise<void>;
 }
 
 // Load recently viewed repos from electron store on initialization
@@ -256,11 +250,6 @@ export const usePRStore = create<PRState>((set, get) => {
           // Auto-group PRs after fetching
           get().groupPRsByPrefix();
         }
-
-        // Store in database (skip for dev mode)
-        if (token !== "dev-token" && window.electron) {
-          await get().storePRsInDB(prs, owner, repo);
-        }
       } catch (error) {
         if (replaceStore) {
           set({
@@ -342,6 +331,9 @@ export const usePRStore = create<PRState>((set, get) => {
     },
 
     fetchRepositories: async () => {
+      const start = performance.now();
+      console.log("⏱️ [PR_STORE] fetchRepositories started");
+
       set({ loading: true, error: null });
 
       try {
@@ -449,11 +441,9 @@ export const usePRStore = create<PRState>((set, get) => {
           loading: false,
         });
 
-        // Store in database (skip for dev mode)
-        if (token !== "dev-token" && window.electron) {
-          await get().storeReposInDB(repos);
-        }
+        console.log(`⏱️ [PR_STORE] Fetched ${repos.length} repositories in ${(performance.now() - start).toFixed(2)}ms`);
       } catch (error) {
+        console.error(`⏱️ [PR_STORE] fetchRepositories failed after ${(performance.now() - start).toFixed(2)}ms:`, error);
         set({
           error: (error as Error).message,
           loading: false,
@@ -677,80 +667,6 @@ export const usePRStore = create<PRState>((set, get) => {
         });
       } catch (error) {
         console.error("Failed to fetch PR stats:", error);
-      }
-    },
-
-    // Database operations
-    storePRsInDB: async (prs: PullRequest[], owner: string, repo: string) => {
-      // Get repo ID first
-      const repoResult = await window.electron.db.query(
-        "SELECT id FROM repositories WHERE owner = ? AND name = ?",
-        [owner, repo],
-      );
-
-      if (
-        !repoResult.success ||
-        !repoResult.data ||
-        repoResult.data.length === 0
-      )
-        return;
-
-      const repoId = repoResult.data[0].id;
-
-      // Store each PR
-      for (const pr of prs) {
-        await window.electron.db.execute(
-          `INSERT OR REPLACE INTO pull_requests 
-         (id, repository_id, number, title, body, state, draft, merged, mergeable,
-          merge_commit_sha, head_ref, head_sha, base_ref, base_sha, author_login,
-          author_avatar_url, assignees, reviewers, labels, created_at, updated_at,
-          closed_at, merged_at, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            pr.id,
-            repoId,
-            pr.number,
-            pr.title,
-            pr.body,
-            pr.state,
-            pr.draft ? 1 : 0,
-            pr.merged ? 1 : 0,
-            pr.mergeable ? 1 : 0,
-            pr.merge_commit_sha,
-            pr.head.ref,
-            pr.head.sha,
-            pr.base.ref,
-            pr.base.sha,
-            pr.user.login,
-            pr.user.avatar_url,
-            JSON.stringify(pr.assignees),
-            JSON.stringify(pr.requested_reviewers),
-            JSON.stringify(pr.labels),
-            pr.created_at,
-            pr.updated_at,
-            pr.closed_at,
-            pr.merged_at,
-          ],
-        );
-      }
-    },
-
-    storeReposInDB: async (repos: Repository[]) => {
-      for (const repo of repos) {
-        await window.electron.db.execute(
-          `INSERT OR REPLACE INTO repositories 
-         (owner, name, full_name, description, default_branch, private, clone_url, last_synced)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          [
-            repo.owner,
-            repo.name,
-            repo.full_name,
-            repo.description,
-            repo.default_branch,
-            repo.private ? 1 : 0,
-            repo.clone_url,
-          ],
-        );
       }
     },
   };

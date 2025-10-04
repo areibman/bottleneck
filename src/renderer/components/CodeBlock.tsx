@@ -1,4 +1,4 @@
-import { useState, memo, lazy, Suspense } from "react";
+import { useState, memo } from "react";
 import {
   Check,
   Copy,
@@ -9,21 +9,6 @@ import {
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useUIStore } from "../stores/uiStore";
-
-// Lazy load the heavy syntax highlighter and styles together
-const SyntaxHighlighterAsync = lazy(async () => {
-  const [{ Prism }, { oneDark, oneLight }] = await Promise.all([
-    import("react-syntax-highlighter"),
-    import("react-syntax-highlighter/dist/esm/styles/prism"),
-  ]);
-
-  // Return a component that handles the theme internally
-  return {
-    default: ({ theme, ...props }: any) => (
-      <Prism style={theme === "dark" ? oneDark : oneLight} {...props} />
-    ),
-  };
-});
 
 interface CodeBlockProps {
   code: string;
@@ -187,9 +172,9 @@ export const CodeBlock = memo(function CodeBlock({
                 ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
                 : "hover:bg-gray-100 text-gray-600 hover:text-gray-800",
               showLines &&
-                (theme === "dark"
-                  ? "bg-gray-700 text-gray-200"
-                  : "bg-gray-100 text-gray-800"),
+              (theme === "dark"
+                ? "bg-gray-700 text-gray-200"
+                : "bg-gray-100 text-gray-800"),
             )}
             title="Toggle line numbers"
           >
@@ -205,9 +190,9 @@ export const CodeBlock = memo(function CodeBlock({
                 ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
                 : "hover:bg-gray-100 text-gray-600 hover:text-gray-800",
               wordWrap &&
-                (theme === "dark"
-                  ? "bg-gray-700 text-gray-200"
-                  : "bg-gray-100 text-gray-800"),
+              (theme === "dark"
+                ? "bg-gray-700 text-gray-200"
+                : "bg-gray-100 text-gray-800"),
             )}
             title="Toggle word wrap"
           >
@@ -235,49 +220,40 @@ export const CodeBlock = memo(function CodeBlock({
         </div>
       </div>
 
-      {/* Code Content - Fixed cursor */}
+      {/* Code Content - Lightweight plain text version */}
       <div
         className={cn(
           "relative overflow-auto cursor-text select-text",
-          wordWrap ? "whitespace-pre-wrap break-words" : "",
+          wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
         )}
       >
-        <Suspense
-          fallback={
-            <pre
-              className={cn(
-                "p-4 text-sm leading-relaxed overflow-auto",
-                theme === "dark" ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              <code>{displayCode}</code>
-            </pre>
-          }
+        <pre
+          className={cn(
+            "m-0 p-4 text-sm leading-relaxed font-mono",
+            theme === "dark"
+              ? "text-gray-300 bg-gray-900"
+              : "text-gray-800 bg-gray-50",
+          )}
         >
-          <SyntaxHighlighterAsync
-            theme={theme}
-            language={normalizedLanguage}
-            showLineNumbers={showLines}
-            customStyle={{
-              margin: 0,
-              padding: "1rem",
-              background: "transparent",
-              fontSize: "0.875rem",
-              lineHeight: "1.5",
-              cursor: "text",
-            }}
-            lineNumberStyle={{
-              minWidth: "2.5em",
-              paddingRight: "1em",
-              color: theme === "dark" ? "#4a5568" : "#9ca3af",
-              userSelect: "none",
-            }}
-            wrapLines={wordWrap}
-            wrapLongLines={wordWrap}
-          >
-            {displayCode}
-          </SyntaxHighlighterAsync>
-        </Suspense>
+          {showLines && (
+            <code className="select-none">
+              {displayCode.split('\n').map((line, i) => (
+                <div key={i} className="table-row">
+                  <span
+                    className={cn(
+                      "table-cell pr-4 text-right",
+                      theme === "dark" ? "text-gray-600" : "text-gray-400"
+                    )}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="table-cell">{line}</span>
+                </div>
+              ))}
+            </code>
+          )}
+          {!showLines && <code>{displayCode}</code>}
+        </pre>
 
         {/* Expand button if collapsed */}
         {collapsed && (

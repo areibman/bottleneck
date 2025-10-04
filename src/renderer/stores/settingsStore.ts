@@ -74,12 +74,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   loadSettings: async () => {
+    const start = performance.now();
+    console.log("⏱️ [SETTINGS] loadSettings started");
+
     try {
       // Load from electron store
       if (window.electron?.settings) {
         const result = await window.electron.settings.get();
         if (result.success && result.settings) {
           set({ settings: { ...defaultSettings, ...result.settings } });
+          console.log(`⏱️ [SETTINGS] Settings loaded in ${(performance.now() - start).toFixed(2)}ms`);
         }
       }
     } catch (error) {
