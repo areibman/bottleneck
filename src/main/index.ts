@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, dialog } from "electron";
 import path from "path";
-import * as dotenv from "dotenv";
-dotenv.config();
+import { config } from "dotenv";
+config();
 
 import { GitHubAuth } from "./auth";
 import { GitOperations } from "./git";
