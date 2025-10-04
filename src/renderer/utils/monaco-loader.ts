@@ -8,7 +8,7 @@ import { loader } from "@monaco-editor/react";
 export { loader };
 
 // Initialize Monaco asynchronously
-loader.init().then((monacoInstance) => {
+loader.init().then(() => {
   console.log("Monaco editor loaded locally");
   // Optionally configure Monaco here if needed
 });

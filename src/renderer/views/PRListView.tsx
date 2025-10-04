@@ -402,11 +402,6 @@ export default function PRListView() {
     [selectPR, deselectPR],
   );
 
-  const handleMergeSelected = useCallback(() => {
-    // TODO: Implement merge functionality
-    console.log("Merging PRs:", Array.from(selectedPRs));
-  }, [selectedPRs]);
-
   const closableSelectedPRIds = useMemo(() => {
     const ids: string[] = [];
     for (const id of selectedPRs) {

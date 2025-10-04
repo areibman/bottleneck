@@ -270,13 +270,9 @@ export default function PRDetailView() {
       throw new Error("Sign in with GitHub to resolve review comments.");
     }
 
-    const { repoOwner, repoName, pullNumber } = resolveRepoContext();
     const api = new GitHubAPI(token);
 
     const updated = await api.updateReviewThreadResolution(
-      repoOwner,
-      repoName,
-      pullNumber,
       threadId,
       true,
     );

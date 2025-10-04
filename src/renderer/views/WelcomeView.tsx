@@ -1,4 +1,3 @@
-import React from "react";
 import { GitPullRequest, GitBranch, Zap, Users } from "lucide-react";
 
 export default function WelcomeView() {
