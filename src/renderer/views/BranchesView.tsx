@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GitBranch,
@@ -69,8 +69,8 @@ export default function BranchesView() {
   );
   const [showCreatePRModal, setShowCreatePRModal] = useState(false);
   const [selectedBranchForPR, setSelectedBranchForPR] = useState<Branch | null>(null);
-  const [prTitle, setPRTitle] = useState("");
-  const [prBody, setPRBody] = useState("");
+  const prTitleRef = useRef<HTMLInputElement>(null);
+  const prBodyRef = useRef<HTMLTextAreaElement>(null);
   const [isDraft, setIsDraft] = useState(false);
   const [isCreatingPR, setIsCreatingPR] = useState(false);
   const [createPRError, setCreatePRError] = useState<string | null>(null);
@@ -306,16 +306,32 @@ export default function BranchesView() {
       .replace(/^(feat|fix|chore|docs|refactor|test|style|cursor)[\/\-]/, '')
       .replace(/[-_]/g, ' ')
       .replace(/\b\w/g, (l) => l.toUpperCase());
-    setPRTitle(title);
-    // Use the latest commit message as default body
-    setPRBody(branch.commit.message || "");
+
     setIsDraft(false);
     setCreatePRError(null);
     setShowCreatePRModal(true);
+
+    // Set values after modal is shown (next tick)
+    setTimeout(() => {
+      if (prTitleRef.current) {
+        prTitleRef.current.value = title;
+      }
+      if (prBodyRef.current) {
+        prBodyRef.current.value = branch.commit.message || "";
+      }
+    }, 0);
   }, []);
 
   const handleCreatePR = useCallback(async () => {
     if (!selectedBranchForPR || !selectedRepo || !token) return;
+
+    const prTitle = prTitleRef.current?.value.trim() || "";
+    const prBody = prBodyRef.current?.value || "";
+
+    if (!prTitle) {
+      setCreatePRError("Title is required");
+      return;
+    }
 
     setIsCreatingPR(true);
     setCreatePRError(null);
@@ -335,8 +351,8 @@ export default function BranchesView() {
       // Close modal and reset
       setShowCreatePRModal(false);
       setSelectedBranchForPR(null);
-      setPRTitle("");
-      setPRBody("");
+      if (prTitleRef.current) prTitleRef.current.value = "";
+      if (prBodyRef.current) prBodyRef.current.value = "";
       setIsDraft(false);
 
       // Refresh the PR list to update the branch-to-PR mapping
@@ -360,7 +376,7 @@ export default function BranchesView() {
     } finally {
       setIsCreatingPR(false);
     }
-  }, [selectedBranchForPR, selectedRepo, token, prTitle, prBody, isDraft, handleRefresh]);
+  }, [selectedBranchForPR, selectedRepo, token, isDraft, handleRefresh]);
 
   // Filtering and sorting
   const filteredAndSortedBranches = useMemo(() => {
@@ -1362,9 +1378,8 @@ export default function BranchesView() {
                   Title
                 </label>
                 <input
+                  ref={prTitleRef}
                   type="text"
-                  value={prTitle}
-                  onChange={(e) => setPRTitle(e.target.value)}
                   placeholder="Enter pull request title"
                   className={cn(
                     "w-full px-3 py-2 rounded-lg border transition-colors",
@@ -1382,8 +1397,7 @@ export default function BranchesView() {
                   Description
                 </label>
                 <textarea
-                  value={prBody}
-                  onChange={(e) => setPRBody(e.target.value)}
+                  ref={prBodyRef}
                   placeholder="Describe your changes (optional)"
                   rows={6}
                   className={cn(
@@ -1443,11 +1457,11 @@ export default function BranchesView() {
               </button>
               <button
                 onClick={handleCreatePR}
-                disabled={isCreatingPR || !prTitle.trim()}
+                disabled={isCreatingPR}
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
                   "bg-blue-600 text-white hover:bg-blue-700",
-                  (isCreatingPR || !prTitle.trim()) && "opacity-50 cursor-not-allowed"
+                  isCreatingPR && "opacity-50 cursor-not-allowed"
                 )}
               >
                 {isCreatingPR ? "Creating..." : isDraft ? "Create Draft PR" : "Create PR"}
