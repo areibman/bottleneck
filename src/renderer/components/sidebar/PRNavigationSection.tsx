@@ -49,7 +49,7 @@ export function PRNavigationSection({
           {navigationState?.currentTaskGroup || "Related PRs"} ({siblingPRs.length})
         </h3>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1 max-h-[calc(100vh-200px)] overflow-y-auto">
         {siblingPRs.map((siblingPR) => {
           const isCurrentPR =
             siblingPR.number?.toString() === navigationState?.currentPRNumber;
