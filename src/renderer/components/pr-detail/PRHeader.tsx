@@ -103,23 +103,23 @@ export function PRHeader({
               >
                 #{pr.number}
               </span>
+              {/* GitHub Link */}
+              <a
+                href={`https://github.com/${pr.base.repo.owner.login}/${pr.base.repo.name}/pull/${pr.number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "ml-2 px-2 py-0.5 rounded transition-colors inline-flex items-center space-x-1 align-middle font-normal",
+                  theme === "dark"
+                    ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
+                    : "hover:bg-gray-100 text-gray-600 hover:text-gray-900",
+                )}
+                title="Open in GitHub"
+              >
+                <span className="text-xs">Open in Github</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </h1>
-
-            {/* GitHub Link */}
-            <a
-              href={`https://github.com/${pr.base.repo.owner.login}/${pr.base.repo.name}/pull/${pr.number}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                "p-1 rounded transition-colors",
-                theme === "dark"
-                  ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
-                  : "hover:bg-gray-100 text-gray-600 hover:text-gray-900",
-              )}
-              title="Open in GitHub"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </a>
           </div>
         </div>
 

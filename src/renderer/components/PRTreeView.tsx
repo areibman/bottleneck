@@ -571,13 +571,14 @@ export function PRTreeView({
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         className={cn(
-                          "p-1 rounded transition-colors ml-2",
+                          "px-2 py-1 rounded transition-colors ml-2 flex items-center space-x-1",
                           theme === "dark"
                             ? "hover:bg-gray-700 text-gray-400 hover:text-gray-200"
                             : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
                         )}
                         title="Open in GitHub"
                       >
+                        <span className="text-[10px]">Open in Github</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
