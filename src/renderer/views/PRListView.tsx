@@ -5,6 +5,7 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { LabelFilterSection } from "../components/sidebar/LabelFilterSection";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
@@ -65,6 +66,11 @@ export default function PRListView() {
     () => new Set<StatusType>(prListFilters.selectedStatuses),
     [prListFilters.selectedStatuses],
   );
+  const selectedLabels = useMemo(
+    () => prListFilters.selectedLabels,
+    [prListFilters.selectedLabels],
+  );
+  const labelFilterMode = prListFilters.labelFilterMode;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -265,6 +271,26 @@ export default function PRListView() {
     [setPRListFilters],
   );
 
+  const handleLabelsChange = useCallback(
+    (labels: string[]) => {
+      setPRListFilters(prev => ({
+        ...prev,
+        selectedLabels: labels,
+      }));
+    },
+    [setPRListFilters],
+  );
+
+  const handleLabelModeChange = useCallback(
+    (mode: "OR" | "AND" | "NOT" | "ONLY") => {
+      setPRListFilters(prev => ({
+        ...prev,
+        labelFilterMode: mode,
+      }));
+    },
+    [setPRListFilters],
+  );
+
 
   // Simplified filtering logic - cleaner and more maintainable
   const getFilteredPRs = useMemo(() => {
@@ -291,8 +317,54 @@ export default function PRListView() {
       const statusMatches = selectedStatuses.size === 0 ||
         selectedStatuses.has(prStatus);
 
-      // Both filters must pass
-      return authorMatches && statusMatches;
+      // Label filter
+      const prLabelNames = pr.labels?.map(label => label.name) || [];
+      let labelMatches = true;
+
+      if (selectedLabels.length > 0) {
+        const hasNoLabel = selectedLabels.includes("__no_label__");
+        const hasLabels = prLabelNames.length > 0;
+        const hasSelectedLabels = selectedLabels.some(label => 
+          label !== "__no_label__" && prLabelNames.includes(label)
+        );
+
+        switch (labelFilterMode) {
+          case "OR":
+            // Show PRs with any selected label OR no label if selected
+            labelMatches = hasSelectedLabels || (hasNoLabel && !hasLabels);
+            break;
+          case "AND":
+            // Show PRs with all selected labels (excluding __no_label__)
+            const nonNoLabelFilters = selectedLabels.filter(label => label !== "__no_label__");
+            if (nonNoLabelFilters.length === 0) {
+              labelMatches = hasNoLabel ? !hasLabels : true;
+            } else {
+              labelMatches = nonNoLabelFilters.every(label => prLabelNames.includes(label));
+              if (hasNoLabel) {
+                labelMatches = labelMatches && !hasLabels;
+              }
+            }
+            break;
+          case "NOT":
+            // Hide PRs with selected labels
+            labelMatches = !hasSelectedLabels && !(hasNoLabel && !hasLabels);
+            break;
+          case "ONLY":
+            // Show PRs with exactly these labels
+            if (hasNoLabel) {
+              labelMatches = !hasLabels;
+            } else {
+              const sortedPRLabels = [...prLabelNames].sort();
+              const sortedSelectedLabels = [...selectedLabels].sort();
+              labelMatches = sortedPRLabels.length === sortedSelectedLabels.length &&
+                sortedPRLabels.every((label, index) => label === sortedSelectedLabels[index]);
+            }
+            break;
+        }
+      }
+
+      // All filters must pass
+      return authorMatches && statusMatches && labelMatches;
     });
 
     // Step 3: Sort PRs
@@ -312,6 +384,8 @@ export default function PRListView() {
     pullRequests,
     selectedAuthors,
     selectedStatuses,
+    selectedLabels,
+    labelFilterMode,
     sortBy,
     selectedRepo,
     getPRStatus,
@@ -880,6 +954,28 @@ export default function PRListView() {
         </div>
       </div>
 
+      {/* Label Filter Section */}
+      {selectedRepo && (
+        <div
+          className={cn(
+            "px-4 py-3 border-b",
+            theme === "dark"
+              ? "bg-gray-800 border-gray-700"
+              : "bg-gray-50 border-gray-200",
+          )}
+        >
+          <LabelFilterSection
+            theme={theme}
+            selectedLabels={selectedLabels}
+            labelFilterMode={labelFilterMode}
+            onLabelsChange={handleLabelsChange}
+            onModeChange={handleLabelModeChange}
+            pullRequests={pullRequests}
+            selectedRepo={selectedRepo}
+          />
+        </div>
+      )}
+
       {/* PR List */}
       <div className="flex-1 overflow-y-auto">
         {showLoadingPlaceholder ? (
@@ -911,7 +1007,7 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
-            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}`}
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${selectedLabels.join('-')}-${labelFilterMode}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
