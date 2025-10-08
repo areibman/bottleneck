@@ -3,7 +3,7 @@
 Superhuman for Code Review. 
 <img width="1504" height="842" alt="Screenshot 2025-10-01 at 3 17 02 PM" src="https://github.com/user-attachments/assets/3bb4c4db-b420-436a-98b4-45799cfb5492" />
 
-A native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for power-review workflows. Fast GitHub PR and branch management optimized for teams building code with AI agents like Claude Code, Cursor, Devin, and Codex.
+Bottleneck is a code review powertool for AI native teams. It's a native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for parallelized background agents. Fast GitHub PR and branch management optimized for teams building code with AI agents like Claude Code, Cursor, Devin, and Codex.
 
 ## Features
 
@@ -13,7 +13,7 @@ A native Electron app that reproduces the core GitHub PR experience while being 
 - 🏷️ **Prefix Grouping** - Automatically groups PRs by common prefixes (feat/, fix/, etc.)
 - 📝 **Monaco Editor** - VSCode-powered diff viewer with syntax highlighting
 - 💾 **Offline Support** - SQLite-based local cache for offline access
-- ⌨️ **Keyboard First** - Comprehensive keyboard shortcuts for power users
+- ⌨️ **Shortcuts for Everything** - Comprehensive keyboard shortcuts for power users
 
 ## Tech Stack
 
