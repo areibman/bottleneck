@@ -36,7 +36,7 @@ export function PRDescription({ pr, theme }: PRDescriptionProps) {
             className={cn(theme === "dark" ? "text-gray-300" : "text-gray-700")}
           >
             {pr.body ? (
-              <Markdown content={pr.body} />
+              <Markdown content={pr.body} variant="compact" />
             ) : (
               <em
                 className={cn(

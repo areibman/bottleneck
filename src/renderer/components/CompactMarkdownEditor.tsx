@@ -124,7 +124,7 @@ export const CompactMarkdownEditor = memo(function CompactMarkdownEditor({
                         style={flexible ? {} : { minHeight, maxHeight }}
                     >
                         {value ? (
-                            <Markdown content={value} />
+                            <Markdown content={value} variant="compact" />
                         ) : (
                             <p
                                 className={cn(

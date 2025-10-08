@@ -81,7 +81,7 @@ export function TimelineItem({ item, theme }: TimelineItemProps) {
                 theme === "dark" ? "text-gray-300" : "text-gray-700",
               )}
             >
-              <Markdown content={item.body} />
+              <Markdown content={item.body} variant="compact" />
             </div>
           )}
         </div>

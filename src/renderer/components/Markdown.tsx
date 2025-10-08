@@ -1,6 +1,5 @@
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { Components } from "react-markdown";
 import { cn } from "../utils/cn";
@@ -9,11 +8,12 @@ import { CodeBlock } from "./CodeBlock";
 
 interface MarkdownProps {
   content: string;
+  variant?: "full" | "compact"; // full = rich prose styling, compact = minimal styling for comments
 }
 
 // Internal component that does the actual rendering
 const MarkdownRenderer = memo(
-  ({ content, theme }: { content: string; theme: "light" | "dark" }) => {
+  ({ content, theme, variant = "full" }: { content: string; theme: "light" | "dark"; variant?: "full" | "compact" }) => {
     // Custom components for ReactMarkdown
     const components: Components = {
       // Custom image rendering with proper sizing and dark mode support
@@ -90,35 +90,50 @@ const MarkdownRenderer = memo(
     return (
       <div
         className={cn(
-          "prose prose-sm max-w-none markdown-content",
-          theme === "dark" ? "prose-invert" : "",
-          // Base prose styles
-          "prose-headings:font-semibold",
-          "prose-p:leading-relaxed",
-          "prose-p:my-2",
-          "prose-strong:font-bold",
-          "prose-em:italic",
-          // Remove default pre/code styles since we're using custom components
-          "[&>pre]:contents",
-          // Table styles
-          "prose-table:border-collapse",
-          theme === "dark"
-            ? "prose-th:border-gray-600 prose-td:border-gray-700"
-            : "prose-th:border-gray-300 prose-td:border-gray-200",
-          // List styles
-          "prose-ul:list-disc prose-ol:list-decimal",
-          // Blockquote styles
-          theme === "dark"
-            ? "prose-blockquote:border-gray-600 prose-blockquote:text-gray-300"
-            : "prose-blockquote:border-gray-300 prose-blockquote:text-gray-600",
-          // Text color
-          theme === "dark"
-            ? "prose-p:text-gray-300 prose-li:text-gray-300 prose-headings:text-gray-100"
-            : "prose-p:text-gray-700 prose-li:text-gray-700 prose-headings:text-gray-900",
+          variant === "full" ? [
+            "prose prose-sm max-w-none markdown-content",
+            theme === "dark" ? "prose-invert" : "",
+            // Base prose styles
+            "prose-headings:font-semibold",
+            "prose-p:leading-relaxed",
+            "prose-p:my-2",
+            "prose-strong:font-bold",
+            "prose-em:italic",
+            // Remove default pre/code styles since we're using custom components
+            "[&>pre]:contents",
+            // Table styles
+            "prose-table:border-collapse",
+            theme === "dark"
+              ? "prose-th:border-gray-600 prose-td:border-gray-700"
+              : "prose-th:border-gray-300 prose-td:border-gray-200",
+            // List styles
+            "prose-ul:list-disc prose-ol:list-decimal",
+            // Blockquote styles
+            theme === "dark"
+              ? "prose-blockquote:border-gray-600 prose-blockquote:text-gray-300"
+              : "prose-blockquote:border-gray-300 prose-blockquote:text-gray-600",
+            // Text color
+            theme === "dark"
+              ? "prose-p:text-gray-300 prose-li:text-gray-300 prose-headings:text-gray-100"
+              : "prose-p:text-gray-700 prose-li:text-gray-700 prose-headings:text-gray-900",
+          ] : [
+            // Compact mode: minimal styling, just basic text colors and spacing
+            "max-w-none markdown-content-compact",
+            theme === "dark" ? "text-gray-300" : "text-gray-700",
+            // Minimal spacing for compact mode
+            "[&>*]:my-1",
+            "[&>hr]:my-2 [&>hr]:border-t",
+            theme === "dark" ? "[&>hr]:border-gray-700" : "[&>hr]:border-gray-300",
+            "[&_strong]:font-semibold",
+            "[&_em]:italic",
+            "[&_ul]:list-disc [&_ul]:ml-4",
+            "[&_ol]:list-decimal [&_ol]:ml-4",
+            "[&_li]:ml-2",
+            "[&>pre]:contents",
+          ]
         )}
       >
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeRaw]}
           components={components}
         >
@@ -130,7 +145,7 @@ const MarkdownRenderer = memo(
 );
 
 // Export the main component that subscribes to theme
-export const Markdown = memo(({ content }: MarkdownProps) => {
+export const Markdown = memo(({ content, variant = "full" }: MarkdownProps) => {
   const theme = useUIStore((state) => state.theme); // Only subscribe to theme changes
-  return <MarkdownRenderer content={content} theme={theme} />;
+  return <MarkdownRenderer content={content} theme={theme} variant={variant} />;
 });

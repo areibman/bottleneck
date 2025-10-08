@@ -91,7 +91,7 @@ export const CommentOverlay: FC<CommentOverlayProps> = ({
               )}
             >
               {overlay.target.startLineNumber &&
-              overlay.target.startLineNumber !== overlay.target.lineNumber ? (
+                overlay.target.startLineNumber !== overlay.target.lineNumber ? (
                 <>
                   Lines {overlay.target.startLineNumber}–{overlay.target.lineNumber}
                 </>

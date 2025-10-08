@@ -1,7 +1,7 @@
 {
   "name": "bottleneck",
-  "version": "0.1.5",
-  "description": "Fast GitHub PR review and branch management",
+  "version": "0.1.6",
+  "description": "Code review for AI native teams",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
@@ -61,7 +61,6 @@
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
     "electron-store": "^8.1.0",
-    "framer-motion": "^10.18.0",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
     "react": "^18.2.0",
@@ -69,10 +68,7 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.21.2",
-    "react-virtualized-auto-sizer": "^1.0.26",
-    "react-window": "^2.1.0",
     "rehype-raw": "^7.0.0",
-    "remark-gfm": "^4.0.1",
     "simple-git": "^3.22.0",
     "zustand": "^4.4.7"
   },

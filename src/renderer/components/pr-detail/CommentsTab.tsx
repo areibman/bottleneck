@@ -320,7 +320,7 @@ export function CommentsTab({
                             </span>
                           </div>
                           <div className="mt-2 text-sm">
-                            <Markdown content={comment.body} />
+                            <Markdown content={comment.body} variant="compact" />
                           </div>
                         </div>
                       </div>

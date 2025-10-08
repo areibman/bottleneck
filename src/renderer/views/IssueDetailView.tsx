@@ -176,7 +176,7 @@ const CommentItem = memo(
             </div>
           </div>
         ) : (
-          <MemoizedMarkdown content={comment.body} />
+          <MemoizedMarkdown content={comment.body} variant="compact" />
         )}
       </div>
     );
@@ -429,7 +429,7 @@ export default function IssueDetailView() {
 
   const handleCloseIssue = async () => {
     if (!owner || !repo || !number || !issue) return;
-    
+
     setIsClosing(true);
     try {
       if (!token || token === "dev-token") {
@@ -450,7 +450,7 @@ export default function IssueDetailView() {
 
   const handleReopenIssue = async () => {
     if (!owner || !repo || !number || !issue) return;
-    
+
     setIsReopening(true);
     try {
       if (!token || token === "dev-token") {
@@ -471,7 +471,7 @@ export default function IssueDetailView() {
 
   const handleUpdateLabels = async () => {
     if (!owner || !repo || !number || !issue) return;
-    
+
     try {
       if (!token || token === "dev-token") {
         // Mock label update for dev mode
@@ -480,7 +480,7 @@ export default function IssueDetailView() {
           const existing = repoLabels.find(l => l.name === name);
           return existing ? { name: existing.name, color: existing.color } : {
             name,
-            color: Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
+            color: Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
           };
         });
         setIssue({ ...issue, labels: mockLabels });
@@ -573,7 +573,7 @@ export default function IssueDetailView() {
               </h1>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             {issue.state === "open" ? (
               <button
@@ -698,7 +698,7 @@ export default function IssueDetailView() {
                       </button>
                     )}
                     {issue.body ? (
-                      <MemoizedMarkdown content={issue.body} />
+                      <MemoizedMarkdown content={issue.body} variant="compact" />
                     ) : (
                       <p className="text-gray-500 italic">
                         No description provided.
@@ -836,7 +836,7 @@ export default function IssueDetailView() {
                       </button>
                     )}
                   </div>
-                  
+
                   {editingLabels ? (
                     <div className="space-y-2">
                       <LabelSelector
