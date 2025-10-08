@@ -42,13 +42,23 @@ export class PrefixTrie {
      */
     private isHashSuffix(token: string): boolean {
         // Hash characteristics:
-        // - 4-6 characters long
+        // - 4-8 characters long
         // - Alphanumeric only
-        // - Contains at least one digit (to distinguish from words)
+        // - Either contains at least one digit OR has characteristics of random strings:
+        //   * 6 characters, all lowercase
+        //   * Has 3+ consecutive consonants (e.g., "axfbof", "trroza")
+        //   Random suffixes typically have unusual consonant clusters
+        const isAlphanumeric = /^[a-z0-9]+$/i.test(token);
+        const hasDigit = /\d/.test(token);
+        const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxyz]{3,}/i.test(token);
+        const isLikelyRandom = token.length === 6 &&
+            token === token.toLowerCase() &&
+            hasConsecutiveConsonants;
+
         return token.length >= 4 &&
-            token.length <= 6 &&
-            /^[a-z0-9]+$/i.test(token) &&
-            /\d/.test(token);
+            token.length <= 8 &&
+            isAlphanumeric &&
+            (hasDigit || isLikelyRandom);
     }
 
     /**

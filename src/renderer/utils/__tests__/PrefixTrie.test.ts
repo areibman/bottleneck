@@ -63,6 +63,24 @@ describe('PrefixTrie', () => {
             expect(normalized[1]).toBe('openai/implement-feature');
             expect(normalized[2]).toBe('devin/implement-feature');
         });
+
+        it('should normalize branches with all-letter hash suffixes', () => {
+            const branches = [
+                'codex/reduce-app-dmg-package-size-axfbof',
+                'codex/reduce-app-dmg-package-size',
+                'codex/reduce-app-dmg-package-size-trroza'
+            ];
+
+            const normalized = branches.map(b => trie.findNormalizedPrefix(b));
+
+            // All should normalize to the same prefix
+            expect(normalized[0]).toBe('codex/reduce-app-dmg-package-size');
+            expect(normalized[1]).toBe('codex/reduce-app-dmg-package-size');
+            expect(normalized[2]).toBe('codex/reduce-app-dmg-package-size');
+
+            // All should be equal
+            expect(new Set(normalized).size).toBe(1);
+        });
     });
 
     describe('Caching behavior', () => {
