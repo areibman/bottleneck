@@ -69,6 +69,8 @@ npm run build
 npm run dist
 ```
 
+By default the macOS build now targets only the architecture of the machine running the command, which keeps the generated DMG compact. If you need installers for both Apple Silicon and Intel, run `npm run dist -- --arm64` and `npm run dist -- --x64` separately (or pass `--universal` when you truly need a combined binary).
+
 ## Development
 
 ### Project Structure
