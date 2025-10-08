@@ -15,6 +15,8 @@
     "electron": "electron .",
     "start": "npm run build && npm run electron",
     "dist": "npm run build && electron-builder",
+    "dist:mac:x64": "npm run build && electron-builder --mac dmg --x64",
+    "dist:mac:arm64": "npm run build && electron-builder --mac dmg --arm64",
     "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
@@ -100,16 +102,15 @@
       "!node_modules/highlight.js/**/*",
       "!node_modules/refractor/**/*"
     ],
+    "compression": "maximum",
+    "asar": true,
     "mac": {
       "icon": "icon.icns",
       "category": "public.app-category.developer-tools",
-      "target": {
-        "target": "default",
-        "arch": [
-          "arm64",
-          "x64"
-        ]
-      }
+      "artifactName": "Bottleneck-${version}-${arch}.${ext}",
+      "target": [
+        "dmg"
+      ]
     },
     "linux": {
       "icon": "1024.png",

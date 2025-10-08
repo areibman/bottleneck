@@ -69,6 +69,14 @@ npm run build
 npm run dist
 ```
 
+To create smaller macOS installers that only target a single CPU architecture (instead of a large universal DMG), run one of the
+following commands from a macOS machine:
+
+```bash
+npm run dist:mac:x64   # Intel Macs (~140MB DMG)
+npm run dist:mac:arm64 # Apple Silicon Macs (~130MB DMG)
+```
+
 ## Development
 
 ### Project Structure
@@ -97,6 +105,8 @@ bottleneck/
 - `npm run dev` - Start development server with hot reload
 - `npm run build` - Build for production
 - `npm run dist` - Package the app for distribution
+- `npm run dist:mac:x64` - Create an Intel-only macOS DMG (reduces installer size)
+- `npm run dist:mac:arm64` - Create an Apple Silicon-only macOS DMG (reduces installer size)
 - `npm run electron` - Run the built app
 
 ### React DevTools Profiler
