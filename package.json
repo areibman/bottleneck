@@ -61,6 +61,7 @@
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
     "react": "^18.2.0",
@@ -99,6 +100,13 @@
     "mac": {
       "icon": "icon.icns",
       "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "KQHSQY486C"
+      },
       "target": {
         "target": "default",
         "arch": [
@@ -106,6 +114,11 @@
           "x64"
         ]
       }
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "areibman",
+      "repo": "bottleneck"
     },
     "linux": {
       "icon": "1024.png",

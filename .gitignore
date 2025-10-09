@@ -6,7 +6,11 @@ node_modules/
 # Production
 dist/
 release/
-build/
+
+# Build artifacts (but keep entitlements for code signing)
+build/*.yaml
+build/*.yml
+build/builder-*.json
 
 # Misc
 .DS_Store

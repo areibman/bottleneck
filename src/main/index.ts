@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, dialog } from "electron";
+import { autoUpdater } from "electron-updater";
 import path from "path";
 import { config } from "dotenv";
 config();
@@ -178,6 +179,30 @@ app.whenReady().then(async () => {
 
     createWindow();
     perfLog("Main process initialization complete", readyTime);
+
+    // Set up auto-updater (only in production)
+    if (!isDev) {
+      autoUpdater.logger = console;
+      autoUpdater.checkForUpdatesAndNotify();
+      
+      autoUpdater.on('update-available', () => {
+        console.log('Update available');
+      });
+      
+      autoUpdater.on('update-downloaded', () => {
+        console.log('Update downloaded');
+        dialog.showMessageBox(mainWindow!, {
+          type: 'info',
+          title: 'Update Ready',
+          message: 'A new version has been downloaded. Restart the application to apply the update.',
+          buttons: ['Restart', 'Later']
+        }).then((result) => {
+          if (result.response === 0) {
+            autoUpdater.quitAndInstall();
+          }
+        });
+      });
+    }
 
     // Install DevTools Extensions AFTER window creation (non-blocking)
     if (isDev) {
