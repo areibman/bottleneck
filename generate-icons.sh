@@ -17,20 +17,28 @@ fi
 
 echo "Creating rounded corner icons from $INPUT..."
 
-# Function to create rounded corners
+# Function to create rounded corners with 80% shrink for Electron dock icon
 create_rounded() {
     local input="$1"
     local output="$2"
     local size="$3"
-    local radius=$((size / 8))  # 12.5% radius for nice rounded corners
     
+    # Calculate 80% of the target size for the actual icon content
+    local content_size=$(awk "BEGIN {print int($size * 0.8)}")
+    local radius=$((content_size / 8))  # 12.5% radius for nice rounded corners
+    
+    # Calculate offset to center the 80% sized content
+    local offset=$(awk "BEGIN {print int(($size - $content_size) / 2)}")
+    
+    # Create the icon at 80% size with rounded corners, then composite onto full-size transparent canvas
     magick "$input" \
-        -resize "${size}x${size}" \
+        -resize "${content_size}x${content_size}" \
         \( +clone -alpha extract \
            -draw "fill black polygon 0,0 0,$radius $radius,0 fill white circle $radius,$radius $radius,0" \
            \( +clone -flip \) -compose Multiply -composite \
            \( +clone -flop \) -compose Multiply -composite \
         \) -alpha off -compose CopyOpacity -composite \
+        -background none -gravity center -extent "${size}x${size}" \
         "$output"
 }
 
