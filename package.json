@@ -61,6 +61,7 @@
     "date-fns": "^3.2.0",
     "dotenv": "^17.2.2",
     "electron-store": "^8.1.0",
+    "framer-motion": "^12.23.22",
     "lucide-react": "^0.312.0",
     "monaco-editor": "^0.45.0",
     "react": "^18.2.0",
@@ -69,6 +70,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.21.2",
     "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
     "simple-git": "^3.22.0",
     "zustand": "^4.4.7"
   },
