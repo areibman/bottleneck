@@ -34,6 +34,39 @@ const electronAPI = {
     getZoomLevel: () => ipcRenderer.invoke("app:get-zoom-level"),
   },
 
+  // Auto-updater
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke("updater:check-for-updates"),
+    installUpdate: () => ipcRenderer.invoke("updater:install-update"),
+    getStatus: () => ipcRenderer.invoke("updater:get-status"),
+    onCheckingForUpdate: (callback: () => void) => {
+      ipcRenderer.on("updater:checking-for-update", callback);
+    },
+    onUpdateAvailable: (callback: (info: any) => void) => {
+      ipcRenderer.on("updater:update-available", (_event, info) => callback(info));
+    },
+    onUpdateNotAvailable: (callback: (info: any) => void) => {
+      ipcRenderer.on("updater:update-not-available", (_event, info) => callback(info));
+    },
+    onDownloadProgress: (callback: (progress: any) => void) => {
+      ipcRenderer.on("updater:download-progress", (_event, progress) => callback(progress));
+    },
+    onUpdateDownloaded: (callback: (info: any) => void) => {
+      ipcRenderer.on("updater:update-downloaded", (_event, info) => callback(info));
+    },
+    onError: (callback: (error: any) => void) => {
+      ipcRenderer.on("updater:error", (_event, error) => callback(error));
+    },
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners("updater:checking-for-update");
+      ipcRenderer.removeAllListeners("updater:update-available");
+      ipcRenderer.removeAllListeners("updater:update-not-available");
+      ipcRenderer.removeAllListeners("updater:download-progress");
+      ipcRenderer.removeAllListeners("updater:update-downloaded");
+      ipcRenderer.removeAllListeners("updater:error");
+    },
+  },
+
   // Utility functions
   utils: {
     fromBase64: (data: string) => ipcRenderer.invoke("utils:fromBase64", data),

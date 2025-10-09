@@ -6,7 +6,7 @@ on:
       - 'v*'  # Trigger on version tags like v0.1.7, v1.0.0, etc.
 
 jobs:
-  release:
+  release-macos:
     runs-on: macos-latest
     
     steps:
@@ -43,7 +43,7 @@ jobs:
           # Add keychain to search list
           security list-keychain -d user -s $KEYCHAIN_PATH
 
-      - name: Build and sign app
+      - name: Build and sign macOS app
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -52,15 +52,63 @@ jobs:
         run: |
           npm run dist
           
-      - name: Upload artifacts
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
+          name: macos-artifacts
           path: |
             release/*.dmg
             release/*.zip
             release/*.blockmap
             release/latest-mac.yml
+
+  release-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run dist
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+
+  create-release:
+    needs: [release-macos, release-windows]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifacts
+          path: release
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -68,8 +116,10 @@ jobs:
           files: |
             release/*.dmg
             release/*.zip
+            release/*.exe
             release/*.blockmap
             release/latest-mac.yml
+            release/latest.yml
           draft: false
           prerelease: false
         env:

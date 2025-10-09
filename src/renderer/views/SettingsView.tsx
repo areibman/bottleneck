@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings,
   Bell,
@@ -10,11 +10,16 @@ import {
   RefreshCw,
   FolderOpen,
   AlertTriangle,
+  Download,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUIStore } from "../stores/uiStore";
 import { cn } from "../utils/cn";
+
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
 export default function SettingsView() {
   const { user, logout } = useAuthStore();
@@ -25,6 +30,92 @@ export default function SettingsView() {
   >("general");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+
+  // Update state
+  const [currentVersion, setCurrentVersion] = useState<string>("");
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [updateInfo, setUpdateInfo] = useState<{ version?: string; releaseDate?: string } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isDev, setIsDev] = useState(false);
+
+  useEffect(() => {
+    // Get current version and dev status
+    const initUpdater = async () => {
+      try {
+        const version = await window.electron.app.getVersion();
+        setCurrentVersion(version);
+
+        const status = await window.electron.updater.getStatus();
+        if (status.success) {
+          setIsDev(status.isDev);
+        }
+      } catch (error) {
+        console.error("Failed to initialize updater:", error);
+      }
+    };
+
+    initUpdater();
+
+    // Set up update event listeners
+    window.electron.updater.onCheckingForUpdate(() => {
+      setUpdateStatus('checking');
+      setErrorMessage("");
+    });
+
+    window.electron.updater.onUpdateAvailable((info) => {
+      setUpdateStatus('available');
+      setUpdateInfo({ version: info.version, releaseDate: info.releaseDate });
+      // Auto-download will start automatically
+      setUpdateStatus('downloading');
+    });
+
+    window.electron.updater.onUpdateNotAvailable(() => {
+      setUpdateStatus('not-available');
+      setUpdateInfo(null);
+    });
+
+    window.electron.updater.onDownloadProgress((progress) => {
+      setUpdateStatus('downloading');
+      setDownloadProgress(progress.percent);
+    });
+
+    window.electron.updater.onUpdateDownloaded((info) => {
+      setUpdateStatus('downloaded');
+      setUpdateInfo({ version: info.version, releaseDate: info.releaseDate });
+      setDownloadProgress(100);
+    });
+
+    window.electron.updater.onError((error) => {
+      setUpdateStatus('error');
+      setErrorMessage(error.message);
+    });
+
+    // Cleanup listeners
+    return () => {
+      window.electron.updater.removeAllListeners();
+    };
+  }, []);
+
+  const handleCheckForUpdates = async () => {
+    try {
+      setErrorMessage("");
+      await window.electron.updater.checkForUpdates();
+    } catch (error) {
+      console.error("Failed to check for updates:", error);
+      setErrorMessage("Failed to check for updates");
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    try {
+      await window.electron.updater.installUpdate();
+      // App will restart automatically
+    } catch (error) {
+      console.error("Failed to install update:", error);
+      setErrorMessage("Failed to install update");
+    }
+  };
 
   const handleSave = async () => {
     await saveSettings();
@@ -336,6 +427,173 @@ export default function SettingsView() {
                         <FolderOpen className="w-4 h-4 mr-2" />
                         Browse
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Version & Updates Section */}
+                  <div className={cn(
+                    "mt-6 pt-6 border-t",
+                    theme === "dark" ? "border-gray-700" : "border-gray-200"
+                  )}>
+                    <label
+                      className={cn(
+                        "label text-base font-semibold mb-3 block",
+                        theme === "dark" ? "text-white" : "text-gray-900",
+                      )}
+                    >
+                      Version & Updates
+                    </label>
+
+                    <div className="space-y-3">
+                      {/* Current Version */}
+                      <div className="flex items-center justify-between">
+                        <span className={cn(
+                          "text-sm",
+                          theme === "dark" ? "text-gray-400" : "text-gray-600"
+                        )}>
+                          Current version
+                        </span>
+                        <span className={cn(
+                          "text-sm font-medium",
+                          theme === "dark" ? "text-white" : "text-gray-900"
+                        )}>
+                          {currentVersion}
+                        </span>
+                      </div>
+
+                      {/* Development Mode Notice */}
+                      {isDev && (
+                        <div className={cn(
+                          "text-xs p-2 rounded",
+                          theme === "dark" ? "bg-yellow-900/20 text-yellow-400" : "bg-yellow-50 text-yellow-700"
+                        )}>
+                          Auto-updates are disabled in development mode
+                        </div>
+                      )}
+
+                      {/* Update Status */}
+                      {!isDev && (
+                        <>
+                          <div className="flex items-center space-x-2">
+                            {updateStatus === 'checking' && (
+                              <>
+                                <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+                                <span className={cn(
+                                  "text-sm",
+                                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                                )}>
+                                  Checking for updates...
+                                </span>
+                              </>
+                            )}
+
+                            {updateStatus === 'not-available' && (
+                              <>
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                                <span className={cn(
+                                  "text-sm",
+                                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                                )}>
+                                  You're up to date!
+                                </span>
+                              </>
+                            )}
+
+                            {updateStatus === 'available' && updateInfo && (
+                              <>
+                                <Download className="w-4 h-4 text-blue-500" />
+                                <span className={cn(
+                                  "text-sm",
+                                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                                )}>
+                                  Update available: <span className="font-semibold">{updateInfo.version}</span>
+                                </span>
+                              </>
+                            )}
+
+                            {updateStatus === 'downloading' && (
+                              <>
+                                <Download className="w-4 h-4 text-blue-500 animate-pulse" />
+                                <span className={cn(
+                                  "text-sm",
+                                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                                )}>
+                                  Downloading update... {Math.round(downloadProgress)}%
+                                </span>
+                              </>
+                            )}
+
+                            {updateStatus === 'downloaded' && updateInfo && (
+                              <>
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                                <span className={cn(
+                                  "text-sm",
+                                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                                )}>
+                                  Update <span className="font-semibold">{updateInfo.version}</span> ready to install
+                                </span>
+                              </>
+                            )}
+
+                            {updateStatus === 'error' && (
+                              <>
+                                <XCircle className="w-4 h-4 text-red-500" />
+                                <span className={cn(
+                                  "text-sm",
+                                  theme === "dark" ? "text-red-400" : "text-red-600"
+                                )}>
+                                  {errorMessage || "Update check failed"}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Download Progress Bar */}
+                          {updateStatus === 'downloading' && (
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                              <div
+                                className="bg-blue-500 h-2 transition-all duration-300"
+                                style={{ width: `${downloadProgress}%` }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Action Buttons */}
+                          <div className="flex space-x-2 mt-2">
+                            {updateStatus === 'downloaded' && (
+                              <button
+                                onClick={handleInstallUpdate}
+                                className={cn(
+                                  "btn btn-primary text-sm px-4 py-2",
+                                  theme === "dark"
+                                    ? "bg-blue-600 hover:bg-blue-700"
+                                    : "bg-blue-500 hover:bg-blue-600"
+                                )}
+                              >
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Install Update & Restart
+                              </button>
+                            )}
+
+                            {(updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error') && (
+                              <button
+                                onClick={handleCheckForUpdates}
+                                disabled={updateStatus === 'checking'}
+                                className={cn(
+                                  "btn btn-secondary text-sm px-4 py-2",
+                                  updateStatus === 'checking' && "opacity-50 cursor-not-allowed"
+                                )}
+                              >
+                                <RefreshCw className={cn(
+                                  "w-4 h-4 mr-2",
+                                  updateStatus === 'checking' && "animate-spin"
+                                )} />
+                                Check for Updates
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

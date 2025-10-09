@@ -42,6 +42,19 @@ declare global {
         getZoomLevel: () => Promise<{ success: boolean; zoomLevel?: number; error?: string }>;
       };
 
+      updater: {
+        checkForUpdates: () => Promise<{ success: boolean; updateInfo?: any; error?: string }>;
+        installUpdate: () => Promise<{ success: boolean; error?: string }>;
+        getStatus: () => Promise<{ success: boolean; isDev: boolean; currentVersion: string }>;
+        onCheckingForUpdate: (callback: () => void) => void;
+        onUpdateAvailable: (callback: (info: { version: string; releaseDate?: string; releaseNotes?: string }) => void) => void;
+        onUpdateNotAvailable: (callback: (info: { version: string }) => void) => void;
+        onDownloadProgress: (callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => void;
+        onUpdateDownloaded: (callback: (info: { version: string; releaseDate?: string }) => void) => void;
+        onError: (callback: (error: { message: string }) => void) => void;
+        removeAllListeners: () => void;
+      };
+
       utils: {
         fromBase64: (data: string) => Promise<string>;
       };

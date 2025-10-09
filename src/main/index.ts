@@ -183,23 +183,56 @@ app.whenReady().then(async () => {
     // Set up auto-updater (only in production)
     if (!isDev) {
       autoUpdater.logger = console;
+      autoUpdater.autoDownload = true; // Auto-download updates in background
+      autoUpdater.autoInstallOnAppQuit = true; // Install on next quit
+
+      // Check for updates on startup
       autoUpdater.checkForUpdatesAndNotify();
-      
-      autoUpdater.on('update-available', () => {
-        console.log('Update available');
+
+      // Set up event listeners
+      autoUpdater.on('checking-for-update', () => {
+        console.log('Checking for updates...');
+        mainWindow?.webContents.send('updater:checking-for-update');
       });
-      
-      autoUpdater.on('update-downloaded', () => {
-        console.log('Update downloaded');
-        dialog.showMessageBox(mainWindow!, {
-          type: 'info',
-          title: 'Update Ready',
-          message: 'A new version has been downloaded. Restart the application to apply the update.',
-          buttons: ['Restart', 'Later']
-        }).then((result) => {
-          if (result.response === 0) {
-            autoUpdater.quitAndInstall();
-          }
+
+      autoUpdater.on('update-available', (info) => {
+        console.log('Update available:', info.version);
+        mainWindow?.webContents.send('updater:update-available', {
+          version: info.version,
+          releaseDate: info.releaseDate,
+          releaseNotes: info.releaseNotes
+        });
+      });
+
+      autoUpdater.on('update-not-available', (info) => {
+        console.log('Update not available. Current version is latest:', info.version);
+        mainWindow?.webContents.send('updater:update-not-available', {
+          version: info.version
+        });
+      });
+
+      autoUpdater.on('download-progress', (progress) => {
+        console.log(`Download progress: ${progress.percent}%`);
+        mainWindow?.webContents.send('updater:download-progress', {
+          percent: progress.percent,
+          bytesPerSecond: progress.bytesPerSecond,
+          transferred: progress.transferred,
+          total: progress.total
+        });
+      });
+
+      autoUpdater.on('update-downloaded', (info) => {
+        console.log('Update downloaded:', info.version);
+        mainWindow?.webContents.send('updater:update-downloaded', {
+          version: info.version,
+          releaseDate: info.releaseDate
+        });
+      });
+
+      autoUpdater.on('error', (err) => {
+        console.error('Update error:', err);
+        mainWindow?.webContents.send('updater:error', {
+          message: err.message
         });
       });
     }
@@ -408,4 +441,45 @@ ipcMain.handle("app:get-zoom-level", () => {
     return { success: true, zoomLevel: mainWindow.webContents.getZoomLevel() };
   }
   return { success: false, error: "No window available" };
+});
+
+// Auto-updater IPC handlers
+ipcMain.handle("updater:check-for-updates", async () => {
+  if (isDev) {
+    return { success: false, error: "Updates not available in development mode" };
+  }
+
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return {
+      success: true,
+      updateInfo: result ? {
+        version: result.updateInfo.version,
+        releaseDate: result.updateInfo.releaseDate
+      } : null
+    };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:install-update", () => {
+  if (isDev) {
+    return { success: false, error: "Updates not available in development mode" };
+  }
+
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle("updater:get-status", () => {
+  return {
+    success: true,
+    isDev,
+    currentVersion: app.getVersion()
+  };
 });
