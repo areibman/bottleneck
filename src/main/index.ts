@@ -118,8 +118,9 @@ function createWindow() {
   // Load the app
   const beforeLoad = Date.now();
   if (isDev) {
-    perfLog("Loading dev server URL");
-    mainWindow.loadURL("http://localhost:3000");
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:3000";
+    perfLog("Loading dev server URL: " + devServerUrl);
+    mainWindow.loadURL(devServerUrl);
     perfLog("Dev URL loaded", beforeLoad);
     mainWindow.webContents.openDevTools();
 

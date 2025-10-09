@@ -16,62 +16,89 @@ try {
 // Start TypeScript watchers for main and preload
 console.log("Starting TypeScript watchers...");
 const mainWatcher = spawn("npm", ["run", "dev:main"], {
-  stdio: "pipe",
+  stdio: "inherit",
   shell: true,
 });
 
 const preloadWatcher = spawn("npm", ["run", "dev:preload"], {
-  stdio: "pipe",
+  stdio: "inherit",
   shell: true,
 });
 
 // Start Vite dev server
 console.log("Starting Vite dev server...");
 const vite = spawn("npm", ["run", "dev:renderer"], {
-  stdio: "pipe",
+  stdio: ["ignore", "pipe", "pipe"],
   shell: true,
 });
 
 let electronStarted = false;
+let resolvedDevUrl = null;
+
+function stripAnsi(input) {
+  // Remove common ANSI escape sequences for colors/styles
+  return input.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function extractDevServerUrl(output) {
+  const text = stripAnsi(output);
+  // Prefer the "Local:" URL vite prints
+  const localLineMatch = text.match(/Local:\s*(https?:\/\/[^\s]+)/i);
+  if (localLineMatch && localLineMatch[1]) {
+    return localLineMatch[1].replace(/\/$/, "");
+  }
+  // Fallback: any localhost/127.0.0.1 URL
+  const urlMatch = text.match(/https?:\/\/(localhost|127\.0\.0\.1):\d+/i);
+  if (urlMatch) {
+    return urlMatch[0];
+  }
+  return null;
+}
 
 vite.stdout.on("data", (data) => {
   const output = data.toString();
-  console.log("[Vite]:", output);
+  process.stdout.write(`[Vite]: ${output}`);
 
   // Start Electron when Vite is ready
-  if (!electronStarted && output.includes("Local:")) {
-    electronStarted = true;
-    console.log("Starting Electron...");
+  if (!electronStarted) {
+    const candidateUrl = extractDevServerUrl(output);
+    if (candidateUrl) {
+      resolvedDevUrl = candidateUrl;
+      electronStarted = true;
+      console.log(`Detected Vite dev server at ${resolvedDevUrl}`);
+      console.log("Starting Electron...");
 
-    // Set environment variable for development
-    process.env.NODE_ENV = "development";
+      // Set environment variable for development
+      process.env.NODE_ENV = "development";
 
-    // Wait a bit for the server to be fully ready
-    setTimeout(() => {
-      const electron = spawn("npx", ["electron", "."], {
-        stdio: "inherit",
-        shell: true,
-        env: {
-          ...process.env,
-          NODE_ENV: "development",
-          GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
-          GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
-        },
-      });
+      // Wait a bit for the server to be fully ready
+      setTimeout(() => {
+        const electron = spawn("npx", ["electron", "."], {
+          stdio: "inherit",
+          shell: true,
+          env: {
+            ...process.env,
+            NODE_ENV: "development",
+            VITE_DEV_SERVER_URL: resolvedDevUrl,
+            GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
+            GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
+          },
+        });
 
-      electron.on("close", () => {
-        console.log("Electron closed, shutting down...");
-        vite.kill();
-        mainWatcher.kill();
-        preloadWatcher.kill();
-        process.exit();
-      });
-    }, 500); // Reduced from 2000ms to 500ms
+        electron.on("close", () => {
+          console.log("Electron closed, shutting down...");
+          vite.kill();
+          mainWatcher.kill();
+          preloadWatcher.kill();
+          process.exit();
+        });
+      }, 500);
+    }
   }
 });
 
 vite.stderr.on("data", (data) => {
-  console.error("[Vite Error]:", data.toString());
+  process.stderr.write(`[Vite Error]: ${data.toString()}`);
 });
 
 // Handle process termination

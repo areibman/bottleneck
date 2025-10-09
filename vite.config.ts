@@ -26,6 +26,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    strictPort: true,
   },
   optimizeDeps: {
     include: [
@@ -34,7 +35,6 @@ export default defineConfig({
       "react-router-dom",
       "zustand",
       "@tanstack/react-query",
-      "framer-motion",
       "lucide-react",
       "clsx",
       "react-markdown",
