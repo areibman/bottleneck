@@ -81,6 +81,26 @@ describe('PrefixTrie', () => {
             // All should be equal
             expect(new Set(normalized).size).toBe(1);
         });
+
+        it('should normalize branches with 4-character hash suffixes', () => {
+            const branches = [
+                'cursor/fix-dev-mode-not-working-ffce',
+                'cursor/fix-dev-mode-not-working-78a0',
+                'cursor/fix-dev-mode-not-working-99df',
+                'cursor/fix-dev-mode-not-working'
+            ];
+
+            const normalized = branches.map(b => trie.findNormalizedPrefix(b));
+
+            // All should normalize to the same prefix
+            expect(normalized[0]).toBe('cursor/fix-dev-mode-not-working');
+            expect(normalized[1]).toBe('cursor/fix-dev-mode-not-working');
+            expect(normalized[2]).toBe('cursor/fix-dev-mode-not-working');
+            expect(normalized[3]).toBe('cursor/fix-dev-mode-not-working');
+
+            // All should be equal
+            expect(new Set(normalized).size).toBe(1);
+        });
     });
 
     describe('Caching behavior', () => {
