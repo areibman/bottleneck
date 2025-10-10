@@ -57,6 +57,9 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@monaco-editor/react": "^4.6.0",
     "@octokit/auth-oauth-app": "^7.0.1",
     "@octokit/auth-oauth-device": "^6.0.1",
