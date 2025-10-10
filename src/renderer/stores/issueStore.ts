@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { GitHubAPI, Issue } from "../services/github";
+import { GitHubAPI, Issue, PullRequest } from "../services/github";
 import { mockIssues } from "../mockData";
+import { KanbanStatus, KanbanIssue, convertToKanbanIssue } from "../utils/kanbanStatus";
 
 export interface IssueFilters {
   status: "all" | "open" | "closed";
@@ -17,6 +18,9 @@ interface IssueState {
   filters: IssueFilters;
   selectedIssues: Set<number>;
   repoLabels: Array<{ name: string; color: string; description: string | null }>;
+  // Kanban-specific state
+  associatedPRs: Map<string, PullRequest[]>;
+  associatedBranches: Map<string, string[]>;
 
   fetchIssues: (owner: string, repo: string, force?: boolean) => Promise<void>;
   updateIssue: (issue: Issue) => void;
@@ -32,6 +36,10 @@ interface IssueState {
   setFilter: (key: keyof IssueFilters, value: any) => void;
   setFilters: (filters: IssueFilters) => void;
   resetFilters: () => void;
+  // Kanban-specific methods
+  getKanbanIssues: (owner: string, repo: string) => KanbanIssue[];
+  updateIssueKanbanStatus: (owner: string, repo: string, issueId: number, newStatus: KanbanStatus) => Promise<void>;
+  fetchAssociatedData: (owner: string, repo: string) => Promise<void>;
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
@@ -47,6 +55,9 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   },
   selectedIssues: new Set(),
   repoLabels: [],
+  // Kanban-specific state
+  associatedPRs: new Map(),
+  associatedBranches: new Map(),
 
   fetchIssues: async (owner: string, repo: string, force = false) => {
     const repoFullName = `${owner}/${repo}`;
@@ -419,6 +430,127 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         // Refetch issues to get updated labels
         await get().fetchIssues(owner, repo, true);
       }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  // Kanban-specific methods
+  getKanbanIssues: (owner: string, repo: string) => {
+    const state = get();
+    const repoFullName = `${owner}/${repo}`;
+    const issues = Array.from(state.issues.values()).filter(issue => 
+      issue.repository?.owner.login === owner && issue.repository?.name === repo
+    );
+    
+    const associatedPRs = state.associatedPRs.get(repoFullName) || [];
+    const associatedBranches = state.associatedBranches.get(repoFullName) || [];
+    
+    return issues.map(issue => convertToKanbanIssue(issue, associatedPRs, associatedBranches));
+  },
+
+  updateIssueKanbanStatus: async (owner: string, repo: string, issueId: number, newStatus: KanbanStatus) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      const api = new GitHubAPI(token);
+      const repoFullName = `${owner}/${repo}`;
+      const issueKey = `${repoFullName}#${issueId}`;
+
+      // Get current issue
+      const currentIssue = get().issues.get(issueKey);
+      if (!currentIssue) {
+        throw new Error("Issue not found");
+      }
+
+      // Determine what actions to take based on the new status
+      let updatedIssue = { ...currentIssue };
+
+      switch (newStatus) {
+        case 'closed':
+          if (currentIssue.state === 'open') {
+            updatedIssue = await api.closeIssue(owner, repo, issueId);
+          }
+          break;
+        case 'done':
+          // For done status, we might want to add a specific label or close the issue
+          // This depends on your workflow - for now, we'll just update the issue
+          break;
+        case 'todo':
+        case 'in-progress':
+        case 'in-review':
+          if (currentIssue.state === 'closed') {
+            updatedIssue = await api.reopenIssue(owner, repo, issueId);
+          }
+          break;
+        case 'unassigned':
+          // Remove all assignees
+          if (currentIssue.assignees.length > 0) {
+            // Note: GitHub API doesn't have a direct way to remove all assignees
+            // We would need to implement this by updating the issue with an empty assignees array
+            // For now, we'll just update the local state
+          }
+          break;
+      }
+
+      // Update the issue in the store
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        newIssues.set(issueKey, updatedIssue);
+        return { issues: newIssues };
+      });
+
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  fetchAssociatedData: async (owner: string, repo: string) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      const api = new GitHubAPI(token);
+      const repoFullName = `${owner}/${repo}`;
+
+      // Fetch pull requests and branches in parallel
+      const [pullRequests, branches] = await Promise.all([
+        api.getPullRequests(owner, repo, 'all'),
+        api.getBranches(owner, repo)
+      ]);
+
+      // Update the store with associated data
+      set((state) => {
+        const newAssociatedPRs = new Map(state.associatedPRs);
+        const newAssociatedBranches = new Map(state.associatedBranches);
+        
+        newAssociatedPRs.set(repoFullName, pullRequests);
+        newAssociatedBranches.set(repoFullName, branches.map(b => b.name));
+        
+        return {
+          associatedPRs: newAssociatedPRs,
+          associatedBranches: newAssociatedBranches,
+        };
+      });
+
     } catch (error) {
       set({ error: (error as Error).message });
     }
