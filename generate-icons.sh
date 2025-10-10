@@ -8,8 +8,7 @@ if ! command -v magick &> /dev/null; then
     exit 1
 fi
 
-# Content shrink percentage inside each icon canvas (default: 80)
-# Can be overridden via environment variable, e.g. `SHRINK_PERCENT=85 ./generate-icons.sh`
+# Content shrink percentage inside each icon canvas (standard for macOS: 80)
 SHRINK_PERCENT="${SHRINK_PERCENT:-80}"
 
 INPUT="1024.png"
@@ -27,26 +26,35 @@ create_rounded() {
     local input="$1"
     local output="$2"
     local size="$3"
-    local radius=$((size / 8))  # 12.5% radius for nice rounded corners
     local shrink_percent="${4:-$SHRINK_PERCENT}"
     local inner_size=$(( size * shrink_percent / 100 ))
+    local radius=$((inner_size * 18 / 100))  # 18% radius based on content size, not canvas
     
-    # Create a rounded rectangle mask
-    magick -size "${size}x${size}" xc:none \
+    # First, resize the input and apply rounded corners to it
+    magick -size "${inner_size}x${inner_size}" xc:none \
         -fill white \
-        -draw "roundrectangle 0,0 $((size-1)),$((size-1)) $radius,$radius" \
+        -draw "roundrectangle 0,0 $((inner_size-1)),$((inner_size-1)) $radius,$radius" \
         /tmp/rounded_mask_${size}.png
     
-    # Resize and center the input image, then apply the rounded mask
+    # Resize input
     magick "$input" \
         -resize "${inner_size}x${inner_size}" \
-        -background none -gravity center -extent "${size}x${size}" \
-        /tmp/rounded_mask_${size}.png \
-        -alpha off -compose CopyOpacity -composite \
+        /tmp/resized_${size}.png
+    
+    # Apply rounded mask
+    magick /tmp/resized_${size}.png /tmp/rounded_mask_${size}.png \
+        -compose DstIn -composite \
+        /tmp/rounded_${size}.png
+    
+    # Center on final canvas
+    magick /tmp/rounded_${size}.png \
+        -gravity center \
+        -background none \
+        -extent "${size}x${size}" \
         "$output"
     
-    # Clean up temporary mask
-    rm -f /tmp/rounded_mask_${size}.png
+    # Clean up temporary files
+    rm -f /tmp/rounded_mask_${size}.png /tmp/resized_${size}.png /tmp/rounded_${size}.png
 }
 
 ## macOS
@@ -90,11 +98,6 @@ for i in 16 22 24 32 36 48 64 72 96 128 192 256 512; do
 done
 echo "✓ Created Linux icons in icons/ directory"
 
-# Create a rounded version of the main icon
-echo "Creating rounded 1024.png (no shrink)..."
-create_rounded "$INPUT" "1024-rounded.png" 1024 100
-echo "✓ Created 1024-rounded.png"
-
 echo ""
 echo "✅ All icons generated successfully!"
 echo ""
@@ -102,8 +105,4 @@ echo "Files created:"
 echo "  - icon.icns (macOS)"
 echo "  - icon.ico (Windows)"
 echo "  - icons/*.png (Linux)"
-echo "  - 1024-rounded.png (source with rounded corners)"
-echo ""
-echo "To use the rounded version as your app icon, run:"
-echo "  mv 1024-rounded.png 1024.png"
 
