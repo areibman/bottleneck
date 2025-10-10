@@ -395,6 +395,279 @@ export const mockPullRequests = [
     additions: 203,
     deletions: 78,
   },
+  // Add more diverse agent contributors
+  {
+    id: 10,
+    number: 1250,
+    title: "Implement advanced caching mechanism",
+    body: "AI-generated performance optimization with Redis caching.",
+    state: "closed" as const,
+    draft: false,
+    merged: true,
+    mergeable: null,
+    merge_commit_sha: "xyz789",
+    head: {
+      ref: "devin/caching-optimization",
+      sha: "abc123",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    base: {
+      ref: "main",
+      sha: "def456",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    user: {
+      login: "devin-ai",
+      avatar_url: "https://github.com/github.png",
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: "ai-generated", color: "7057ff" },
+      { name: "performance", color: "0e8a16" },
+    ],
+    comments: 8,
+    created_at: new Date(Date.now() - 1209600000).toISOString(), // 2 weeks ago
+    updated_at: new Date(Date.now() - 1209600000 + 172800000).toISOString(), // 2 days later
+    closed_at: new Date(Date.now() - 1209600000 + 172800000).toISOString(),
+    merged_at: new Date(Date.now() - 1209600000 + 172800000).toISOString(),
+    changed_files: 12,
+    additions: 456,
+    deletions: 89,
+  },
+  {
+    id: 11,
+    number: 1249,
+    title: "Add comprehensive error handling",
+    body: "AI-generated error handling improvements across the application.",
+    state: "closed" as const,
+    draft: false,
+    merged: true,
+    mergeable: null,
+    merge_commit_sha: "def456",
+    head: {
+      ref: "chatgpt/error-handling",
+      sha: "ghi789",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    base: {
+      ref: "main",
+      sha: "def456",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    user: {
+      login: "chatgpt-ai",
+      avatar_url: "https://github.com/github.png",
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: "ai-generated", color: "7057ff" },
+      { name: "bug", color: "d73a4a" },
+    ],
+    comments: 5,
+    created_at: new Date(Date.now() - 2592000000).toISOString(), // 1 month ago
+    updated_at: new Date(Date.now() - 2592000000 + 432000000).toISOString(), // 5 days later
+    closed_at: new Date(Date.now() - 2592000000 + 432000000).toISOString(),
+    merged_at: new Date(Date.now() - 2592000000 + 432000000).toISOString(),
+    changed_files: 8,
+    additions: 234,
+    deletions: 67,
+  },
+  {
+    id: 12,
+    number: 1248,
+    title: "Optimize database queries",
+    body: "AI-generated database query optimization for better performance.",
+    state: "open" as const,
+    draft: false,
+    merged: false,
+    mergeable: true,
+    merge_commit_sha: null,
+    head: {
+      ref: "devin/db-optimization",
+      sha: "jkl012",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    base: {
+      ref: "main",
+      sha: "def456",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    user: {
+      login: "devin-ai",
+      avatar_url: "https://github.com/github.png",
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: "ai-generated", color: "7057ff" },
+      { name: "performance", color: "0e8a16" },
+    ],
+    comments: 3,
+    created_at: new Date(Date.now() - 432000000).toISOString(), // 5 days ago
+    updated_at: new Date(Date.now() - 216000000).toISOString(), // 2.5 days ago
+    closed_at: null,
+    merged_at: null,
+    changed_files: 15,
+    additions: 678,
+    deletions: 123,
+  },
+  {
+    id: 13,
+    number: 1247,
+    title: "Add unit tests for authentication module",
+    body: "AI-generated comprehensive unit tests for the authentication system.",
+    state: "closed" as const,
+    draft: false,
+    merged: true,
+    mergeable: null,
+    merge_commit_sha: "mno345",
+    head: {
+      ref: "claude/tests-auth",
+      sha: "pqr678",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    base: {
+      ref: "main",
+      sha: "def456",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    user: {
+      login: "claude-ai",
+      avatar_url: "https://github.com/github.png",
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: "ai-generated", color: "7057ff" },
+      { name: "tests", color: "0366d6" },
+    ],
+    comments: 2,
+    created_at: new Date(Date.now() - 1814400000).toISOString(), // 3 weeks ago
+    updated_at: new Date(Date.now() - 1814400000 + 259200000).toISOString(), // 3 days later
+    closed_at: new Date(Date.now() - 1814400000 + 259200000).toISOString(),
+    merged_at: new Date(Date.now() - 1814400000 + 259200000).toISOString(),
+    changed_files: 6,
+    additions: 345,
+    deletions: 12,
+  },
+  // Add more human contributors for better stats
+  {
+    id: 14,
+    number: 1246,
+    title: "Refactor user authentication flow",
+    body: "Complete refactor of the authentication system for better security.",
+    state: "closed" as const,
+    draft: false,
+    merged: true,
+    mergeable: null,
+    merge_commit_sha: "stu901",
+    head: {
+      ref: "feature/auth-refactor",
+      sha: "vwx234",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    base: {
+      ref: "main",
+      sha: "def456",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    user: {
+      login: "david",
+      avatar_url: "https://github.com/github.png",
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: "enhancement", color: "a2eeef" },
+      { name: "security", color: "b60205" },
+    ],
+    comments: 15,
+    created_at: new Date(Date.now() - 3456000000).toISOString(), // 6 weeks ago
+    updated_at: new Date(Date.now() - 3456000000 + 604800000).toISOString(), // 1 week later
+    closed_at: new Date(Date.now() - 3456000000 + 604800000).toISOString(),
+    merged_at: new Date(Date.now() - 3456000000 + 604800000).toISOString(),
+    changed_files: 25,
+    additions: 1200,
+    deletions: 300,
+  },
+  {
+    id: 15,
+    number: 1245,
+    title: "Fix critical security vulnerability",
+    body: "Addresses CVE-2023-12345 in the dependency chain.",
+    state: "closed" as const,
+    draft: false,
+    merged: true,
+    mergeable: null,
+    merge_commit_sha: "yz1567",
+    head: {
+      ref: "hotfix/security-patch",
+      sha: "abc890",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    base: {
+      ref: "main",
+      sha: "def456",
+      repo: {
+        name: "bottleneck",
+        owner: { login: "dev-user" },
+      },
+    },
+    user: {
+      login: "sarah",
+      avatar_url: "https://github.com/github.png",
+    },
+    assignees: [],
+    requested_reviewers: [],
+    labels: [
+      { name: "bug", color: "d73a4a" },
+      { name: "security", color: "b60205" },
+      { name: "hotfix", color: "ff6b6b" },
+    ],
+    comments: 8,
+    created_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+    updated_at: new Date(Date.now() - 43200000).toISOString(), // 12 hours later
+    closed_at: new Date(Date.now() - 43200000).toISOString(),
+    merged_at: new Date(Date.now() - 43200000).toISOString(),
+    changed_files: 3,
+    additions: 45,
+    deletions: 12,
+  },
 ];
 
 export const mockRepositories = [
