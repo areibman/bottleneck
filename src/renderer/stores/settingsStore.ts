@@ -1,5 +1,14 @@
 import { create } from "zustand";
 
+export interface AuthorTeam {
+  id: string;
+  name: string;
+  members: string[]; // GitHub logins
+  color?: string; // Hex or named color
+  icon?: string; // Optional emoji or icon name
+  description?: string;
+}
+
 interface Settings {
   // General
   autoSync: boolean;
@@ -26,6 +35,9 @@ interface Settings {
   cacheSize: number;
   enableDebugMode: boolean;
   enableTelemetry: boolean;
+
+  // User-defined
+  authorTeams: AuthorTeam[];
 }
 
 interface SettingsState {
@@ -34,6 +46,11 @@ interface SettingsState {
   loadSettings: () => Promise<void>;
   saveSettings: () => Promise<void>;
   resetSettings: () => void;
+
+  // Teams management
+  addAuthorTeam: (team: Omit<AuthorTeam, "id"> & { id?: string }) => void;
+  updateAuthorTeam: (team: AuthorTeam) => void;
+  deleteAuthorTeam: (teamId: string) => void;
 }
 
 const defaultSettings: Settings = {
@@ -62,6 +79,9 @@ const defaultSettings: Settings = {
   cacheSize: 500,
   enableDebugMode: false,
   enableTelemetry: false,
+
+  // User-defined
+  authorTeams: [],
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -107,5 +127,76 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   resetSettings: () => {
     set({ settings: defaultSettings });
+  },
+
+  // Teams management
+  addAuthorTeam: (teamInput) => {
+    set((state) => {
+      const id = teamInput.id ?? `team_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const newTeam: AuthorTeam = {
+        id,
+        name: teamInput.name?.trim() || "Untitled Team",
+        members: Array.from(new Set(teamInput.members || [])).sort(),
+        color: teamInput.color,
+        icon: teamInput.icon,
+        description: teamInput.description,
+      };
+      const nextSettings = {
+        ...state.settings,
+        authorTeams: [...(state.settings.authorTeams || []), newTeam],
+      };
+
+      // Persist immediately if electron is available
+      if (typeof window !== "undefined" && window.electron?.settings?.set) {
+        window.electron.settings.set("authorTeams", nextSettings.authorTeams).catch(() => {});
+      }
+
+      return {
+        settings: {
+          ...nextSettings,
+        },
+      };
+    });
+  },
+
+  updateAuthorTeam: (team) => {
+    set((state) => {
+      const nextTeams = (state.settings.authorTeams || []).map((t) =>
+        t.id === team.id
+          ? {
+              ...t,
+              name: team.name?.trim() || t.name,
+              members: Array.from(new Set(team.members || [])).sort(),
+              color: team.color,
+              icon: team.icon,
+              description: team.description,
+            }
+          : t,
+      );
+      if (typeof window !== "undefined" && window.electron?.settings?.set) {
+        window.electron.settings.set("authorTeams", nextTeams).catch(() => {});
+      }
+      return {
+        settings: {
+          ...state.settings,
+          authorTeams: nextTeams,
+        },
+      };
+    });
+  },
+
+  deleteAuthorTeam: (teamId) => {
+    set((state) => {
+      const nextTeams = (state.settings.authorTeams || []).filter((t) => t.id !== teamId);
+      if (typeof window !== "undefined" && window.electron?.settings?.set) {
+        window.electron.settings.set("authorTeams", nextTeams).catch(() => {});
+      }
+      return {
+        settings: {
+          ...state.settings,
+          authorTeams: nextTeams,
+        },
+      };
+    });
   },
 }));
