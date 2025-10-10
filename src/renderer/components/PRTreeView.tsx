@@ -421,14 +421,16 @@ export function PRTreeView({
                         onClick={(event) => {
                           event.stopPropagation();
                           onCloseGroup(item.data.closablePRIds ?? []);
-                          setHoveredGroup(null);
+                          // Don't immediately clear hover - let the UI update be visible
+                          setTimeout(() => setHoveredGroup(null), 500);
                         }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             event.stopPropagation();
                             onCloseGroup(item.data.closablePRIds ?? []);
-                            setHoveredGroup(null);
+                            // Don't immediately clear hover - let the UI update be visible
+                            setTimeout(() => setHoveredGroup(null), 500);
                           }
                         }}
                         className={cn(
