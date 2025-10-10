@@ -23,7 +23,7 @@ function perfLog(label: string, startTime?: number) {
 
 perfLog("Main process started");
 
-const isDev = process.env.NODE_ENV === "development";
+const isDev = !app.isPackaged;
 perfLog("Environment loaded (isDev=" + isDev + ")");
 
 const store = new Store();

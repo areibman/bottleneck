@@ -43,9 +43,6 @@ vite.stdout.on("data", (data) => {
     electronStarted = true;
     console.log("Starting Electron...");
 
-    // Set environment variable for development
-    process.env.NODE_ENV = "development";
-
     // Wait a bit for the server to be fully ready
     setTimeout(() => {
       const electron = spawn("npx", ["electron", "."], {
@@ -53,7 +50,6 @@ vite.stdout.on("data", (data) => {
         shell: true,
         env: {
           ...process.env,
-          NODE_ENV: "development",
           GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
           GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
         },

@@ -24,7 +24,6 @@ npm install
 ```env
 GITHUB_CLIENT_ID=your_client_id_here
 GITHUB_CLIENT_SECRET=your_client_secret_here
-NODE_ENV=development
 ```
 
 4. **Run in development mode:**
