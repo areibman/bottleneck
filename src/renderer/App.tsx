@@ -19,7 +19,7 @@ const PRDetailView = lazy(() => import("./views/PRDetailView"));
 const BranchesView = lazy(() => import("./views/BranchesView"));
 const SettingsView = lazy(() => import("./views/SettingsView"));
 const AuthView = lazy(() => import("./views/AuthView"));
-const IssuesView = lazy(() => import("./views/IssuesView"));
+const KanbanView = lazy(() => import("./views/KanbanView"));
 const IssueDetailView = lazy(() => import("./views/IssueDetailView"));
 const CursorView = lazy(() => import("./views/CursorView"));
 const DevinView = lazy(() => import("./views/DevinView"));
@@ -180,7 +180,7 @@ function App() {
                 element={<PRDetailView />}
               />
               <Route path="/branches" element={<BranchesView />} />
-              <Route path="/issues" element={<IssuesView />} />
+              <Route path="/issues" element={<KanbanView />} />
               <Route
                 path="/issues/:owner/:repo/:number"
                 element={<IssueDetailView />}
