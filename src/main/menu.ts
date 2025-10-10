@@ -81,6 +81,15 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
               { role: "selectAll" as const },
               { type: "separator" as const },
               {
+                label: "Find",
+                accelerator: "CmdOrCtrl+F",
+                click: () => {
+                  // Show the native find bar
+                  mainWindow.webContents.findInPage("");
+                },
+              },
+              { type: "separator" as const },
+              {
                 label: "Speech",
                 submenu: [
                   { role: "startSpeaking" as const },
@@ -92,6 +101,15 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
               { role: "delete" as const },
               { type: "separator" as const },
               { role: "selectAll" as const },
+              { type: "separator" as const },
+              {
+                label: "Find",
+                accelerator: "CmdOrCtrl+F",
+                click: () => {
+                  // Show the native find bar
+                  mainWindow.webContents.findInPage("");
+                },
+              },
             ]),
       ],
     },
