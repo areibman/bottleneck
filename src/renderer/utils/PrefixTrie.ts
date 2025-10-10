@@ -3,90 +3,163 @@
  */
 class TrieNode {
     children: Map<string, TrieNode> = new Map();
-    isEndOfPrefix: boolean = false;
-    normalizedValue?: string; // Stores the normalized version of this prefix
+    branches: string[] = []; // All complete branches that share this prefix
 }
 
 /**
  * Prefix Trie for efficient branch name grouping and normalization
- * Handles agent branch patterns like codex/feature-name-hash
+ * 
+ * Algorithm: Hybrid Heuristic + Longest Common Prefix (LCP)
+ * 
+ * Why hybrid is optimal for this problem:
+ * 1. **Cold Start**: Heuristics allow normalization of first branch (pure LCP can't)
+ * 2. **Data Refinement**: When multiple similar branches appear, LCP overrides heuristics
+ * 3. **Pattern Recognition**: Uses linguistic patterns (vowel ratios, consonant clusters)
+ *    to identify likely variable suffixes without hard-coding specific hash formats
+ * 
+ * Time Complexity:
+ * - Insert: O(k) where k = number of tokens in branch name
+ * - Lookup: O(1) with caching, O(k) without
+ * 
+ * Space Complexity: O(n * k) where n = number of unique normalized prefixes
  */
 export class PrefixTrie {
     private root: TrieNode = new TrieNode();
     private agentPrefixes: Set<string>;
+    private branchToNormalized: Map<string, string> = new Map();
 
     constructor(agentPrefixes: string[] = ["codex", "cursor", "claude", "openai", "devin", "gpt"]) {
         this.agentPrefixes = new Set(agentPrefixes);
     }
 
     /**
-     * Splits a branch name into tokens for trie traversal
+     * Tokenizes branch name into parts for trie traversal
+     * Agent branches: agent/feature-name-parts -> [agent, feature, name, parts]
      */
     private tokenize(branchName: string): string[] {
-        // Split by '/' first to separate agent prefix from feature name
         const parts = branchName.split('/');
 
         if (parts.length >= 2 && this.agentPrefixes.has(parts[0])) {
-            // For agent branches, keep agent prefix as first token
-            // Then split the feature name by dashes
             const featureParts = parts.slice(1).join('/').split('-');
             return [parts[0], ...featureParts];
         }
 
-        // For non-agent branches, split by common delimiters
-        return branchName.split(/[\/\-_]/);
+        return parts;
     }
 
     /**
-     * Checks if a token is likely a hash suffix
+     * Reconstructs branch name from tokens
      */
-    private isHashSuffix(token: string): boolean {
-        // Hash characteristics:
-        // - 4-8 characters long
-        // - Alphanumeric only
-        // - Either contains at least one digit OR has characteristics of random strings:
-        //   * All lowercase
-        //   * Has 2+ consecutive consonants (e.g., "ffce", "axfbof", "trroza")
-        //   Random suffixes typically have unusual consonant clusters
-        const isAlphanumeric = /^[a-z0-9]+$/i.test(token);
-        const hasDigit = /\d/.test(token);
-        const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxyz]{2,}/i.test(token);
-        const isLikelyRandom = token.length >= 4 &&
-            token.length <= 8 &&
-            token === token.toLowerCase() &&
-            hasConsecutiveConsonants;
+    private reconstruct(tokens: string[], isAgentBranch: boolean): string {
+        if (tokens.length === 0) return '';
 
-        return token.length >= 4 &&
-            token.length <= 8 &&
-            isAlphanumeric &&
-            (hasDigit || isLikelyRandom);
+        if (isAgentBranch && tokens.length > 1) {
+            return `${tokens[0]}/${tokens.slice(1).join('-')}`;
+        }
+
+        return tokens.join('/');
     }
 
     /**
-     * Inserts a branch name into the trie and returns its normalized form
+     * Heuristic: Identifies likely variable suffixes using linguistic patterns
+     * 
+     * Distinguishes random suffixes (abc123, ffce, axfbof) from real words (requests, size)
+     * by analyzing:
+     * - Presence of digits (most variable suffixes have them)
+     * - Vowel ratio (random strings have fewer vowels)
+     * - Unusual consonant patterns (double/triple consonants, rare combinations)
      */
-    insert(branchName: string): string {
-        const tokens = this.tokenize(branchName);
+    private isPotentiallyVariable(token: string): boolean {
+        if (token.length < 4 || token.length > 8 || !/^[a-z0-9]+$/i.test(token)) {
+            return false;
+        }
 
-        if (tokens.length === 0) return branchName;
+        // Digits are strong indicators
+        if (/\d/.test(token)) {
+            return true;
+        }
 
-        // Check if this is an agent branch
-        const isAgentBranch = this.agentPrefixes.has(tokens[0]);
+        // Analyze letter patterns
+        const lowerToken = token.toLowerCase();
+        const vowelCount = (lowerToken.match(/[aeiou]/g) || []).length;
+        const vowelRatio = vowelCount / token.length;
 
-        // For agent branches, check if the last token is a hash
-        let normalizedTokens = tokens;
-        if (isAgentBranch && tokens.length > 2) {
-            const lastToken = tokens[tokens.length - 1];
-            if (this.isHashSuffix(lastToken)) {
-                // Remove the hash suffix for normalization
-                normalizedTokens = tokens.slice(0, -1);
+        // Unusual consonant patterns
+        const hasUnusualDoubles = /([bcdfghjklmnpqrstvwxyz])\1/.test(lowerToken) &&
+            !/ll|ss|tt|ff|mm|nn|pp/.test(lowerToken);
+        const hasTripleConsonants = /[bcdfghjklmnpqrstvwxyz]{3,}/.test(lowerToken);
+        const hasUnusualCombos = /[xzq][bcdfghjklmnpqrstvwxyz]|[bcdfghjklmnpqrstvwxyz][xzq]/.test(lowerToken);
+
+        return (vowelRatio <= 0.35 && (hasUnusualDoubles || hasTripleConsonants || hasUnusualCombos));
+    }
+
+    /**
+     * Computes longest common prefix (LCP) among multiple token arrays
+     */
+    private longestCommonPrefix(tokenArrays: string[][]): number {
+        if (tokenArrays.length === 0) return 0;
+
+        const minLen = Math.min(...tokenArrays.map(t => t.length));
+        let commonLen = 0;
+
+        for (let i = 0; i < minLen; i++) {
+            if (tokenArrays.every(t => t[i] === tokenArrays[0][i])) {
+                commonLen++;
+            } else {
+                break;
             }
         }
 
-        // Build the normalized name
-        const normalized = isAgentBranch
-            ? `${normalizedTokens[0]}/${normalizedTokens.slice(1).join('-')}`
-            : normalizedTokens.join('-');
+        return commonLen;
+    }
+
+    /**
+     * Finds branches that share at least (n-1) tokens with input
+     */
+    private findSimilarBranches(tokens: string[]): string[] {
+        if (tokens.length === 0) return [];
+
+        let current = this.root;
+        const prefixLen = Math.max(1, tokens.length - 1);
+
+        for (let i = 0; i < prefixLen && i < tokens.length; i++) {
+            if (!current.children.has(tokens[i])) {
+                return [];
+            }
+            current = current.children.get(tokens[i])!;
+        }
+
+        return current.branches;
+    }
+
+    /**
+     * Inserts a branch and returns its normalized form
+     * 
+     * Process:
+     * 1. Check cache (O(1) lookup)
+     * 2. Apply heuristic to detect potential variable suffix
+     * 3. Insert into trie at normalized position
+     * 4. Find similar branches using LCP
+     * 5. If multiple similar branches exist, use their common prefix (data overrides heuristic)
+     */
+    insert(branchName: string): string {
+        if (this.branchToNormalized.has(branchName)) {
+            return this.branchToNormalized.get(branchName)!;
+        }
+
+        const tokens = this.tokenize(branchName);
+        if (tokens.length === 0) return branchName;
+
+        const isAgentBranch = this.agentPrefixes.has(tokens[0]);
+
+        if (!isAgentBranch) {
+            this.branchToNormalized.set(branchName, branchName);
+            return branchName;
+        }
+
+        // Apply heuristic: check if last token looks variable
+        const hasVariableSuffix = tokens.length > 2 && this.isPotentiallyVariable(tokens[tokens.length - 1]);
+        const normalizedTokens = hasVariableSuffix ? tokens.slice(0, -1) : tokens;
 
         // Insert into trie
         let current = this.root;
@@ -95,81 +168,57 @@ export class PrefixTrie {
                 current.children.set(token, new TrieNode());
             }
             current = current.children.get(token)!;
+            if (!current.branches.includes(branchName)) {
+                current.branches.push(branchName);
+            }
         }
-        current.isEndOfPrefix = true;
-        current.normalizedValue = normalized;
 
+        // Apply LCP if similar branches exist
+        const similarBranches = this.findSimilarBranches(normalizedTokens);
+
+        if (similarBranches.length > 1) {
+            const allTokens = similarBranches.map(b => this.tokenize(b));
+            const lcpLength = this.longestCommonPrefix(allTokens);
+
+            if (lcpLength >= 2) {
+                const commonTokens = allTokens[0].slice(0, lcpLength);
+                const normalized = this.reconstruct(commonTokens, true);
+
+                // Update all similar branches
+                for (const branch of similarBranches) {
+                    this.branchToNormalized.set(branch, normalized);
+                }
+
+                return normalized;
+            }
+        }
+
+        // No similar branches found, use heuristic result
+        const normalized = this.reconstruct(normalizedTokens, isAgentBranch);
+        this.branchToNormalized.set(branchName, normalized);
         return normalized;
     }
 
     /**
-     * Finds the normalized prefix for a branch name
+     * Finds the normalized prefix for a branch name (alias for insert)
      */
     findNormalizedPrefix(branchName: string): string {
-        const tokens = this.tokenize(branchName);
-
-        if (tokens.length === 0) return branchName;
-
-        const isAgentBranch = this.agentPrefixes.has(tokens[0]);
-
-        // For agent branches, try to find without the potential hash
-        if (isAgentBranch && tokens.length > 2) {
-            const lastToken = tokens[tokens.length - 1];
-            if (this.isHashSuffix(lastToken)) {
-                // Try to find the prefix without the hash
-                const withoutHash = tokens.slice(0, -1);
-                const result = this.searchPrefix(withoutHash);
-                if (result) return result;
-            }
-        }
-
-        // Try to find with full tokens
-        const result = this.searchPrefix(tokens);
-        if (result) return result;
-
-        // If not found, normalize on the fly
         return this.insert(branchName);
     }
 
     /**
-     * Searches for a prefix in the trie
-     */
-    private searchPrefix(tokens: string[]): string | null {
-        let current = this.root;
-
-        for (const token of tokens) {
-            if (!current.children.has(token)) {
-                return null;
-            }
-            current = current.children.get(token)!;
-        }
-
-        return current.normalizedValue || null;
-    }
-
-    /**
-     * Gets all stored prefixes (for debugging/inspection)
+     * Gets all unique normalized prefixes
      */
     getAllPrefixes(): string[] {
-        const prefixes: string[] = [];
-
-        const traverse = (node: TrieNode) => {
-            if (node.isEndOfPrefix && node.normalizedValue) {
-                prefixes.push(node.normalizedValue);
-            }
-            for (const child of node.children.values()) {
-                traverse(child);
-            }
-        };
-
-        traverse(this.root);
-        return prefixes;
+        const uniquePrefixes = new Set(this.branchToNormalized.values());
+        return Array.from(uniquePrefixes);
     }
 
     /**
-     * Clears the trie
+     * Clears all stored data
      */
     clear(): void {
         this.root = new TrieNode();
+        this.branchToNormalized.clear();
     }
 }
