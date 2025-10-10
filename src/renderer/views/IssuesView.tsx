@@ -41,13 +41,28 @@ const IssueItem = React.memo(
     onIssueClick,
     onToggleSelect,
     theme,
+    onQuickMove,
   }: {
     issue: Issue;
     isSelected: boolean;
     onIssueClick: (issue: Issue) => void;
     onToggleSelect: (e: React.MouseEvent, issueNumber: number) => void;
     theme: "light" | "dark";
+    onQuickMove: (issue: Issue, target: "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed") => void;
   }) => {
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const menuRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+      const handler = (e: MouseEvent) => {
+        if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+          setMenuOpen(false);
+        }
+      };
+      if (menuOpen) document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, [menuOpen]);
+
     return (
       <div
         className={cn(
@@ -134,7 +149,7 @@ const IssueItem = React.memo(
                 )}
               </div>
 
-              <div className="flex items-center space-x-3 ml-4">
+              <div className="flex items-center space-x-3 ml-4 relative">
                 {issue.assignees.length > 0 && (
                   <div className="flex -space-x-2">
                     {issue.assignees.map((assignee) => (
@@ -156,6 +171,51 @@ const IssueItem = React.memo(
                   <MessageSquare className="w-3 h-3 mr-1" />
                   {issue.comments}
                 </span>
+
+                {/* Quick actions menu */}
+                <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setMenuOpen(!menuOpen)}
+                    className={cn(
+                      "p-1 rounded text-xs",
+                      theme === "dark" ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-100 text-gray-700",
+                    )}
+                    title="Quick actions"
+                  >
+                    •••
+                  </button>
+                  {menuOpen && (
+                    <div
+                      className={cn(
+                        "absolute right-0 mt-1 z-20 w-40 rounded border shadow-lg",
+                        theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200",
+                      )}
+                    >
+                      {[
+                        { id: "todo", label: "Move to TODO" },
+                        { id: "in_progress", label: "Move to In Progress" },
+                        { id: "in_review", label: "Move to In Review" },
+                        { id: "done", label: "Mark Done" },
+                        { id: "closed", label: "Close" },
+                        { id: "unassigned", label: "Unassign" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => {
+                            onQuickMove(issue, opt.id as any);
+                            setMenuOpen(false);
+                          }}
+                          className={cn(
+                            "block w-full text-left px-3 py-1.5 text-xs",
+                            theme === "dark" ? "hover:bg-gray-700 text-gray-200" : "hover:bg-gray-100 text-gray-700",
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -442,6 +502,11 @@ export default function IssuesView() {
     const number = parseInt(numberStr, 10);
     const target = String(over.id) as "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed";
     await moveIssueToColumn(owner, repo, number, target);
+  }, [moveIssueToColumn, selectedRepo]);
+
+  const handleQuickMove = useCallback(async (issue: Issue, target: "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed") => {
+    if (!selectedRepo) return;
+    await moveIssueToColumn(selectedRepo.owner, selectedRepo.name, issue.number, target);
   }, [moveIssueToColumn, selectedRepo]);
 
   const handleIssueClick = useCallback(
@@ -815,7 +880,7 @@ export default function IssuesView() {
                   {columns.unassigned.map((issue) => (
                     <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
                       <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
-                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} onQuickMove={handleQuickMove} />
                       </div>
                     </DragItem>
                   ))}
@@ -835,7 +900,7 @@ export default function IssuesView() {
                   {columns.todo.map((issue) => (
                     <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
                       <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
-                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} onQuickMove={handleQuickMove} />
                       </div>
                     </DragItem>
                   ))}
@@ -855,7 +920,7 @@ export default function IssuesView() {
                   {columns.in_progress.map((issue) => (
                     <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
                       <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
-                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} onQuickMove={handleQuickMove} />
                       </div>
                     </DragItem>
                   ))}
@@ -875,7 +940,7 @@ export default function IssuesView() {
                   {columns.in_review.map((issue) => (
                     <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
                       <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
-                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} onQuickMove={handleQuickMove} />
                       </div>
                     </DragItem>
                   ))}
@@ -895,7 +960,7 @@ export default function IssuesView() {
                   {columns.done.map((issue) => (
                     <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
                       <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
-                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} onQuickMove={handleQuickMove} />
                       </div>
                     </DragItem>
                   ))}
@@ -915,7 +980,7 @@ export default function IssuesView() {
                   {columns.closed.map((issue) => (
                     <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
                       <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
-                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} onQuickMove={handleQuickMove} />
                       </div>
                     </DragItem>
                   ))}
