@@ -9,6 +9,19 @@ import { PerfLogger } from "./utils/perfLogger";
 
 PerfLogger.mark("main.tsx execution started");
 
+// Global error handlers for renderer process
+window.addEventListener('error', (event) => {
+  console.error('Global error caught:', event.error);
+  // Prevent the error from crashing the renderer
+  event.preventDefault();
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  // Prevent the error from crashing the renderer
+  event.preventDefault();
+});
+
 const beforeQueryClient = performance.now();
 const queryClient = new QueryClient({
   defaultOptions: {
