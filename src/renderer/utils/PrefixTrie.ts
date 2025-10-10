@@ -45,13 +45,14 @@ export class PrefixTrie {
         // - 4-8 characters long
         // - Alphanumeric only
         // - Either contains at least one digit OR has characteristics of random strings:
-        //   * 6 characters, all lowercase
-        //   * Has 3+ consecutive consonants (e.g., "axfbof", "trroza")
+        //   * All lowercase
+        //   * Has 2+ consecutive consonants (e.g., "ffce", "axfbof", "trroza")
         //   Random suffixes typically have unusual consonant clusters
         const isAlphanumeric = /^[a-z0-9]+$/i.test(token);
         const hasDigit = /\d/.test(token);
-        const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxyz]{3,}/i.test(token);
-        const isLikelyRandom = token.length === 6 &&
+        const hasConsecutiveConsonants = /[bcdfghjklmnpqrstvwxyz]{2,}/i.test(token);
+        const isLikelyRandom = token.length >= 4 &&
+            token.length <= 8 &&
             token === token.toLowerCase() &&
             hasConsecutiveConsonants;
 

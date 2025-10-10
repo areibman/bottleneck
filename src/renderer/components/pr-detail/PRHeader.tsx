@@ -242,7 +242,16 @@ export function PRHeader({
                 </>
               )}
 
-              <button onClick={onMerge} className="btn btn-primary text-xs">
+              <button
+                onClick={onMerge}
+                disabled={pr.draft}
+                className="btn btn-primary text-xs"
+                title={
+                  pr.draft
+                    ? "This PR is a draft. Mark it as ready for review before merging."
+                    : "Merge this pull request"
+                }
+              >
                 <GitMerge className="w-3 h-3 mr-1" />
                 Merge
               </button>
