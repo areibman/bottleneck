@@ -32,6 +32,9 @@ perfLog("Electron store initialized");
 let mainWindow: BrowserWindow | null = null;
 let githubAuth: GitHubAuth;
 let gitOps: GitOperations;
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+let periodicUpdateInterval: ReturnType<typeof setInterval> | null = null;
+let isUpdateCheckInProgress = false;
 
 function createWindow() {
   const start = perfLog("createWindow called");
@@ -186,8 +189,36 @@ app.whenReady().then(async () => {
       autoUpdater.autoDownload = true; // Auto-download updates in background
       autoUpdater.autoInstallOnAppQuit = true; // Install on next quit
 
+      const runUpdateCheck = (reason: "startup" | "scheduled") => {
+        if (isUpdateCheckInProgress) {
+          console.log(`[Updater] Skipping ${reason} update check; another check is in progress`);
+          return;
+        }
+
+        isUpdateCheckInProgress = true;
+        const checkPromise =
+          reason === "startup"
+            ? autoUpdater.checkForUpdatesAndNotify()
+            : autoUpdater.checkForUpdates();
+
+        checkPromise
+          .catch((error) => {
+            console.error(`Failed ${reason} update check:`, error);
+          })
+          .finally(() => {
+            isUpdateCheckInProgress = false;
+          });
+      };
+
       // Check for updates on startup
-      autoUpdater.checkForUpdatesAndNotify();
+      runUpdateCheck("startup");
+
+      // Schedule periodic update checks every 4 hours
+      if (!periodicUpdateInterval) {
+        periodicUpdateInterval = setInterval(() => {
+          runUpdateCheck("scheduled");
+        }, UPDATE_CHECK_INTERVAL_MS);
+      }
 
       // Set up event listeners
       autoUpdater.on('checking-for-update', () => {
@@ -278,6 +309,13 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+app.on("before-quit", () => {
+  if (periodicUpdateInterval) {
+    clearInterval(periodicUpdateInterval);
+    periodicUpdateInterval = null;
   }
 });
 
@@ -450,6 +488,11 @@ ipcMain.handle("updater:check-for-updates", async () => {
   }
 
   try {
+    if (isUpdateCheckInProgress) {
+      return { success: false, error: "Update check already in progress" };
+    }
+
+    isUpdateCheckInProgress = true;
     const result = await autoUpdater.checkForUpdates();
     return {
       success: true,
@@ -460,6 +503,8 @@ ipcMain.handle("updater:check-for-updates", async () => {
     };
   } catch (error) {
     return { success: false, error: (error as Error).message };
+  } finally {
+    isUpdateCheckInProgress = false;
   }
 });
 
