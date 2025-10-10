@@ -1,6 +1,16 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag } from "lucide-react";
+import {
+  DndContext,
+  DragEndEvent,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+} from "@dnd-kit/core";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -179,6 +189,7 @@ export default function IssuesView() {
   const [bulkLabelsToRemove, setBulkLabelsToRemove] = useState<string[]>([]);
   const [showLabelFilterDropdown, setShowLabelFilterDropdown] = useState(false);
   const labelFilterDropdownRef = useRef<HTMLDivElement>(null);
+  const [activeDragIssueId, setActiveDragIssueId] = useState<number | null>(null);
 
   useEffect(() => {
     if (selectedRepo) {
@@ -448,6 +459,153 @@ export default function IssuesView() {
     return <WelcomeView />;
   }
 
+  // Derive Kanban columns from labels and issue metadata
+  type ColumnKey = "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed";
+
+  const byColumn: Record<ColumnKey, Issue[]> = useMemo(() => {
+    const result: Record<ColumnKey, Issue[]> = {
+      unassigned: [],
+      todo: [],
+      in_progress: [],
+      in_review: [],
+      done: [],
+      closed: [],
+    };
+
+    for (const issue of filteredIssues) {
+      const hasAssignees = issue.assignees && issue.assignees.length > 0;
+      const labelNames = new Set(issue.labels.map((l) => l.name));
+
+      if (issue.state === "closed") {
+        result.closed.push(issue);
+        continue;
+      }
+
+      // Done: prefer status label for now
+      if (labelNames.has("status:done")) {
+        result.done.push(issue);
+        continue;
+      }
+
+      if (labelNames.has("status:in-review")) {
+        result.in_review.push(issue);
+        continue;
+      }
+
+      if (labelNames.has("status:in-progress")) {
+        result.in_progress.push(issue);
+        continue;
+      }
+
+      if (labelNames.has("status:todo")) {
+        result.todo.push(issue);
+        continue;
+      }
+
+      // Unassigned: no assignee and no PR/branch linkage (PR linkage detection added later)
+      if (!hasAssignees) {
+        result.unassigned.push(issue);
+        continue;
+      }
+
+      // Default to TODO if open and none of the above
+      result.todo.push(issue);
+    }
+
+    return result;
+  }, [filteredIssues]);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const { setIssueStatus } = useIssueStore.getState();
+
+  function Column({ id, title, children }: { id: ColumnKey; title: string; children: React.ReactNode }) {
+    const { setNodeRef, isOver } = useDroppable({ id, data: { column: id } });
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "rounded-lg border flex flex-col",
+          theme === "dark" ? "bg-gray-900/50 border-gray-700" : "bg-white border-gray-200",
+          isOver ? "ring-2 ring-blue-500" : undefined,
+        )}
+      >
+        <div
+          className={cn(
+            "px-3 py-2 border-b text-xs font-semibold uppercase tracking-wide",
+            theme === "dark" ? "border-gray-700 text-gray-300" : "border-gray-200 text-gray-600",
+          )}
+        >
+          {title} <span className="opacity-60">({byColumn[id].length})</span>
+        </div>
+        <div className="flex-1 overflow-auto">{children}</div>
+      </div>
+    );
+  }
+
+  function DraggableIssue({ issue, column }: { issue: Issue; column: ColumnKey }) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: `issue-${issue.number}`,
+      data: { issueNumber: issue.number, column },
+    });
+    const style = transform
+      ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+      : undefined;
+    return (
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        className={cn(
+          "m-2 rounded-md border cursor-grab active:cursor-grabbing",
+          theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200",
+          isDragging ? "ring-2 ring-blue-500" : undefined,
+        )}
+        style={style}
+        onClick={() => handleIssueClick(issue)}
+      >
+        <IssueItem
+          issue={issue}
+          isSelected={selectedIssues.has(issue.number)}
+          onIssueClick={handleIssueClick}
+          onToggleSelect={handleToggleSelect}
+          theme={theme}
+        />
+      </div>
+    );
+  }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const issueId = event.active?.data?.current?.issueNumber as number | undefined;
+    if (issueId) setActiveDragIssueId(issueId);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const fromColumn = event.active?.data?.current?.column as ColumnKey | undefined;
+    const issueNumber = event.active?.data?.current?.issueNumber as number | undefined;
+    const toColumn = event.over?.data?.current?.column as ColumnKey | undefined;
+    setActiveDragIssueId(null);
+    if (!selectedRepo || !issueNumber || !fromColumn || !toColumn || fromColumn === toColumn) return;
+
+    // Map columns to status labels
+    const columnToStatus: Partial<Record<ColumnKey, "todo" | "in_progress" | "in_review" | "done" | "none">> = {
+      todo: "todo",
+      in_progress: "in_progress",
+      in_review: "in_review",
+      done: "done",
+      unassigned: "none",
+      closed: "none",
+    };
+
+    const status = columnToStatus[toColumn] ?? "none";
+    await useIssueStore.getState().setIssueStatus(
+      selectedRepo.owner,
+      selectedRepo.name,
+      issueNumber,
+      status,
+    );
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -463,7 +621,7 @@ export default function IssuesView() {
           <div className="flex items-center">
             <h1 className="text-xl font-semibold flex items-center">
               <AlertCircle className="w-5 h-5 mr-2" />
-              Issues
+              Issue Tracker
               <span
                 className={cn(
                   "ml-2 text-sm",
@@ -670,50 +828,41 @@ export default function IssuesView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <div
-              className={cn(
-                theme === "dark" ? "text-gray-400" : "text-gray-600",
-              )}
-            >
-              Loading issues...
-            </div>
+            <div className={cn(theme === "dark" ? "text-gray-400" : "text-gray-600")}>Loading issues...</div>
           </div>
         ) : filteredIssues.length === 0 ? (
-          <div
-            className={cn(
-              "flex flex-col items-center justify-center h-64",
-              theme === "dark" ? "text-gray-400" : "text-gray-600",
-            )}
+          <div className={cn("flex flex-col items-center justify-center h-64", theme === "dark" ? "text-gray-400" : "text-gray-600")}
           >
             <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
             <p className="text-lg font-medium">No issues found</p>
-            {selectedRepo && (
-              <p className="text-sm mt-2">
-                No issues in {selectedRepo.full_name}
-              </p>
-            )}
+            {selectedRepo && <p className="text-sm mt-2">No issues in {selectedRepo.full_name}</p>}
           </div>
         ) : (
-          <div
-            className={cn(
-              "divide-y",
-              theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-            )}
-          >
-            {filteredIssues.map((issue) => (
-              <IssueItem
-                key={issue.id}
-                issue={issue}
-                isSelected={selectedIssues.has(issue.number)}
-                onIssueClick={handleIssueClick}
-                onToggleSelect={handleToggleSelect}
-                theme={theme}
-              />
-            ))}
-          </div>
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="h-full overflow-auto px-4 py-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 min-w-[1050px]">
+                {(
+                  [
+                    { key: "unassigned", title: "Unassigned" },
+                    { key: "todo", title: "TODO" },
+                    { key: "in_progress", title: "In Progress" },
+                    { key: "in_review", title: "In Review" },
+                    { key: "done", title: "Done" },
+                    { key: "closed", title: "Closed" },
+                  ] as { key: ColumnKey; title: string }[]
+                ).map(({ key, title }) => (
+                  <Column key={key} id={key} title={title}>
+                    {byColumn[key].map((issue) => (
+                      <DraggableIssue key={issue.number} issue={issue} column={key} />
+                    ))}
+                  </Column>
+                ))}
+              </div>
+            </div>
+          </DndContext>
         )}
       </div>
     </div>

@@ -105,13 +105,13 @@ const commands: Command[] = [
   },
   {
     id: "nav-issues",
-    name: "Go to Issues",
-    keywords: "navigate issues",
+    name: "Go to Issue Tracker",
+    keywords: "navigate issues issue tracker kanban",
     action: () => {
       const nav = window.__commandNavigate;
       if (nav) nav("/issues");
     },
-    preview: <div>Open issues list</div>,
+    preview: <div>Open the Issue Tracker Kanban board</div>,
   },
   {
     id: "show-shortcuts",

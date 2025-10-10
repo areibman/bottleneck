@@ -1425,6 +1425,76 @@ export class GitHubAPI {
     return data;
   }
 
+  async getLinkedPullRequestsForIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<Array<{ number: number; state: "OPEN" | "CLOSED"; mergedAt: string | null; reviewDecision: "REVIEW_REQUIRED" | "CHANGES_REQUESTED" | "APPROVED" | null; isDraft: boolean }>> {
+    const results: Array<{ number: number; state: "OPEN" | "CLOSED"; mergedAt: string | null; reviewDecision: "REVIEW_REQUIRED" | "CHANGES_REQUESTED" | "APPROVED" | null; isDraft: boolean }>
+      = [];
+    let hasNextPage = true;
+    let after: string | null = null;
+
+    const query = `
+      query ($owner: String!, $name: String!, $number: Int!, $after: String) {
+        repository(owner: $owner, name: $name) {
+          issue(number: $number) {
+            timelineItems(first: 50, after: $after, itemTypes: [CROSS_REFERENCED_EVENT]) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                __typename
+                ... on CrossReferencedEvent {
+                  source {
+                    __typename
+                    ... on PullRequest {
+                      number
+                      state
+                      mergedAt
+                      isDraft
+                      reviewDecision
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    while (hasNextPage) {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        name: repo,
+        number: issueNumber,
+        after,
+      });
+      const nodes = response?.repository?.issue?.timelineItems?.nodes ?? [];
+      nodes.forEach((node: any) => {
+        const pr = node?.source;
+        if (pr && pr.__typename === "PullRequest") {
+          results.push({
+            number: pr.number,
+            state: pr.state,
+            mergedAt: pr.mergedAt,
+            reviewDecision: pr.reviewDecision ?? null,
+            isDraft: Boolean(pr.isDraft),
+          });
+        }
+      });
+      const pageInfo = response?.repository?.issue?.timelineItems?.pageInfo;
+      hasNextPage = Boolean(pageInfo?.hasNextPage);
+      after = pageInfo?.endCursor ?? null;
+    }
+
+    // Deduplicate by PR number
+    const dedup = new Map<number, typeof results[number]>();
+    for (const pr of results) {
+      dedup.set(pr.number, pr);
+    }
+    return Array.from(dedup.values());
+  }
+
   async createPullRequest(
     owner: string,
     repo: string,

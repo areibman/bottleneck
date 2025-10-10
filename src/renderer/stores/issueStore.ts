@@ -29,9 +29,20 @@ interface IssueState {
   createLabel: (owner: string, repo: string, name: string, color: string, description?: string) => Promise<void>;
   addLabelsToIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
   removeLabelsFromIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
+  getLinkedPRs: (
+    owner: string,
+    repo: string,
+    issueNumber: number
+  ) => Promise<{ prNumbers: number[]; hasOpenPR: boolean; hasMergedPR: boolean; hasInReview: boolean }>;
   setFilter: (key: keyof IssueFilters, value: any) => void;
   setFilters: (filters: IssueFilters) => void;
   resetFilters: () => void;
+  setIssueStatus: (
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    status: "todo" | "in_progress" | "in_review" | "done" | "none"
+  ) => Promise<void>;
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
@@ -419,6 +430,105 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         // Refetch issues to get updated labels
         await get().fetchIssues(owner, repo, true);
       }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  getLinkedPRs: async (owner: string, repo: string, issueNumber: number) => {
+    try {
+      let token: string | null = null;
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+      if (!token || token === "dev-token") {
+        return { prNumbers: [], hasOpenPR: false, hasMergedPR: false, hasInReview: false };
+      }
+      const api = new GitHubAPI(token);
+      const linked = await api.getLinkedPullRequestsForIssue(owner, repo, issueNumber);
+      const prNumbers = linked.map((p) => p.number);
+      const hasMergedPR = linked.some((p) => Boolean(p.mergedAt));
+      const hasOpenPR = linked.some((p) => p.state === "OPEN");
+      const hasInReview = linked.some((p) => p.state === "OPEN" && (p.reviewDecision === "REVIEW_REQUIRED" || p.reviewDecision === "CHANGES_REQUESTED"));
+      return { prNumbers, hasOpenPR, hasMergedPR, hasInReview };
+    } catch (error) {
+      set({ error: (error as Error).message });
+      return { prNumbers: [], hasOpenPR: false, hasMergedPR: false, hasInReview: false };
+    }
+  },
+
+  setIssueStatus: async (
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    status: "todo" | "in_progress" | "in_review" | "done" | "none"
+  ) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      // Compute new labels by removing any existing status: labels and adding the new one (except for none)
+      const key = `${owner}/${repo}#${issueNumber}`;
+      const currentIssue = get().issues.get(key);
+      if (!currentIssue) return;
+
+      const STATUS_LABELS = new Set(["status:todo", "status:in-progress", "status:in-review", "status:done"]);
+      const filteredExisting = currentIssue.labels.filter((l) => !STATUS_LABELS.has(l.name));
+      const statusToLabel: Record<string, string | null> = {
+        todo: "status:todo",
+        in_progress: "status:in-progress",
+        in_review: "status:in-review",
+        done: "status:done",
+        none: null,
+      };
+      const newStatusLabel = statusToLabel[status];
+      const nextLabelNames = [
+        ...filteredExisting.map((l) => l.name),
+        ...(newStatusLabel ? [newStatusLabel] : []),
+      ];
+
+      // Optimistic update
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        const updated = {
+          ...currentIssue,
+          labels: nextLabelNames.map((name) => {
+            const existing = filteredExisting.find((l) => l.name === name);
+            return existing || { name, color: "999999" } as any;
+          }),
+        } as Issue;
+        newIssues.set(key, updated);
+        return { issues: newIssues };
+      });
+
+      if (token === "dev-token") {
+        // No server call in dev mode
+        return;
+      }
+
+      const api = new GitHubAPI(token);
+      const updatedLabels = await api.setIssueLabels(owner, repo, issueNumber, nextLabelNames);
+
+      // Sync with server-confirmed labels
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        const issue = newIssues.get(key);
+        if (issue) {
+          newIssues.set(key, { ...issue, labels: updatedLabels });
+        }
+        return { issues: newIssues };
+      });
     } catch (error) {
       set({ error: (error as Error).message });
     }
