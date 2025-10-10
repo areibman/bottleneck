@@ -160,7 +160,8 @@ interface PRTreeViewProps {
   onTogglePRSelection: (prId: string, checked: boolean) => void;
   onToggleGroupSelection: (prIds: string[], checked: boolean) => void;
   onPRClick: (pr: PullRequest) => void;
-  onCloseGroup: (prIds: string[]) => void;
+  onCloseGroup: (groupId: string, prIds: string[]) => void;
+  closingGroupId: string | null;
 }
 
 // Helper function to format date and time
@@ -214,6 +215,7 @@ export function PRTreeView({
   onToggleGroupSelection,
   onPRClick,
   onCloseGroup,
+  closingGroupId,
 }: PRTreeViewProps) {
   const treeItems = useMemo(
     () => buildTreeItems(prsWithMetadata),
@@ -414,31 +416,34 @@ export function PRTreeView({
                       )}
                     </div>
 
-                    {item.data.closablePRIds && item.data.closablePRIds.length > 0 && hoveredGroup === item.index && (
+                    {item.data.closablePRIds && item.data.closablePRIds.length > 0 && (hoveredGroup === item.index || closingGroupId === item.index) && (
                       <div
                         role="button"
                         tabIndex={0}
                         onClick={(event) => {
+                          if (closingGroupId === item.index) return;
                           event.stopPropagation();
-                          onCloseGroup(item.data.closablePRIds ?? []);
-                          setHoveredGroup(null);
+                          onCloseGroup(item.index as string, item.data.closablePRIds ?? []);
                         }}
                         onKeyDown={(event) => {
+                          if (closingGroupId === item.index) return;
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             event.stopPropagation();
-                            onCloseGroup(item.data.closablePRIds ?? []);
-                            setHoveredGroup(null);
+                            onCloseGroup(item.index as string, item.data.closablePRIds ?? []);
                           }
                         }}
                         className={cn(
-                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors cursor-pointer",
+                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors",
+                          closingGroupId === item.index
+                            ? "cursor-wait opacity-75"
+                            : "cursor-pointer",
                           theme === "dark"
                             ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
                             : "border-red-400 text-red-600 hover:bg-red-50"
                         )}
                       >
-                        Close unmerged PRs?
+                        {closingGroupId === item.index ? "Closing..." : "Close unmerged PRs?"}
                       </div>
                     )}
                   </>
