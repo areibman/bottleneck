@@ -6,7 +6,7 @@ export interface IssueFilters {
   status: "all" | "open" | "closed";
   labels: string[];
   assignee: "all" | "assigned" | "unassigned" | string;
-  author: string;
+  selectedAuthors: string[]; // Array of author login names
 }
 
 interface IssueState {
@@ -43,7 +43,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     status: "all",
     labels: [],
     assignee: "all",
-    author: "all",
+    selectedAuthors: [],
   },
   selectedIssues: new Set(),
   repoLabels: [],
@@ -134,7 +134,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         status: "all",
         labels: [],
         assignee: "all",
-        author: "all",
+        selectedAuthors: [],
       },
     });
   },

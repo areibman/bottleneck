@@ -1,10 +1,12 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { GitPullRequest } from "lucide-react";
+import { GitPullRequest, Settings } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
+import { useTeamsStore } from "../stores/teamsStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import TeamManager from "../components/TeamManager";
 import { detectAgentName } from "../utils/agentIcons";
 import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
@@ -50,11 +52,13 @@ export default function PRListView() {
     setPRListFilters,
   } = useUIStore();
   const { token } = useAuthStore();
+  const { teams } = useTeamsStore();
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [showTeamManager, setShowTeamManager] = useState(false);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -224,6 +228,42 @@ export default function PRListView() {
       });
     },
     [authors, setPRListFilters],
+  );
+
+  const handleTeamToggle = useCallback(
+    (teamId: string) => {
+      const team = teams.find((t) => t.id === teamId);
+      if (!team) return;
+
+      setPRListFilters((prev) => {
+        const newSet = new Set(prev.selectedAuthors);
+        const teamMembers = new Set(team.members);
+        
+        // Check if all team members are currently selected
+        const allMembersSelected = team.members.every((member) =>
+          newSet.has(member)
+        );
+
+        if (allMembersSelected) {
+          // Deselect all team members
+          team.members.forEach((member) => newSet.delete(member));
+          newSet.delete("all");
+        } else {
+          // Select all team members
+          team.members.forEach((member) => newSet.add(member));
+          // Check if now all authors are selected
+          if (authors.every((author) => newSet.has(author.login))) {
+            newSet.add("all");
+          }
+        }
+
+        return {
+          ...prev,
+          selectedAuthors: Array.from(newSet),
+        };
+      });
+    },
+    [teams, authors, setPRListFilters]
   );
 
   // Use the centralized getPRStatus utility
@@ -539,6 +579,13 @@ export default function PRListView() {
   }
 
   return (
+    <>
+      {showTeamManager && (
+        <TeamManager
+          availableAuthors={authors}
+          onClose={() => setShowTeamManager(false)}
+        />
+      )}
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
@@ -816,13 +863,13 @@ export default function PRListView() {
                 {showAuthorDropdown && (
                   <div
                     className={cn(
-                      "absolute top-full mt-1 right-0 z-50 min-w-[200px] rounded-md shadow-lg border",
+                      "absolute top-full mt-1 right-0 z-50 min-w-[250px] rounded-md shadow-lg border",
                       theme === "dark"
                         ? "bg-gray-800 border-gray-700"
                         : "bg-white border-gray-200"
                     )}
                   >
-                    <div className="p-2 max-h-64 overflow-y-auto">
+                    <div className="p-2 max-h-96 overflow-y-auto">
                       {/* All Authors option */}
                       <label
                         className={cn(
@@ -841,10 +888,73 @@ export default function PRListView() {
                         <span className="text-sm font-medium">All Authors</span>
                       </label>
 
+                      {/* Teams Section */}
+                      {teams.length > 0 && (
+                        <>
+                          <div className={cn(
+                            "my-1 border-t",
+                            theme === "dark" ? "border-gray-700" : "border-gray-200"
+                          )} />
+
+                          <div className={cn(
+                            "px-2 py-1 text-xs font-medium",
+                            theme === "dark" ? "text-gray-400" : "text-gray-600"
+                          )}>
+                            Teams
+                          </div>
+
+                          {teams.map((team) => {
+                            const allMembersSelected = team.members.every((member) =>
+                              selectedAuthors.has(member)
+                            );
+                            return (
+                              <label
+                                key={team.id}
+                                className={cn(
+                                  "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                                  theme === "dark"
+                                    ? "hover:bg-gray-700"
+                                    : "hover:bg-gray-50"
+                                )}
+                                title={team.description || `${team.members.length} members`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={allMembersSelected}
+                                  onChange={() => handleTeamToggle(team.id)}
+                                  className="rounded"
+                                />
+                                <span className="text-lg" style={{ color: team.color }}>
+                                  {team.icon || "🏢"}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium truncate">
+                                    {team.name}
+                                  </div>
+                                  <div className={cn(
+                                    "text-xs",
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                  )}>
+                                    {team.members.length} member{team.members.length !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </>
+                      )}
+
                       <div className={cn(
                         "my-1 border-t",
                         theme === "dark" ? "border-gray-700" : "border-gray-200"
                       )} />
+
+                      <div className={cn(
+                        "px-2 py-1 text-xs font-medium",
+                        theme === "dark" ? "text-gray-400" : "text-gray-600"
+                      )}>
+                        Individual Authors
+                      </div>
 
                       {/* Individual authors */}
                       {authors.map(author => (
@@ -871,6 +981,29 @@ export default function PRListView() {
                           <span className="text-sm">{author.login}</span>
                         </label>
                       ))}
+
+                      {/* Manage Teams Button */}
+                      <div className={cn(
+                        "mt-1 pt-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowTeamManager(true);
+                            setShowAuthorDropdown(false);
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-center space-x-2 p-2 rounded text-sm font-medium",
+                            theme === "dark"
+                              ? "text-blue-400 hover:bg-gray-700"
+                              : "text-blue-600 hover:bg-gray-50"
+                          )}
+                        >
+                          <Settings className="w-4 h-4" />
+                          <span>Manage Teams</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -924,5 +1057,6 @@ export default function PRListView() {
         )}
       </div>
     </div>
+    </>
   );
 }
