@@ -43,22 +43,37 @@ function App() {
     PerfLogger.mark("App useEffect (init) started");
     console.log("window.electron:", window.electron);
 
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn("Loading timeout - forcing app to render");
+      setLoading(false);
+    }, 3000); // 3 second timeout
+
     if (window.electron) {
       // Load settings and auth in parallel
       PerfLogger.markStart("Settings & Auth load");
-      Promise.all([loadSettings(), checkAuth()]).finally(() => {
-        PerfLogger.markEnd("Settings & Auth load");
-        setLoading(false);
-        PerfLogger.mark("App loading complete (auth + settings)");
-      });
+      Promise.all([loadSettings(), checkAuth()])
+        .catch((error) => {
+          console.error("Error during initialization:", error);
+        })
+        .finally(() => {
+          clearTimeout(timeoutId);
+          PerfLogger.markEnd("Settings & Auth load");
+          setLoading(false);
+          PerfLogger.mark("App loading complete (auth + settings)");
+        });
 
       const keyboardStart = performance.now();
       const cleanup = setupKeyboardShortcuts();
       console.log(`⏱️ [APP] Keyboard shortcuts setup in ${(performance.now() - keyboardStart).toFixed(2)}ms`);
 
-      return cleanup;
+      return () => {
+        clearTimeout(timeoutId);
+        cleanup();
+      };
     } else {
       console.error("window.electron is not available!");
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }, [checkAuth, loadSettings]);
@@ -97,12 +112,15 @@ function App() {
   const LoadingFallback = () => (
     <div
       className={cn(
-        "flex items-center justify-center h-full",
+        "flex flex-col items-center justify-center h-full",
         theme === "dark" ? "bg-gray-900 dark" : "bg-white light",
       )}
     >
-      <div className={theme === "dark" ? "text-white" : "text-gray-900"}>
-        Loading...
+      <div className="flex flex-col items-center space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className={theme === "dark" ? "text-gray-300" : "text-gray-700"}>
+          Loading...
+        </div>
       </div>
     </div>
   );
@@ -168,6 +186,8 @@ function App() {
               <Route path="/agents/cursor" element={<CursorView />} />
               <Route path="/agents/devin" element={<DevinView />} />
               <Route path="/agents/chatgpt" element={<ChatGPTView />} />
+              {/* Catch-all route for unmatched paths */}
+              <Route path="*" element={<Navigate to="/pulls" replace />} />
             </Routes>
           </Suspense>
         </main>
