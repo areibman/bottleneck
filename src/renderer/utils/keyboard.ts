@@ -5,7 +5,7 @@ export function setupKeyboardShortcuts() {
     console.warn(
       "window.electron not available, skipping keyboard shortcuts setup",
     );
-    return () => {};
+    return () => { };
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -71,15 +71,6 @@ export function setupKeyboardShortcuts() {
       if ((e.key === "l" || e.key === "L") && e.shiftKey) {
         e.preventDefault();
         useUIStore.getState().toggleWordWrap();
-        return;
-      }
-
-      // Sync all (Cmd/Ctrl + R)
-      if ((e.key === "r" || e.key === "R") && !e.shiftKey) {
-        e.preventDefault();
-        import("../stores/syncStore").then(({ useSyncStore }) => {
-          useSyncStore.getState().syncAll();
-        });
         return;
       }
     }
