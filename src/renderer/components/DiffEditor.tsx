@@ -6,7 +6,7 @@ import {
   useMemo,
   useCallback,
 } from "react";
-import { DiffEditor as MonacoDiffEditor } from "@monaco-editor/react";
+import { DiffEditor as MonacoDiffEditor, loader } from "@monaco-editor/react";
 import type {
   editor as MonacoEditorType,
   IDisposable,
@@ -14,6 +14,13 @@ import type {
 import { File, Comment, GitHubAPI } from "../services/github";
 import { useUIStore } from "../stores/uiStore";
 import type { Monaco } from "@monaco-editor/react";
+
+// Configure Monaco Editor loader
+loader.config({
+  paths: {
+    vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs",
+  },
+});
 import {
   buildThreads,
   CommentSide,

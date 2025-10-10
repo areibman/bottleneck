@@ -5,8 +5,7 @@ import path from "path";
 export default defineConfig({
   plugins: [
     react(),
-    // Monaco is now loaded via @monaco-editor/react lazy loading
-    // No need for vite-plugin-monaco-editor
+    // Monaco is loaded from CDN in production
   ],
   base: "./",
   root: path.resolve(__dirname, "src/renderer"),
@@ -43,6 +42,6 @@ export default defineConfig({
       "react-complex-tree",
       "date-fns",
     ],
-    exclude: ["monaco-editor", "@monaco-editor/react"], // Monaco is lazy-loaded, don't pre-bundle it
+    // Monaco is now bundled via vite-plugin-monaco-editor
   },
 });

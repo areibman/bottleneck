@@ -49,7 +49,8 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
     "vite-plugin-electron": "^0.15.5",
-    "vite-plugin-electron-renderer": "^0.14.5"
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vite-plugin-monaco-editor": "^1.1.0"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -87,8 +88,6 @@
       "!node_modules/**/tests/**/*",
       "!node_modules/**/*.md",
       "!node_modules/**/.bin/**/*",
-      "!node_modules/monaco-editor/**/*",
-      "!node_modules/@monaco-editor/**/*",
       "!node_modules/date-fns/locale/**/*",
       "!node_modules/date-fns/esm/**/*",
       "!node_modules/lucide-react/dist/esm/**/*",
