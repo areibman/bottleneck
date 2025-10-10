@@ -231,6 +231,7 @@ export function PRTreeView({
     <span className="pr-tree-view-container">
       <div className="flex-1 overflow-y-auto">
         <UncontrolledTreeEnvironment
+          key={JSON.stringify(Object.keys(treeItems))}
           dataProvider={treeDataProvider}
           renderDepthOffset={24}
           getItemTitle={(item) => {
