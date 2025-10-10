@@ -24,6 +24,7 @@ const IssueDetailView = lazy(() => import("./views/IssueDetailView"));
 const CursorView = lazy(() => import("./views/CursorView"));
 const DevinView = lazy(() => import("./views/DevinView"));
 const ChatGPTView = lazy(() => import("./views/ChatGPTView"));
+const HighScoresView = lazy(() => import("./views/HighScoresView"));
 
 PerfLogger.mark("App.tsx module loaded");
 
@@ -186,6 +187,7 @@ function App() {
                 element={<IssueDetailView />}
               />
               <Route path="/settings" element={<SettingsView />} />
+              <Route path="/high-scores" element={<HighScoresView />} />
               <Route path="/agents/cursor" element={<CursorView />} />
               <Route path="/agents/devin" element={<DevinView />} />
               <Route path="/agents/chatgpt" element={<ChatGPTView />} />
