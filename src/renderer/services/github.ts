@@ -1420,6 +1420,142 @@ export class GitHubAPI {
     }));
   }
 
+  async getIssueTimeline(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<any[]> {
+    const { data } = await this.octokit.issues.listEventsForTimeline({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      per_page: 100,
+    });
+
+    return data;
+  }
+
+  async getRelatedPullRequests(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<PullRequest[]> {
+    // Use GraphQL to find PRs that reference this issue
+    const query = `
+      query ($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) {
+          issue(number: $number) {
+            timelineItems(first: 100, itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT]) {
+              nodes {
+                ... on CrossReferencedEvent {
+                  source {
+                    ... on PullRequest {
+                      number
+                      title
+                      state
+                      merged
+                      isDraft
+                      createdAt
+                      updatedAt
+                      closedAt
+                      mergedAt
+                      author {
+                        login
+                      }
+                    }
+                  }
+                }
+                ... on ConnectedEvent {
+                  subject {
+                    ... on PullRequest {
+                      number
+                      title
+                      state
+                      merged
+                      isDraft
+                      createdAt
+                      updatedAt
+                      closedAt
+                      mergedAt
+                      author {
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        name: repo,
+        number: issueNumber,
+      });
+
+      const items = response?.repository?.issue?.timelineItems?.nodes || [];
+      const prNumbers = new Set<number>();
+      
+      items.forEach((item: any) => {
+        const pr = item?.source || item?.subject;
+        if (pr && pr.number) {
+          prNumbers.add(pr.number);
+        }
+      });
+
+      // Fetch full PR details for each related PR
+      if (prNumbers.size > 0) {
+        const prs = await Promise.all(
+          Array.from(prNumbers).map(num => 
+            this.getPullRequest(owner, repo, num).catch(() => null)
+          )
+        );
+        return prs.filter((pr): pr is PullRequest => pr !== null);
+      }
+
+      return [];
+    } catch (error) {
+      console.error("Failed to fetch related PRs:", error);
+      return [];
+    }
+  }
+
+  async assignIssueTo(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    assignees: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.addAssignees({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      assignees,
+    });
+
+    return data as Issue;
+  }
+
+  async unassignIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    assignees: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.removeAssignees({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      assignees,
+    });
+
+    return data as Issue;
+  }
+
   async getCurrentUser() {
     const { data } = await this.octokit.users.getAuthenticated();
     return data;
