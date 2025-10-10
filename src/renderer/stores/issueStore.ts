@@ -115,8 +115,25 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   updateIssue: (issue) => {
     set((state) => {
       const newIssues = new Map(state.issues);
-      const key = `${issue.repository.owner.login}/${issue.repository.name}#${issue.number}`;
-      newIssues.set(key, issue);
+      // Prefer explicit repository field when available
+      let targetKey: string | null =
+        (issue as any)?.repository?.owner?.login && (issue as any)?.repository?.name
+          ? `${(issue as any).repository.owner.login}/${(issue as any).repository.name}#${issue.number}`
+          : null;
+
+      if (!targetKey) {
+        // Fallback: find existing entry by issue number
+        for (const key of newIssues.keys()) {
+          if (key.endsWith(`#${issue.number}`)) {
+            targetKey = key;
+            break;
+          }
+        }
+      }
+
+      if (targetKey) {
+        newIssues.set(targetKey, issue);
+      }
       return { issues: newIssues };
     });
   },
