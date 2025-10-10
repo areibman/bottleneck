@@ -528,3 +528,33 @@ ipcMain.handle("updater:get-status", () => {
     currentVersion: app.getVersion()
   };
 });
+
+// Find-in-page IPC handlers
+ipcMain.handle("find:start", () => {
+  if (mainWindow) {
+    mainWindow.webContents.findInPage("");
+    return { success: true };
+  }
+  return { success: false, error: "No window available" };
+});
+
+ipcMain.handle("find:find", (_, text: string, options?: { forward?: boolean; matchCase?: boolean; findNext?: boolean }) => {
+  if (mainWindow) {
+    const findOptions = {
+      forward: options?.forward !== false,
+      matchCase: options?.matchCase || false,
+      findNext: options?.findNext || false
+    };
+    mainWindow.webContents.findInPage(text, findOptions);
+    return { success: true };
+  }
+  return { success: false, error: "No window available" };
+});
+
+ipcMain.handle("find:stop", () => {
+  if (mainWindow) {
+    mainWindow.webContents.stopFindInPage("clearSelection");
+    return { success: true };
+  }
+  return { success: false, error: "No window available" };
+});

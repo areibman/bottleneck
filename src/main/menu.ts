@@ -74,6 +74,28 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
         { role: "cut" },
         { role: "copy" },
         { role: "paste" },
+        { type: "separator" },
+        {
+          label: "Find",
+          accelerator: "CmdOrCtrl+F",
+          click: () => {
+            mainWindow.webContents.findInPage("");
+          },
+        },
+        {
+          label: "Find Next",
+          accelerator: "CmdOrCtrl+G",
+          click: () => {
+            mainWindow.webContents.findInPage("", { findNext: true });
+          },
+        },
+        {
+          label: "Find Previous",
+          accelerator: "CmdOrCtrl+Shift+G",
+          click: () => {
+            mainWindow.webContents.findInPage("", { findNext: false });
+          },
+        },
         ...(isMac
           ? [
               { role: "pasteAndMatchStyle" as const },
