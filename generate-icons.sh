@@ -31,15 +31,22 @@ create_rounded() {
     local shrink_percent="${4:-$SHRINK_PERCENT}"
     local inner_size=$(( size * shrink_percent / 100 ))
     
+    # Create a rounded rectangle mask
+    magick -size "${size}x${size}" xc:none \
+        -fill white \
+        -draw "roundrectangle 0,0 $((size-1)),$((size-1)) $radius,$radius" \
+        /tmp/rounded_mask_${size}.png
+    
+    # Resize and center the input image, then apply the rounded mask
     magick "$input" \
         -resize "${inner_size}x${inner_size}" \
         -background none -gravity center -extent "${size}x${size}" \
-        \( +clone -alpha extract \
-           -draw "fill black polygon 0,0 0,$radius $radius,0 fill white circle $radius,$radius $radius,0" \
-           \( +clone -flip \) -compose Multiply -composite \
-           \( +clone -flop \) -compose Multiply -composite \
-        \) -alpha off -compose CopyOpacity -composite \
+        /tmp/rounded_mask_${size}.png \
+        -alpha off -compose CopyOpacity -composite \
         "$output"
+    
+    # Clean up temporary mask
+    rm -f /tmp/rounded_mask_${size}.png
 }
 
 ## macOS
@@ -59,6 +66,7 @@ for i in 16 32 64 128 256 512 1024; do
 done
 
 iconutil --convert icns -o icon.icns icon.iconset
+rm -rf icon.iconset
 echo "✓ Created icon.icns"
 
 ## Windows
