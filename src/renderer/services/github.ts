@@ -1196,6 +1196,26 @@ export class GitHubAPI {
     throw new Error("Could not retrieve file content.");
   }
 
+  async getFileContentBase64(
+    owner: string,
+    repo: string,
+    path: string,
+    ref: string,
+  ): Promise<string> {
+    const { data } = await this.octokit.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+    });
+
+    if ("content" in data) {
+      return data.content;
+    }
+
+    throw new Error("Could not retrieve file content.");
+  }
+
   async searchPullRequests(query: string) {
     const { data } = await this.octokit.search.issuesAndPullRequests({
       q: `${query} type:pr`,

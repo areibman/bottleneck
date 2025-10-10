@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { File } from "../../services/github";
 import { cn } from "../../utils/cn";
+import { isImageFile } from "../../utils/fileType";
 
 type TreeData = {
   isFolder: boolean;
@@ -159,8 +160,11 @@ export function FileTree({
                 {item.data.file.status === "added" ? (
                   <>
                     <FilePlus className="w-3 h-3 text-green-500" />
-                    <span className="text-green-500">
-                      +{item.data.file.additions}
+                    <span className="text-green-500 font-medium">
+                      {item.data.file.additions === 0 &&
+                      item.data.file.deletions === 0
+                        ? "New"
+                        : `+${item.data.file.additions}`}
                     </span>
                   </>
                 ) : item.data.file.status === "removed" ? (
@@ -171,15 +175,35 @@ export function FileTree({
                     </span>
                   </>
                 ) : item.data.file.status === "modified" ? (
-                  <>
-                    <FileEdit className="w-3 h-3 text-yellow-500" />
-                    <span className="text-green-400">
-                      +{item.data.file.additions}
-                    </span>
-                    <span className="text-red-400">
-                      -{item.data.file.deletions}
-                    </span>
-                  </>
+                  (() => {
+                    const showChangedLabel =
+                      isImageFile(item.data.file!.filename) &&
+                      item.data.file.additions === 0 &&
+                      item.data.file.deletions === 0;
+
+                    if (showChangedLabel) {
+                      return (
+                        <>
+                          <FileEdit className="w-3 h-3 text-yellow-500" />
+                          <span className="text-yellow-500 font-medium">
+                            Changed
+                          </span>
+                        </>
+                      );
+                    }
+
+                    return (
+                      <>
+                        <FileEdit className="w-3 h-3 text-yellow-500" />
+                        <span className="text-green-400">
+                          +{item.data.file.additions}
+                        </span>
+                        <span className="text-red-400">
+                          -{item.data.file.deletions}
+                        </span>
+                      </>
+                    );
+                  })()
                 ) : (
                   <>
                     <span className="text-green-400">

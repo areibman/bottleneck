@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { File } from "../../services/github";
 import { cn } from "../../utils/cn";
+import { isImageFile } from "../../utils/fileType";
 
 interface DiffEditorHeaderProps {
   file: File;
@@ -56,6 +57,9 @@ export const DiffEditorHeader: FC<DiffEditorHeaderProps> = ({
       ? "Show diff"
       : "Show full file"
     : "Full file content not available";
+  const isImage = isImageFile(file.filename);
+  const hasNoLineChanges =
+    file.additions === 0 && file.deletions === 0;
 
   return (
     <div
@@ -80,7 +84,9 @@ export const DiffEditorHeader: FC<DiffEditorHeaderProps> = ({
         <div className="flex items-center space-x-2 text-xs">
           {file.status === "added" ? (
             <span className="text-green-500 font-medium">
-              New file (+{file.additions} lines)
+              {file.additions === 0 && file.deletions === 0
+                ? "New file"
+                : `New file (+${file.additions} lines)`}
             </span>
           ) : file.status === "removed" ? (
             <span className="text-red-500 font-medium">
@@ -88,8 +94,14 @@ export const DiffEditorHeader: FC<DiffEditorHeaderProps> = ({
             </span>
           ) : (
             <>
-              <span className="text-green-400">+{file.additions}</span>
-              <span className="text-red-400">-{file.deletions}</span>
+              {isImage && hasNoLineChanges ? (
+                <span className="text-yellow-500 font-medium">Changed</span>
+              ) : (
+                <>
+                  <span className="text-green-400">+{file.additions}</span>
+                  <span className="text-red-400">-{file.deletions}</span>
+                </>
+              )}
             </>
           )}
         </div>

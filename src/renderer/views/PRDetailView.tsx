@@ -23,6 +23,7 @@ import {
   mockReviewThreads,
 } from "../mockData";
 import { useUIStore } from "../stores/uiStore";
+import { getImageMimeType, isImageFile } from "../utils/fileType";
 
 // Import new components
 import {
@@ -67,8 +68,11 @@ export default function PRDetailView() {
   const [loading, setLoading] = useState(true);
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set());
   const [fileContent, setFileContent] = useState<{
-    original: string;
-    modified: string;
+    original?: string;
+    modified?: string;
+    originalBinaryUrl?: string | null;
+    modifiedBinaryUrl?: string | null;
+    isBinary?: boolean;
   } | null>(null);
   const [fileListWidth, setFileListWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
@@ -111,34 +115,98 @@ export default function PRDetailView() {
   }, [owner, repo, number, token]);
 
   useEffect(() => {
-    if (files.length > 0 && !selectedFile) {
-      handleFileSelect(files[0]);
-    }
-  }, [files, selectedFile]);
+    setFiles([]);
+    setSelectedFile(null);
+    setFileContent(null);
+    setViewedFiles(new Set<string>());
+  }, [owner, repo, number]);
 
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     setSelectedFile(file);
     setFileContent(null);
+    const isImage = isImageFile(file.filename);
 
     if (token && owner && repo && pr) {
       try {
         const api = new GitHubAPI(token);
-        const [original, modified] = await Promise.all([
-          file.status === "added"
-            ? Promise.resolve("")
-            : api.getFileContent(owner, repo, file.filename, pr.base.sha),
-          file.status === "removed"
-            ? Promise.resolve("")
-            : api.getFileContent(owner, repo, file.filename, pr.head.sha),
-        ]);
-        setFileContent({ original, modified });
+
+        if (isImage) {
+          const mimeType =
+            getImageMimeType(file.filename) ?? "application/octet-stream";
+
+          const [originalBase64, modifiedBase64] = await Promise.all([
+            file.status === "added"
+              ? Promise.resolve<string | null>(null)
+              : api.getFileContentBase64(
+                owner,
+                repo,
+                file.filename,
+                pr.base.sha,
+              ),
+            file.status === "removed"
+              ? Promise.resolve<string | null>(null)
+              : api.getFileContentBase64(
+                owner,
+                repo,
+                file.filename,
+                pr.head.sha,
+              ),
+          ]);
+
+          setFileContent({
+            isBinary: true,
+            originalBinaryUrl: originalBase64
+              ? `data:${mimeType};base64,${originalBase64}`
+              : null,
+            modifiedBinaryUrl: modifiedBase64
+              ? `data:${mimeType};base64,${modifiedBase64}`
+              : null,
+          });
+        } else {
+          const [original, modified] = await Promise.all([
+            file.status === "added"
+              ? Promise.resolve("")
+              : api.getFileContent(owner, repo, file.filename, pr.base.sha),
+            file.status === "removed"
+              ? Promise.resolve("")
+              : api.getFileContent(owner, repo, file.filename, pr.head.sha),
+          ]);
+          setFileContent({ original, modified, isBinary: false });
+        }
       } catch (error) {
         console.error("Failed to fetch file content:", error);
         // Fallback to patch if content fetch fails
         setFileContent(null);
       }
+    } else if (isImage) {
+      setFileContent({
+        isBinary: true,
+        originalBinaryUrl: null,
+        modifiedBinaryUrl: null,
+      });
     }
-  };
+  }, [token, owner, repo, pr]);
+
+  useEffect(() => {
+    if (files.length === 0) {
+      return;
+    }
+
+    if (selectedFile) {
+      const matchingFile = files.find(
+        (file) => file.filename === selectedFile.filename,
+      );
+
+      if (matchingFile) {
+        if (matchingFile !== selectedFile) {
+          handleFileSelect(matchingFile);
+        }
+        return;
+      }
+    }
+
+    handleFileSelect(files[0]);
+  }, [files, selectedFile, handleFileSelect]);
 
   const loadPRData = async () => {
     setLoading(true);
@@ -763,6 +831,9 @@ export default function PRDetailView() {
                     file={selectedFile}
                     originalContent={fileContent?.original}
                     modifiedContent={fileContent?.modified}
+                    originalBinaryContent={fileContent?.originalBinaryUrl ?? undefined}
+                    modifiedBinaryContent={fileContent?.modifiedBinaryUrl ?? undefined}
+                    isBinary={fileContent?.isBinary ?? false}
                     comments={reviewComments.filter(
                       (c) => c.path === selectedFile.filename,
                     )}

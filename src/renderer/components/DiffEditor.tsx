@@ -32,11 +32,16 @@ import {
 import { DiffEditorHeader } from "./diff/DiffEditorHeader";
 import { CommentOverlay } from "./diff/CommentOverlay";
 import { useOverlayResize } from "./diff/useOverlayResize";
+import { ImageDiffViewer } from "./diff/ImageDiffViewer";
+import { isImageFile } from "../utils/fileType";
 
 interface DiffEditorProps {
   file: File;
   originalContent?: string;
   modifiedContent?: string;
+  originalBinaryContent?: string | null;
+  modifiedBinaryContent?: string | null;
+  isBinary?: boolean;
   comments: Comment[];
   onMarkViewed: () => void;
   isViewed: boolean;
@@ -52,6 +57,9 @@ export function DiffEditor({
   file,
   originalContent,
   modifiedContent,
+  originalBinaryContent,
+  modifiedBinaryContent,
+  isBinary = false,
   comments,
   onMarkViewed,
   isViewed,
@@ -88,6 +96,11 @@ export function DiffEditor({
     modified: string[];
   }>({ original: [], modified: [] });
   const threadsRef = useRef<InlineCommentThread[]>([]);
+  const isRecognizedImage = useMemo(
+    () => isImageFile(file.filename),
+    [file.filename],
+  );
+  const isImageDiff = (isBinary || isRecognizedImage) && isRecognizedImage;
 
   // Parse patch content synchronously to avoid flicker
   const patchData = useMemo(() => {
@@ -1225,7 +1238,8 @@ export function DiffEditor({
     ? (originalContent !== undefined && modifiedContent !== undefined)
     : true; // Patch content is always ready via useMemo
 
-  const shouldRenderEditor = !isInitializing && isContentReady;
+  const shouldRenderImageViewer = isImageDiff && !isInitializing;
+  const shouldRenderEditor = !isImageDiff && !isInitializing && isContentReady;
 
   return (
     <div className="flex flex-col h-full">
@@ -1248,7 +1262,15 @@ export function DiffEditor({
       />
 
       <div className="flex-1 relative" ref={containerRef}>
-        {shouldRenderEditor ? (
+        {shouldRenderImageViewer ? (
+          <ImageDiffViewer
+            file={file}
+            originalSrc={originalBinaryContent}
+            modifiedSrc={modifiedBinaryContent}
+            diffView={diffView}
+            theme={theme}
+          />
+        ) : shouldRenderEditor ? (
           <MonacoDiffEditor
             key={file.filename} // Force remount when file changes to ensure clean Monaco disposal
             original={
@@ -1323,7 +1345,7 @@ export function DiffEditor({
           </div>
         )}
 
-        {activeOverlay && overlayPosition && (
+        {!isImageDiff && activeOverlay && overlayPosition && (
           <CommentOverlay
             overlay={activeOverlay}
             position={overlayPosition}
