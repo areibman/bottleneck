@@ -480,6 +480,10 @@ export default function IssuesView() {
         initial.in_review.push(issue);
         continue;
       }
+      if (labelNames.has("in-progress")) {
+        initial.in_progress.push(issue);
+        continue;
+      }
       if (issue.assignees.length > 0 || hasLinkedPR(issue)) {
         initial.in_progress.push(issue);
         continue;
