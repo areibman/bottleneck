@@ -7,6 +7,7 @@ export interface IssueFilters {
   labels: string[];
   assignee: "all" | "assigned" | "unassigned" | string;
   author: string;
+  selectedTeams: string[]; // Array of team IDs
 }
 
 interface IssueState {
@@ -44,6 +45,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     labels: [],
     assignee: "all",
     author: "all",
+    selectedTeams: [],
   },
   selectedIssues: new Set(),
   repoLabels: [],
@@ -135,6 +137,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         labels: [],
         assignee: "all",
         author: "all",
+        selectedTeams: [],
       },
     });
   },

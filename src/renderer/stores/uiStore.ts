@@ -29,6 +29,7 @@ interface UIState {
   prListFilters: {
     sortBy: SortByType;
     selectedAuthors: string[];
+    selectedTeams: string[]; // Array of team IDs
     selectedStatuses: PRStatusFilter[];
   };
 
@@ -72,6 +73,7 @@ export const useUIStore = create<UIState>()(
       prListFilters: {
         sortBy: "updated",
         selectedAuthors: [],
+        selectedTeams: [],
         selectedStatuses: ["open", "draft"],
       },
 
@@ -130,6 +132,7 @@ export const useUIStore = create<UIState>()(
           prListFilters: {
             sortBy: "updated",
             selectedAuthors: [],
+            selectedTeams: [],
             selectedStatuses: ["open", "draft"],
           },
         }),
