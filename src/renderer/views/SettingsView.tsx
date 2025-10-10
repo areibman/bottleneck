@@ -13,23 +13,26 @@ import {
   Download,
   CheckCircle,
   XCircle,
+  Users,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUIStore } from "../stores/uiStore";
+import TeamManagementDialog from "../components/TeamManagementDialog";
 import { cn } from "../utils/cn";
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
 export default function SettingsView() {
   const { user, logout } = useAuthStore();
-  const { settings, updateSettings, saveSettings, resetSettings } = useSettingsStore();
+  const { settings, updateSettings, saveSettings, resetSettings, teams, loadTeams } = useSettingsStore();
   const { theme } = useUIStore();
   const [activeTab, setActiveTab] = useState<
-    "general" | "appearance" | "notifications" | "advanced"
+    "general" | "appearance" | "notifications" | "advanced" | "teams"
   >("general");
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [showTeamDialog, setShowTeamDialog] = useState(false);
 
   // Update state
   const [currentVersion, setCurrentVersion] = useState<string>("");
@@ -40,6 +43,9 @@ export default function SettingsView() {
   const [isDev, setIsDev] = useState(false);
 
   useEffect(() => {
+    // Load teams on component mount
+    loadTeams();
+
     // Get current version and dev status
     const initUpdater = async () => {
       try {
@@ -95,7 +101,7 @@ export default function SettingsView() {
     return () => {
       window.electron.updater.removeAllListeners();
     };
-  }, []);
+  }, [loadTeams]);
 
   const handleCheckForUpdates = async () => {
     try {
@@ -191,6 +197,7 @@ export default function SettingsView() {
     { id: "general", label: "General", icon: Settings },
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "teams", label: "Teams", icon: Users },
     { id: "advanced", label: "Advanced", icon: Code },
   ];
 
@@ -909,6 +916,158 @@ export default function SettingsView() {
             </div>
           )}
 
+          {activeTab === "teams" && (
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2
+                    className={cn(
+                      "text-lg font-semibold",
+                      theme === "dark" ? "text-white" : "text-gray-900",
+                    )}
+                  >
+                    Team Management
+                  </h2>
+                  <button
+                    onClick={() => setShowTeamDialog(true)}
+                    className={cn(
+                      "btn btn-primary flex items-center space-x-2",
+                      theme === "dark"
+                        ? "bg-blue-600 hover:bg-blue-700"
+                        : "bg-blue-500 hover:bg-blue-600"
+                    )}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Manage Teams</span>
+                  </button>
+                </div>
+
+                <p
+                  className={cn(
+                    "text-sm mb-6",
+                    theme === "dark" ? "text-gray-400" : "text-gray-600",
+                  )}
+                >
+                  Create and manage teams to quickly filter pull requests by groups of authors.
+                </p>
+
+                {teams.length === 0 ? (
+                  <div
+                    className={cn(
+                      "text-center py-12 rounded-lg border-2 border-dashed",
+                      theme === "dark"
+                        ? "border-gray-700 text-gray-400"
+                        : "border-gray-300 text-gray-500"
+                    )}
+                  >
+                    <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <h3
+                      className={cn(
+                        "text-lg font-medium mb-2",
+                        theme === "dark" ? "text-gray-300" : "text-gray-700",
+                      )}
+                    >
+                      No teams created yet
+                    </h3>
+                    <p className="text-sm mb-4">
+                      Create your first team to start filtering pull requests by groups of authors.
+                    </p>
+                    <button
+                      onClick={() => setShowTeamDialog(true)}
+                      className={cn(
+                        "btn btn-primary",
+                        theme === "dark"
+                          ? "bg-blue-600 hover:bg-blue-700"
+                          : "bg-blue-500 hover:bg-blue-600"
+                      )}
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Create Your First Team
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {teams.map(team => (
+                      <div
+                        key={team.id}
+                        className={cn(
+                          "p-4 rounded-lg border",
+                          theme === "dark"
+                            ? "bg-gray-800 border-gray-700 hover:border-gray-600"
+                            : "bg-white border-gray-200 hover:border-gray-300"
+                        )}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-lg flex-shrink-0"
+                            style={{ backgroundColor: team.color }}
+                          >
+                            {team.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3
+                              className={cn(
+                                "font-medium truncate",
+                                theme === "dark" ? "text-white" : "text-gray-900",
+                              )}
+                            >
+                              {team.name}
+                            </h3>
+                            {team.description && (
+                              <p
+                                className={cn(
+                                  "text-sm mt-1 truncate",
+                                  theme === "dark" ? "text-gray-400" : "text-gray-600",
+                                )}
+                              >
+                                {team.description}
+                              </p>
+                            )}
+                            <p
+                              className={cn(
+                                "text-xs mt-2",
+                                theme === "dark" ? "text-gray-500" : "text-gray-500",
+                              )}
+                            >
+                              {team.authorLogins.length} member{team.authorLogins.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {team.authorLogins.slice(0, 3).map(login => (
+                            <span
+                              key={login}
+                              className={cn(
+                                "px-2 py-1 text-xs rounded-full",
+                                theme === "dark"
+                                  ? "bg-gray-700 text-gray-300"
+                                  : "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              {login}
+                            </span>
+                          ))}
+                          {team.authorLogins.length > 3 && (
+                            <span
+                              className={cn(
+                                "px-2 py-1 text-xs rounded-full",
+                                theme === "dark"
+                                  ? "bg-gray-700 text-gray-300"
+                                  : "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              +{team.authorLogins.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === "advanced" && (
             <div className="space-y-6">
               <div>
@@ -1154,6 +1313,13 @@ export default function SettingsView() {
           </div>
         </div>
       )}
+
+      {/* Team Management Dialog */}
+      <TeamManagementDialog
+        isOpen={showTeamDialog}
+        onClose={() => setShowTeamDialog(false)}
+        availableAuthors={[]} // Empty array since we don't have PR authors in settings
+      />
     </div>
   );
 }
