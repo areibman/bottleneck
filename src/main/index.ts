@@ -155,6 +155,34 @@ function createWindow() {
   // Set up application menu
   const menu = createMenu(mainWindow);
   Menu.setApplicationMenu(menu);
+
+  // Set up find-in-page support
+  let findState = {
+    isActive: false,
+    searchText: "",
+  };
+
+  mainWindow.webContents.on("found-in-page", (_event, result) => {
+    if (result.finalUpdate) {
+      console.log(`Found ${result.matches} matches for "${result.activeMatchOrdinal}/${result.matches}"`);
+    }
+  });
+
+  // Handle find IPC from renderer
+  ipcMain.on("find-in-page", (_event, text: string, options?: { forward?: boolean, findNext?: boolean }) => {
+    if (mainWindow) {
+      findState.searchText = text;
+      findState.isActive = true;
+      mainWindow.webContents.findInPage(text, options || {});
+    }
+  });
+
+  ipcMain.on("stop-find-in-page", (_event, action: "clearSelection" | "keepSelection" | "activateSelection" = "clearSelection") => {
+    if (mainWindow) {
+      findState.isActive = false;
+      mainWindow.webContents.stopFindInPage(action);
+    }
+  });
 }
 
 // App event handlers
