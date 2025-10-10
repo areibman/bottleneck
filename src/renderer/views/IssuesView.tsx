@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { DndContext, type DragEndEvent, useDroppable, useDraggable } from "@dnd-kit/core";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
@@ -11,6 +12,27 @@ import Dropdown, { DropdownOption } from "../components/Dropdown";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 import LabelSelector from "../components/LabelSelector";
+
+function DropColumn({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} data-column-id={id} className="flex-1 min-w-[280px] max-w-[360px] mx-2" >
+      {children}
+    </div>
+  );
+}
+
+function DragItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
+  const style: React.CSSProperties = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : {};
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <div className={isDragging ? "opacity-70" : undefined}>{children}</div>
+    </div>
+  );
+}
 
 const IssueItem = React.memo(
   ({
@@ -168,9 +190,10 @@ export default function IssuesView() {
     repoLabels,
     createLabel,
     addLabelsToIssues,
-    removeLabelsFromIssues
+    removeLabelsFromIssues,
+    moveIssueToColumn
   } = useIssueStore();
-  const { selectedRepo } = usePRStore();
+  const { selectedRepo, pullRequests } = usePRStore();
   const { theme } = useUIStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
@@ -341,6 +364,86 @@ export default function IssuesView() {
     return issuesArray;
   }, [issues, parsedDates, sortBy, filters]);
 
+  // PRs in current repo for cross-link detection
+  const repoPRs = useMemo(() => {
+    if (!selectedRepo) return [] as any[];
+    const all = Array.from(pullRequests.values());
+    return all.filter((pr: any) => pr.base?.repo?.owner?.login === selectedRepo.owner && pr.base?.repo?.name === selectedRepo.name);
+  }, [pullRequests, selectedRepo]);
+
+  // Group issues into Kanban columns
+  const columns = useMemo(() => {
+    const initial = {
+      unassigned: [] as Issue[],
+      todo: [] as Issue[],
+      in_progress: [] as Issue[],
+      in_review: [] as Issue[],
+      done: [] as Issue[],
+      closed: [] as Issue[],
+    };
+
+    const hasLinkedPR = (issue: Issue) => {
+      const needle = `#${issue.number}`;
+      for (const pr of repoPRs) {
+        const title: string = pr.title || "";
+        const body: string = pr.body || "";
+        const headRef: string = pr.head?.ref || "";
+        if (title.includes(needle) || body.includes(needle) || headRef.includes(String(issue.number))) return true;
+      }
+      return false;
+    };
+    const hasLinkedMergedPR = (issue: Issue) => {
+      const needle = `#${issue.number}`;
+      for (const pr of repoPRs) {
+        const title: string = pr.title || "";
+        const body: string = pr.body || "";
+        const headRef: string = pr.head?.ref || "";
+        if ((title.includes(needle) || body.includes(needle) || headRef.includes(String(issue.number))) && pr.merged) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    for (const issue of filteredIssues) {
+      const labelNames = new Set(issue.labels.map((l) => l.name.toLowerCase()));
+
+      if (hasLinkedMergedPR(issue) || labelNames.has("done")) {
+        initial.done.push(issue);
+        continue;
+      }
+      if (issue.state === "closed") {
+        initial.closed.push(issue);
+        continue;
+      }
+      if (labelNames.has("in-review")) {
+        initial.in_review.push(issue);
+        continue;
+      }
+      if (issue.assignees.length > 0 || hasLinkedPR(issue)) {
+        initial.in_progress.push(issue);
+        continue;
+      }
+      if (labelNames.has("todo")) {
+        initial.todo.push(issue);
+        continue;
+      }
+      initial.unassigned.push(issue);
+    }
+
+    return initial;
+  }, [filteredIssues, repoPRs]);
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!active?.id || !over?.id || !selectedRepo) return;
+    const issueKey = String(active.id);
+    const [owner, repo, numberStr] = issueKey.split("#");
+    const number = parseInt(numberStr, 10);
+    const target = String(over.id) as "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed";
+    await moveIssueToColumn(owner, repo, number, target);
+  }, [moveIssueToColumn, selectedRepo]);
+
   const handleIssueClick = useCallback(
     (issue: Issue) => {
       if (selectedRepo) {
@@ -463,7 +566,7 @@ export default function IssuesView() {
           <div className="flex items-center">
             <h1 className="text-xl font-semibold flex items-center">
               <AlertCircle className="w-5 h-5 mr-2" />
-              Issues
+              Issue Tracker
               <span
                 className={cn(
                   "ml-2 text-sm",
@@ -670,7 +773,7 @@ export default function IssuesView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div
@@ -697,23 +800,129 @@ export default function IssuesView() {
             )}
           </div>
         ) : (
-          <div
-            className={cn(
-              "divide-y",
-              theme === "dark" ? "divide-gray-700" : "divide-gray-200",
-            )}
-          >
-            {filteredIssues.map((issue) => (
-              <IssueItem
-                key={issue.id}
-                issue={issue}
-                isSelected={selectedIssues.has(issue.number)}
-                onIssueClick={handleIssueClick}
-                onToggleSelect={handleToggleSelect}
-                theme={theme}
-              />
-            ))}
-          </div>
+          <DndContext onDragEnd={handleDragEnd}>
+            <div className="flex h-full overflow-x-auto px-3 py-3 gap-3">
+              {/* Unassigned */}
+              <DropColumn id="unassigned">
+                <div className={cn(
+                  "px-3 py-2 mb-2 rounded border text-sm font-semibold",
+                  theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200",
+                )}>Unassigned <span className={cn("ml-1 text-xs", theme === "dark" ? "text-gray-400" : "text-gray-600")}>({columns.unassigned.length})</span></div>
+                <div className={cn(
+                  "rounded border p-1 min-h-[200px] max-h-[calc(100vh-260px)] overflow-auto",
+                  theme === "dark" ? "bg-gray-900/40 border-gray-800" : "bg-white border-gray-200",
+                )}>
+                  {columns.unassigned.map((issue) => (
+                    <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
+                      <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                      </div>
+                    </DragItem>
+                  ))}
+                </div>
+              </DropColumn>
+
+              {/* TODO */}
+              <DropColumn id="todo">
+                <div className={cn(
+                  "px-3 py-2 mb-2 rounded border text-sm font-semibold",
+                  theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200",
+                )}>TODO <span className={cn("ml-1 text-xs", theme === "dark" ? "text-gray-400" : "text-gray-600")}>({columns.todo.length})</span></div>
+                <div className={cn(
+                  "rounded border p-1 min-h-[200px] max-h-[calc(100vh-260px)] overflow-auto",
+                  theme === "dark" ? "bg-gray-900/40 border-gray-800" : "bg-white border-gray-200",
+                )}>
+                  {columns.todo.map((issue) => (
+                    <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
+                      <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                      </div>
+                    </DragItem>
+                  ))}
+                </div>
+              </DropColumn>
+
+              {/* In Progress */}
+              <DropColumn id="in_progress">
+                <div className={cn(
+                  "px-3 py-2 mb-2 rounded border text-sm font-semibold",
+                  theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200",
+                )}>In Progress <span className={cn("ml-1 text-xs", theme === "dark" ? "text-gray-400" : "text-gray-600")}>({columns.in_progress.length})</span></div>
+                <div className={cn(
+                  "rounded border p-1 min-h-[200px] max-h-[calc(100vh-260px)] overflow-auto",
+                  theme === "dark" ? "bg-gray-900/40 border-gray-800" : "bg-white border-gray-200",
+                )}>
+                  {columns.in_progress.map((issue) => (
+                    <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
+                      <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                      </div>
+                    </DragItem>
+                  ))}
+                </div>
+              </DropColumn>
+
+              {/* In Review */}
+              <DropColumn id="in_review">
+                <div className={cn(
+                  "px-3 py-2 mb-2 rounded border text-sm font-semibold",
+                  theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200",
+                )}>In Review <span className={cn("ml-1 text-xs", theme === "dark" ? "text-gray-400" : "text-gray-600")}>({columns.in_review.length})</span></div>
+                <div className={cn(
+                  "rounded border p-1 min-h-[200px] max-h-[calc(100vh-260px)] overflow-auto",
+                  theme === "dark" ? "bg-gray-900/40 border-gray-800" : "bg-white border-gray-200",
+                )}>
+                  {columns.in_review.map((issue) => (
+                    <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
+                      <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                      </div>
+                    </DragItem>
+                  ))}
+                </div>
+              </DropColumn>
+
+              {/* Done */}
+              <DropColumn id="done">
+                <div className={cn(
+                  "px-3 py-2 mb-2 rounded border text-sm font-semibold",
+                  theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200",
+                )}>Done <span className={cn("ml-1 text-xs", theme === "dark" ? "text-gray-400" : "text-gray-600")}>({columns.done.length})</span></div>
+                <div className={cn(
+                  "rounded border p-1 min-h-[200px] max-h-[calc(100vh-260px)] overflow-auto",
+                  theme === "dark" ? "bg-gray-900/40 border-gray-800" : "bg-white border-gray-200",
+                )}>
+                  {columns.done.map((issue) => (
+                    <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
+                      <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                      </div>
+                    </DragItem>
+                  ))}
+                </div>
+              </DropColumn>
+
+              {/* Closed */}
+              <DropColumn id="closed">
+                <div className={cn(
+                  "px-3 py-2 mb-2 rounded border text-sm font-semibold",
+                  theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200",
+                )}>Closed <span className={cn("ml-1 text-xs", theme === "dark" ? "text-gray-400" : "text-gray-600")}>({columns.closed.length})</span></div>
+                <div className={cn(
+                  "rounded border p-1 min-h-[200px] max-h-[calc(100vh-260px)] overflow-auto",
+                  theme === "dark" ? "bg-gray-900/40 border-gray-800" : "bg-white border-gray-200",
+                )}>
+                  {columns.closed.map((issue) => (
+                    <DragItem key={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`} id={`${selectedRepo!.owner}/${selectedRepo!.name}#${issue.number}`}>
+                      <div className={cn("rounded mb-2 border", theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200") }>
+                        <IssueItem issue={issue} isSelected={selectedIssues.has(issue.number)} onIssueClick={handleIssueClick} onToggleSelect={handleToggleSelect} theme={theme} />
+                      </div>
+                    </DragItem>
+                  ))}
+                </div>
+              </DropColumn>
+            </div>
+          </DndContext>
         )}
       </div>
     </div>

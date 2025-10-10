@@ -20,6 +20,12 @@ interface IssueState {
 
   fetchIssues: (owner: string, repo: string, force?: boolean) => Promise<void>;
   updateIssue: (issue: Issue) => void;
+  moveIssueToColumn: (
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    target: "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed",
+  ) => Promise<void>;
   closeIssues: (owner: string, repo: string, issueNumbers: number[]) => Promise<void>;
   reopenIssues: (owner: string, repo: string, issueNumbers: number[]) => Promise<void>;
   toggleIssueSelection: (issueNumber: number) => void;
@@ -113,6 +119,140 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       newIssues.set(key, issue);
       return { issues: newIssues };
     });
+  },
+
+  moveIssueToColumn: async (owner, repo, issueNumber, target) => {
+    try {
+      let token: string | null = null;
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      // Read current issue from store
+      const key = `${owner}/${repo}#${issueNumber}`;
+      const current = get().issues.get(key);
+      if (!current) return;
+
+      // Compute desired mutations per column semantics
+      // We'll implement with labels for workflow states and assignees for assignment
+      // Labels used: todo, in-progress, in-review, done
+      const workflowLabels = new Set(["todo", "in-progress", "in-review", "done"]);
+
+      const normalize = (name: string) => name.toLowerCase();
+      const currentLabelNames = new Set(current.labels.map((l) => normalize(l.name)));
+
+      const addLabels: string[] = [];
+      const removeLabels: string[] = [];
+      let setAssignees: string[] | null = null;
+
+      const removeWorkflowLabels = () => {
+        current.labels.forEach((l) => {
+          if (workflowLabels.has(normalize(l.name))) {
+            removeLabels.push(l.name);
+          }
+        });
+      };
+
+      switch (target) {
+        case "unassigned": {
+          // Unassigned means no assignees and no linked PR/branch (we cannot check PR linkage here easily)
+          setAssignees = [];
+          // Do not set workflow label implicitly
+          break;
+        }
+        case "todo": {
+          removeWorkflowLabels();
+          if (!currentLabelNames.has("todo")) addLabels.push("todo");
+          break;
+        }
+        case "in_progress": {
+          removeWorkflowLabels();
+          if (!currentLabelNames.has("in-progress")) addLabels.push("in-progress");
+          // If currently unassigned, keep as-is; assignment handled via card editing
+          break;
+        }
+        case "in_review": {
+          removeWorkflowLabels();
+          if (!currentLabelNames.has("in-review")) addLabels.push("in-review");
+          break;
+        }
+        case "done": {
+          removeWorkflowLabels();
+          if (!currentLabelNames.has("done")) addLabels.push("done");
+          break;
+        }
+        case "closed": {
+          // Close the issue
+          if (token === "dev-token") {
+            set((state) => {
+              const newIssues = new Map(state.issues);
+              const issue = newIssues.get(key);
+              if (issue) newIssues.set(key, { ...issue, state: "closed" });
+              return { issues: newIssues };
+            });
+          } else {
+            const api = new GitHubAPI(token);
+            const updated = await api.closeIssue(owner, repo, issueNumber);
+            get().updateIssue(updated);
+          }
+          return;
+        }
+      }
+
+      if (token === "dev-token") {
+        // Mock update locally
+        set((state) => {
+          const newIssues = new Map(state.issues);
+          const issue = newIssues.get(key);
+          if (!issue) return {} as any;
+          const existing = new Set(issue.labels.map((l) => l.name));
+          const nextLabels = [
+            ...issue.labels.filter((l) => !removeLabels.includes(l.name)),
+            ...addLabels
+              .filter((l) => !existing.has(l))
+              .map((name) => ({ name, color: Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0") })),
+          ];
+          const nextAssignees = setAssignees !== null ? [] : issue.assignees;
+          newIssues.set(key, { ...issue, labels: nextLabels, assignees: nextAssignees });
+          return { issues: newIssues } as any;
+        });
+      } else {
+        const api = new GitHubAPI(token);
+        // Apply label removals
+        if (removeLabels.length > 0) {
+          await Promise.all(
+            removeLabels.map((label) => api.removeIssueLabel(owner, repo, issueNumber, label)),
+          );
+        }
+        // Apply label additions
+        if (addLabels.length > 0) {
+          const updatedLabels = await api.addIssueLabels(owner, repo, issueNumber, addLabels);
+          // Update local labels partially; we'll refresh the issue below
+          set((state) => {
+            const newIssues = new Map(state.issues);
+            const issue = newIssues.get(key);
+            if (issue) newIssues.set(key, { ...issue, labels: updatedLabels });
+            return { issues: newIssues } as any;
+          });
+        }
+        // Apply assignee changes
+        if (setAssignees !== null) {
+          const updated = await api.setIssueAssignees(owner, repo, issueNumber, setAssignees);
+          get().updateIssue(updated);
+        } else {
+          // Finally refetch this issue to ensure consistency
+          const updated = await api.getIssue(owner, repo, issueNumber);
+          get().updateIssue(updated);
+        }
+      }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
   },
 
   setFilter: (key, value) => {
