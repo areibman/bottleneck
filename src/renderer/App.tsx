@@ -112,15 +112,18 @@ function App() {
   const LoadingFallback = () => (
     <div
       className={cn(
-        "flex flex-col items-center justify-center h-full",
-        theme === "dark" ? "bg-gray-900 dark" : "bg-white light",
+        "flex h-screen w-full flex-col items-center justify-center px-6 text-center",
+        theme === "dark"
+          ? "bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-gray-200"
+          : "bg-gradient-to-b from-slate-100 via-white to-slate-100 text-gray-700",
       )}
     >
-      <div className="flex flex-col items-center space-y-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        <div className={theme === "dark" ? "text-gray-300" : "text-gray-700"}>
-          Loading...
-        </div>
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+        <div className="text-lg font-semibold">Warming up Bottleneck...</div>
+        <p className="max-w-xs text-sm opacity-80">
+          Connecting to GitHub and loading your repositories. Sit tight—this only takes a moment.
+        </p>
       </div>
     </div>
   );
