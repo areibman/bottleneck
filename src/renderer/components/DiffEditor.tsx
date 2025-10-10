@@ -1,6 +1,7 @@
 import {
   useRef,
   useEffect,
+  useLayoutEffect,
   useState,
   useMemo,
   useCallback,
@@ -287,24 +288,43 @@ export function DiffEditor({
       side === "LEFT"
         ? diffEditor.getOriginalEditor()
         : diffEditor.getModifiedEditor();
+
+    const model = editor.getModel();
+    if (!model || model.isDisposed()) {
+      return;
+    }
+
     const key = side === "LEFT" ? "original" : "modified";
-    hoverDecorationsRef.current[key] = editor.deltaDecorations(
-      hoverDecorationsRef.current[key],
-      [],
-    );
+    try {
+      hoverDecorationsRef.current[key] = editor.deltaDecorations(
+        hoverDecorationsRef.current[key],
+        [],
+      );
+    } catch (error) {
+      console.debug('Error clearing hover decoration:', error);
+    }
   }, []);
 
   useEffect(() => {
-    if (!diffEditorRef.current || !monaco) return;
+    if (!diffEditorRef.current || !monacoRef.current) return;
 
     const diffEditor = diffEditorRef.current;
     const originalEditor = diffEditor.getOriginalEditor();
     const modifiedEditor = diffEditor.getModifiedEditor();
 
+    // Check if models are valid before applying decorations
+    const originalModel = originalEditor.getModel();
+    const modifiedModel = modifiedEditor.getModel();
+
+    if (!originalModel || originalModel.isDisposed() || !modifiedModel || modifiedModel.isDisposed()) {
+      console.debug('Skipping decoration update - models are disposed');
+      return;
+    }
+
     const lineDecoration = (thread: InlineCommentThread) => {
       const startLine = thread.startLineNumber ?? thread.lineNumber;
       const endLine = thread.endLineNumber ?? thread.lineNumber;
-      const decorations = [] as Monaco["editor"]["IModelDeltaDecoration"][];
+      const decorations = [] as MonacoEditorType.IModelDeltaDecoration[];
       for (let current = startLine; current <= endLine; current++) {
         const isStart = current === startLine;
         const isEnd = current === endLine;
@@ -336,52 +356,107 @@ export function DiffEditor({
       return decorations;
     };
 
-    commentDecorationsRef.current.original = originalEditor.deltaDecorations(
-      commentDecorationsRef.current.original,
-      commentThreads
-        .filter((thread) => thread.side === "LEFT")
-        .flatMap(lineDecoration),
-    );
+    try {
+      commentDecorationsRef.current.original = originalEditor.deltaDecorations(
+        commentDecorationsRef.current.original,
+        commentThreads
+          .filter((thread) => thread.side === "LEFT")
+          .flatMap(lineDecoration),
+      );
 
-    commentDecorationsRef.current.modified = modifiedEditor.deltaDecorations(
-      commentDecorationsRef.current.modified,
-      commentThreads
-        .filter((thread) => thread.side === "RIGHT")
-        .flatMap(lineDecoration),
-    );
+      commentDecorationsRef.current.modified = modifiedEditor.deltaDecorations(
+        commentDecorationsRef.current.modified,
+        commentThreads
+          .filter((thread) => thread.side === "RIGHT")
+          .flatMap(lineDecoration),
+      );
 
-    console.log('✨ Applied decorations for', commentThreads.length, 'comment threads');
+      console.log('✨ Applied decorations for', commentThreads.length, 'comment threads');
+    } catch (error) {
+      console.debug('Error applying decorations (likely during unmount):', error);
+    }
   }, [commentThreads, diffEditorReady]);
 
-  useEffect(() => {
+  // Use layoutEffect for cleanup to ensure it runs synchronously before Monaco's disposal
+  useLayoutEffect(() => {
     return () => {
-      disposablesRef.current.forEach((sub) => sub.dispose());
+      console.log('🧹 Starting DiffEditor cleanup (layoutEffect)');
+
+      // First, dispose all event listeners to prevent them from firing during Monaco's cleanup
+      disposablesRef.current.forEach((sub) => {
+        try {
+          sub.dispose();
+        } catch (error) {
+          console.debug('Error disposing subscription:', error);
+        }
+      });
       disposablesRef.current = [];
 
-      if (!diffEditorRef.current) return;
-
+      // Store and clear the editor reference to prevent any further access
       const diffEditor = diffEditorRef.current;
-      const originalEditor = diffEditor.getOriginalEditor();
-      const modifiedEditor = diffEditor.getModifiedEditor();
+      diffEditorRef.current = null;
 
-      originalEditor.deltaDecorations(
-        commentDecorationsRef.current.original,
-        [],
-      );
-      modifiedEditor.deltaDecorations(
-        commentDecorationsRef.current.modified,
-        [],
-      );
-      originalEditor.deltaDecorations(hoverDecorationsRef.current.original, []);
-      modifiedEditor.deltaDecorations(hoverDecorationsRef.current.modified, []);
-      originalEditor.deltaDecorations(
-        lineHighlightDecorationsRef.current.original,
-        [],
-      );
-      modifiedEditor.deltaDecorations(
-        lineHighlightDecorationsRef.current.modified,
-        [],
-      );
+      if (!diffEditor) return;
+
+      try {
+        // Check if the editor models still exist before trying to update decorations
+        const originalEditor = diffEditor.getOriginalEditor();
+        const modifiedEditor = diffEditor.getModifiedEditor();
+        const originalModel = originalEditor?.getModel();
+        const modifiedModel = modifiedEditor?.getModel();
+
+        // Only clear decorations if models are still valid
+        if (originalModel && !originalModel.isDisposed()) {
+          try {
+            originalEditor.deltaDecorations(
+              commentDecorationsRef.current.original,
+              [],
+            );
+            originalEditor.deltaDecorations(hoverDecorationsRef.current.original, []);
+            originalEditor.deltaDecorations(
+              lineHighlightDecorationsRef.current.original,
+              [],
+            );
+          } catch (error) {
+            console.debug('Error clearing original decorations:', error);
+          }
+        }
+
+        if (modifiedModel && !modifiedModel.isDisposed()) {
+          try {
+            modifiedEditor.deltaDecorations(
+              commentDecorationsRef.current.modified,
+              [],
+            );
+            modifiedEditor.deltaDecorations(hoverDecorationsRef.current.modified, []);
+            modifiedEditor.deltaDecorations(
+              lineHighlightDecorationsRef.current.modified,
+              [],
+            );
+          } catch (error) {
+            console.debug('Error clearing modified decorations:', error);
+          }
+        }
+
+        // Reset decoration refs
+        commentDecorationsRef.current = { original: [], modified: [] };
+        hoverDecorationsRef.current = { original: [], modified: [] };
+        lineHighlightDecorationsRef.current = { original: [], modified: [] };
+
+        // CRITICAL: Set the diff editor's model to null before Monaco disposes it
+        // This prevents the "TextModel got disposed before DiffEditorWidget model got reset" error
+        try {
+          diffEditor.setModel(null);
+          console.log('✅ Cleared diff editor model');
+        } catch (error) {
+          console.debug('Error clearing diff editor model:', error);
+        }
+
+        console.log('✅ DiffEditor cleanup complete');
+      } catch (error) {
+        // Silently handle disposal errors that occur during unmount
+        console.debug('Editor cleanup handled during unmount:', error);
+      }
     };
   }, []);
 
@@ -517,6 +592,12 @@ export function DiffEditor({
           side === "LEFT"
             ? diffEditor.getOriginalEditor()
             : diffEditor.getModifiedEditor();
+
+        const model = editor.getModel();
+        if (!model || model.isDisposed()) {
+          return;
+        }
+
         const key = side === "LEFT" ? "original" : "modified";
 
         const existingThread = threadsRef.current.some((thread) => {
@@ -531,18 +612,22 @@ export function DiffEditor({
           return;
         }
 
-        hoverDecorationsRef.current[key] = editor.deltaDecorations(
-          hoverDecorationsRef.current[key],
-          [
-            {
-              range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
-              options: {
-                isWholeLine: true,
-                linesDecorationsClassName: "comment-hover-decoration",
+        try {
+          hoverDecorationsRef.current[key] = editor.deltaDecorations(
+            hoverDecorationsRef.current[key],
+            [
+              {
+                range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
+                options: {
+                  isWholeLine: true,
+                  linesDecorationsClassName: "comment-hover-decoration",
+                },
               },
-            },
-          ],
-        );
+            ],
+          );
+        } catch (error) {
+          console.debug('Error updating hover decoration:', error);
+        }
       },
     [clearHoverDecoration],
   );
@@ -561,7 +646,14 @@ export function DiffEditor({
       file: file.filename
     });
 
-    disposablesRef.current.forEach((sub) => sub.dispose());
+    // Clean up existing subscriptions first
+    disposablesRef.current.forEach((sub) => {
+      try {
+        sub.dispose();
+      } catch (error) {
+        console.debug('Error disposing old subscription:', error);
+      }
+    });
     disposablesRef.current = [];
 
     if (!diffEditorReady || !diffEditorRef.current) {
@@ -572,25 +664,37 @@ export function DiffEditor({
     console.log('🎧 Setting up event listeners for:', file.filename);
 
     const diffEditor = diffEditorRef.current;
-    const originalEditor = diffEditor.getOriginalEditor();
-    const modifiedEditor = diffEditor.getModifiedEditor();
 
-    const subscriptions: IDisposable[] = [
-      originalEditor.onMouseDown(handleMouseDown("LEFT")),
-      originalEditor.onMouseMove(handleMouseMove("LEFT")),
-      originalEditor.onMouseLeave(handleMouseLeave("LEFT")),
-      modifiedEditor.onMouseDown(handleMouseDown("RIGHT")),
-      modifiedEditor.onMouseMove(handleMouseMove("RIGHT")),
-      modifiedEditor.onMouseLeave(handleMouseLeave("RIGHT")),
-    ];
+    try {
+      const originalEditor = diffEditor.getOriginalEditor();
+      const modifiedEditor = diffEditor.getModifiedEditor();
 
-    disposablesRef.current = subscriptions;
-    console.log('✅ Event listeners attached successfully');
+      const subscriptions: IDisposable[] = [
+        originalEditor.onMouseDown(handleMouseDown("LEFT")),
+        originalEditor.onMouseMove(handleMouseMove("LEFT")),
+        originalEditor.onMouseLeave(handleMouseLeave("LEFT")),
+        modifiedEditor.onMouseDown(handleMouseDown("RIGHT")),
+        modifiedEditor.onMouseMove(handleMouseMove("RIGHT")),
+        modifiedEditor.onMouseLeave(handleMouseLeave("RIGHT")),
+      ];
+
+      disposablesRef.current = subscriptions;
+      console.log('✅ Event listeners attached successfully');
+    } catch (error) {
+      console.debug('Error setting up event listeners:', error);
+    }
 
     return () => {
       console.log('🧹 Cleaning up event listeners for:', file.filename);
-      subscriptions.forEach((sub) => sub.dispose());
+      const subsToDispose = disposablesRef.current;
       disposablesRef.current = [];
+      subsToDispose.forEach((sub) => {
+        try {
+          sub.dispose();
+        } catch (error) {
+          console.debug('Error disposing subscription during cleanup:', error);
+        }
+      });
     };
   }, [diffEditorReady, handleMouseDown, handleMouseMove, handleMouseLeave, file.filename]);
 
@@ -659,20 +763,31 @@ export function DiffEditor({
     if (!diffEditorRef.current) return;
 
     const diffEditor = diffEditorRef.current;
-    const originalEditor = diffEditor.getOriginalEditor();
-    const modifiedEditor = diffEditor.getModifiedEditor();
 
-    const subscriptions: IDisposable[] = [
-      originalEditor.onDidScrollChange(updateOverlayPosition),
-      modifiedEditor.onDidScrollChange(updateOverlayPosition),
-    ];
+    try {
+      const originalEditor = diffEditor.getOriginalEditor();
+      const modifiedEditor = diffEditor.getModifiedEditor();
 
-    window.addEventListener("resize", updateOverlayPosition);
+      const subscriptions: IDisposable[] = [
+        originalEditor.onDidScrollChange(updateOverlayPosition),
+        modifiedEditor.onDidScrollChange(updateOverlayPosition),
+      ];
 
-    return () => {
-      subscriptions.forEach((sub) => sub.dispose());
-      window.removeEventListener("resize", updateOverlayPosition);
-    };
+      window.addEventListener("resize", updateOverlayPosition);
+
+      return () => {
+        subscriptions.forEach((sub) => {
+          try {
+            sub.dispose();
+          } catch (error) {
+            console.debug('Error disposing scroll subscription:', error);
+          }
+        });
+        window.removeEventListener("resize", updateOverlayPosition);
+      };
+    } catch (error) {
+      console.debug('Error setting up scroll listeners:', error);
+    }
   }, [updateOverlayPosition]);
 
   useEffect(() => {
@@ -680,11 +795,20 @@ export function DiffEditor({
   }, [showFullFile, diffView, wordWrap, updateOverlayPosition]);
 
   useEffect(() => {
-    if (!diffEditorRef.current || !monaco) return;
+    if (!diffEditorRef.current || !monacoRef.current) return;
 
     const diffEditor = diffEditorRef.current;
     const originalEditor = diffEditor.getOriginalEditor();
     const modifiedEditor = diffEditor.getModifiedEditor();
+
+    // Check if models are valid before applying decorations
+    const originalModel = originalEditor.getModel();
+    const modifiedModel = modifiedEditor.getModel();
+
+    if (!originalModel || originalModel.isDisposed() || !modifiedModel || modifiedModel.isDisposed()) {
+      console.debug('Skipping line highlight update - models are disposed');
+      return;
+    }
 
     const decorationForLine = (lineNumber: number) => ({
       range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
@@ -698,8 +822,8 @@ export function DiffEditor({
     const buildDecorations = (
       startLine: number,
       endLine: number,
-    ): Monaco["editor"]["IModelDeltaDecoration"][] => {
-      const decorations: Monaco["editor"]["IModelDeltaDecoration"][] = [];
+    ): MonacoEditorType.IModelDeltaDecoration[] => {
+      const decorations: MonacoEditorType.IModelDeltaDecoration[] = [];
       for (let current = startLine; current <= endLine; current++) {
         decorations.push(decorationForLine(current));
       }
@@ -711,27 +835,31 @@ export function DiffEditor({
     const activeEnd =
       activeOverlay?.target.endLineNumber ?? activeOverlay?.target.lineNumber;
 
-    lineHighlightDecorationsRef.current.original =
-      originalEditor.deltaDecorations(
-        lineHighlightDecorationsRef.current.original,
-        activeOverlay &&
-          activeOverlay.target.side === "LEFT" &&
-          activeStart !== undefined &&
-          activeEnd !== undefined
-          ? buildDecorations(activeStart, activeEnd)
-          : [],
-      );
+    try {
+      lineHighlightDecorationsRef.current.original =
+        originalEditor.deltaDecorations(
+          lineHighlightDecorationsRef.current.original,
+          activeOverlay &&
+            activeOverlay.target.side === "LEFT" &&
+            activeStart !== undefined &&
+            activeEnd !== undefined
+            ? buildDecorations(activeStart, activeEnd)
+            : [],
+        );
 
-    lineHighlightDecorationsRef.current.modified =
-      modifiedEditor.deltaDecorations(
-        lineHighlightDecorationsRef.current.modified,
-        activeOverlay &&
-          activeOverlay.target.side === "RIGHT" &&
-          activeStart !== undefined &&
-          activeEnd !== undefined
-          ? buildDecorations(activeStart, activeEnd)
-          : [],
-      );
+      lineHighlightDecorationsRef.current.modified =
+        modifiedEditor.deltaDecorations(
+          lineHighlightDecorationsRef.current.modified,
+          activeOverlay &&
+            activeOverlay.target.side === "RIGHT" &&
+            activeStart !== undefined &&
+            activeEnd !== undefined
+            ? buildDecorations(activeStart, activeEnd)
+            : [],
+        );
+    } catch (error) {
+      console.debug('Error updating line highlights (likely during unmount):', error);
+    }
   }, [activeOverlay]);
 
   useEffect(() => {
