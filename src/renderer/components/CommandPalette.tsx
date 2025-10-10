@@ -105,8 +105,8 @@ const commands: Command[] = [
   },
   {
     id: "nav-issues",
-    name: "Go to Issues",
-    keywords: "navigate issues",
+    name: "Go to Issue Tracker",
+    keywords: "navigate issues issue tracker",
     action: () => {
       const nav = window.__commandNavigate;
       if (nav) nav("/issues");

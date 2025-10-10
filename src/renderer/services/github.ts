@@ -1420,6 +1420,22 @@ export class GitHubAPI {
     }));
   }
 
+  async setIssueAssignees(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    assignees: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.setAssignees({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      assignees,
+    });
+
+    return data as Issue;
+  }
+
   async getCurrentUser() {
     const { data } = await this.octokit.users.getAuthenticated();
     return data;
