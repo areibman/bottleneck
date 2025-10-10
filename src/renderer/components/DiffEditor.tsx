@@ -1,7 +1,6 @@
 import {
   useRef,
   useEffect,
-  useLayoutEffect,
   useState,
   useMemo,
   useCallback,
@@ -27,7 +26,6 @@ import {
   CommentTarget,
   InlineCommentThread,
   ActiveOverlay,
-  PatchMappings,
   parsePatch,
   getLanguageFromFilename,
 } from "./diff/commentUtils";
@@ -91,15 +89,32 @@ export function DiffEditor({
   }>({ original: [], modified: [] });
   const threadsRef = useRef<InlineCommentThread[]>([]);
 
-  const [patchOriginalContent, setPatchOriginalContent] = useState("");
-  const [patchModifiedContent, setPatchModifiedContent] = useState("");
-  const [patchMappings, setPatchMappings] = useState<PatchMappings | null>(null);
+  // Parse patch content synchronously to avoid flicker
+  const patchData = useMemo(() => {
+    if (file.patch) {
+      const { original, modified, mappings } = parsePatch(file.patch);
+      return { original, modified, mappings };
+    }
+    return { original: "", modified: "", mappings: null };
+  }, [file.patch]);
+
   // Default to full file view only if full file content is available
-  const [showFullFile, setShowFullFile] = useState(
-    !(originalContent === undefined && modifiedContent === undefined)
-  );
+  const hasFullContent = !(originalContent === undefined && modifiedContent === undefined);
+
+  // Track previous file to detect changes during render
+  const prevFileRef = useRef<string>(file.filename);
+  const [showFullFile, setShowFullFile] = useState(hasFullContent);
   const [diffEditorReady, setDiffEditorReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // Update showFullFile synchronously during render when file changes
+  if (prevFileRef.current !== file.filename) {
+    prevFileRef.current = file.filename;
+    // Reset state synchronously during render to prevent flicker
+    if (showFullFile !== hasFullContent) {
+      setShowFullFile(hasFullContent);
+    }
+  }
   const [hideUnchangedRegions, setHideUnchangedRegions] = useState(false); // Default to showing all lines
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay | null>(null);
   const [overlayPosition, setOverlayPosition] = useState<
@@ -118,29 +133,13 @@ export function DiffEditor({
   } = useOverlayResize();
 
   useEffect(() => {
-    console.log('🔄 File changed:', file.filename, 'Resetting editor state');
+    console.log('🔄 File changed:', file.filename);
+
+    // CRITICAL: Reset these IMMEDIATELY to prevent effects from accessing disposed Monaco
     setIsInitializing(true);
-    setDiffEditorReady(false); // Reset editor ready state when file changes
-    diffEditorRef.current = null; // Clear editor ref to prevent stale listeners
-
-    // Reset decoration refs to prevent stale decoration IDs
-    commentDecorationsRef.current = { original: [], modified: [] };
-    hoverDecorationsRef.current = { original: [], modified: [] };
-
-    // Default to full file view only if full file content is available
-    const hasFullContent = !(originalContent === undefined && modifiedContent === undefined);
-    setShowFullFile(hasFullContent);
-
-    if (file.patch) {
-      const { original, modified, mappings } = parsePatch(file.patch);
-      setPatchOriginalContent(original);
-      setPatchModifiedContent(modified);
-      setPatchMappings(mappings);
-    } else {
-      setPatchOriginalContent("");
-      setPatchModifiedContent("");
-      setPatchMappings(null);
-    }
+    setDiffEditorReady(false);
+    diffEditorRef.current = null;
+    monacoRef.current = null;
 
     // Small delay to prevent flicker when switching files
     const timer = setTimeout(() => {
@@ -149,7 +148,7 @@ export function DiffEditor({
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [file.patch, file.filename, originalContent, modifiedContent]);
+  }, [file.filename]);
 
   const mapLineForSide = useCallback(
     (line: number | null | undefined, side: CommentSide): number | null => {
@@ -157,18 +156,18 @@ export function DiffEditor({
         return null;
       }
 
-      if (showFullFile || !patchMappings) {
+      if (showFullFile || !patchData.mappings) {
         return line;
       }
 
       const mapping =
         side === "LEFT"
-          ? patchMappings.originalLineToEditorLine
-          : patchMappings.modifiedLineToEditorLine;
+          ? patchData.mappings.originalLineToEditorLine
+          : patchData.mappings.modifiedLineToEditorLine;
 
       return mapping.get(line) ?? line;
     },
-    [patchMappings, showFullFile],
+    [patchData.mappings, showFullFile],
   );
 
   const mapPositionForSide = useCallback(
@@ -178,19 +177,19 @@ export function DiffEditor({
         position === undefined ||
         position <= 0 ||
         showFullFile ||
-        !patchMappings
+        !patchData.mappings
       ) {
         return null;
       }
 
       const mapping =
         side === "LEFT"
-          ? patchMappings.diffPositionToEditorLine.LEFT
-          : patchMappings.diffPositionToEditorLine.RIGHT;
+          ? patchData.mappings.diffPositionToEditorLine.LEFT
+          : patchData.mappings.diffPositionToEditorLine.RIGHT;
 
       return mapping.get(position) ?? null;
     },
-    [patchMappings, showFullFile],
+    [patchData.mappings, showFullFile],
   );
 
   const commentThreads = useMemo(() => {
@@ -200,7 +199,7 @@ export function DiffEditor({
       commentsCount: comments.length,
       threadsCount: threads.length,
       showFullFile,
-      hasPatchMappings: !!patchMappings,
+      hasPatchMappings: !!patchData.mappings,
       comments: comments.map(c => ({
         id: c.id,
         line: c.line,
@@ -313,83 +312,88 @@ export function DiffEditor({
   }, []);
 
   useEffect(() => {
-    if (!diffEditorRef.current || !monacoRef.current) return;
+    if (!diffEditorRef.current || !monacoRef.current || !diffEditorReady) return;
 
     const diffEditor = diffEditorRef.current;
-    const originalEditor = diffEditor.getOriginalEditor();
-    const modifiedEditor = diffEditor.getModifiedEditor();
-
-    // Check if models are valid before applying decorations
-    const originalModel = originalEditor.getModel();
-    const modifiedModel = modifiedEditor.getModel();
-
-    if (!originalModel || originalModel.isDisposed() || !modifiedModel || modifiedModel.isDisposed()) {
-      console.debug('Skipping decoration update - models are disposed');
-      return;
-    }
-
-    const lineDecoration = (thread: InlineCommentThread) => {
-      const startLine = thread.startLineNumber ?? thread.lineNumber;
-      const endLine = thread.endLineNumber ?? thread.lineNumber;
-      const decorations = [] as MonacoEditorType.IModelDeltaDecoration[];
-      for (let current = startLine; current <= endLine; current++) {
-        const isStart = current === startLine;
-        const isEnd = current === endLine;
-        const classNames = ["comment-thread-decoration"];
-        if (isStart) {
-          classNames.push("comment-thread-decoration-start");
-        }
-        if (!isStart && !isEnd) {
-          classNames.push("comment-thread-decoration-middle");
-        }
-        if (isEnd && !isStart) {
-          classNames.push("comment-thread-decoration-end");
-        }
-        decorations.push({
-          range: new monacoRef.current!.Range(current, 1, current, 1),
-          options: {
-            isWholeLine: true,
-            linesDecorationsClassName: classNames.join(" "),
-            hoverMessage:
-              current === startLine
-                ? {
-                  value: `${thread.comments.length} comment${thread.comments.length === 1 ? "" : "s"
-                    }`,
-                }
-                : undefined,
-          },
-        });
-      }
-      return decorations;
-    };
 
     try {
-      commentDecorationsRef.current.original = originalEditor.deltaDecorations(
-        commentDecorationsRef.current.original,
-        commentThreads
-          .filter((thread) => thread.side === "LEFT")
-          .flatMap(lineDecoration),
-      );
+      const originalEditor = diffEditor.getOriginalEditor();
+      const modifiedEditor = diffEditor.getModifiedEditor();
 
-      commentDecorationsRef.current.modified = modifiedEditor.deltaDecorations(
-        commentDecorationsRef.current.modified,
-        commentThreads
-          .filter((thread) => thread.side === "RIGHT")
-          .flatMap(lineDecoration),
-      );
+      // Check if models are valid before applying decorations
+      const originalModel = originalEditor?.getModel();
+      const modifiedModel = modifiedEditor?.getModel();
 
-      console.log('✨ Applied decorations for', commentThreads.length, 'comment threads');
+      if (!originalModel || originalModel.isDisposed() || !modifiedModel || modifiedModel.isDisposed()) {
+        console.debug('Skipping decoration update - models are disposed or not ready');
+        return;
+      }
+
+      const lineDecoration = (thread: InlineCommentThread) => {
+        const startLine = thread.startLineNumber ?? thread.lineNumber;
+        const endLine = thread.endLineNumber ?? thread.lineNumber;
+        const decorations = [] as MonacoEditorType.IModelDeltaDecoration[];
+        for (let current = startLine; current <= endLine; current++) {
+          const isStart = current === startLine;
+          const isEnd = current === endLine;
+          const classNames = ["comment-thread-decoration"];
+          if (isStart) {
+            classNames.push("comment-thread-decoration-start");
+          }
+          if (!isStart && !isEnd) {
+            classNames.push("comment-thread-decoration-middle");
+          }
+          if (isEnd && !isStart) {
+            classNames.push("comment-thread-decoration-end");
+          }
+          decorations.push({
+            range: new monacoRef.current!.Range(current, 1, current, 1),
+            options: {
+              isWholeLine: true,
+              linesDecorationsClassName: classNames.join(" "),
+              hoverMessage:
+                current === startLine
+                  ? {
+                    value: `${thread.comments.length} comment${thread.comments.length === 1 ? "" : "s"
+                      }`,
+                  }
+                  : undefined,
+            },
+          });
+        }
+        return decorations;
+      };
+
+      try {
+        commentDecorationsRef.current.original = originalEditor.deltaDecorations(
+          commentDecorationsRef.current.original,
+          commentThreads
+            .filter((thread) => thread.side === "LEFT")
+            .flatMap(lineDecoration),
+        );
+
+        commentDecorationsRef.current.modified = modifiedEditor.deltaDecorations(
+          commentDecorationsRef.current.modified,
+          commentThreads
+            .filter((thread) => thread.side === "RIGHT")
+            .flatMap(lineDecoration),
+        );
+
+        console.log('✨ Applied decorations for', commentThreads.length, 'comment threads');
+      } catch (error) {
+        console.debug('Error applying decorations (likely during unmount):', error);
+      }
     } catch (error) {
-      console.debug('Error applying decorations (likely during unmount):', error);
+      console.debug('Error in decoration effect:', error);
     }
   }, [commentThreads, diffEditorReady]);
 
-  // Use layoutEffect for cleanup to ensure it runs synchronously before Monaco's disposal
-  useLayoutEffect(() => {
+  // Cleanup effect - dispose event listeners when Monaco unmounts
+  useEffect(() => {
     return () => {
-      console.log('🧹 Starting DiffEditor cleanup (layoutEffect)');
+      console.log('🧹 Disposing event listeners for:', file.filename);
 
-      // First, dispose all event listeners to prevent them from firing during Monaco's cleanup
+      // Only dispose event listeners - state is already reset by file change effect
       disposablesRef.current.forEach((sub) => {
         try {
           sub.dispose();
@@ -399,73 +403,14 @@ export function DiffEditor({
       });
       disposablesRef.current = [];
 
-      // Store and clear the editor reference to prevent any further access
-      const diffEditor = diffEditorRef.current;
-      diffEditorRef.current = null;
+      // Reset decoration refs
+      commentDecorationsRef.current = { original: [], modified: [] };
+      hoverDecorationsRef.current = { original: [], modified: [] };
+      lineHighlightDecorationsRef.current = { original: [], modified: [] };
 
-      if (!diffEditor) return;
-
-      try {
-        // Check if the editor models still exist before trying to update decorations
-        const originalEditor = diffEditor.getOriginalEditor();
-        const modifiedEditor = diffEditor.getModifiedEditor();
-        const originalModel = originalEditor?.getModel();
-        const modifiedModel = modifiedEditor?.getModel();
-
-        // Only clear decorations if models are still valid
-        if (originalModel && !originalModel.isDisposed()) {
-          try {
-            originalEditor.deltaDecorations(
-              commentDecorationsRef.current.original,
-              [],
-            );
-            originalEditor.deltaDecorations(hoverDecorationsRef.current.original, []);
-            originalEditor.deltaDecorations(
-              lineHighlightDecorationsRef.current.original,
-              [],
-            );
-          } catch (error) {
-            console.debug('Error clearing original decorations:', error);
-          }
-        }
-
-        if (modifiedModel && !modifiedModel.isDisposed()) {
-          try {
-            modifiedEditor.deltaDecorations(
-              commentDecorationsRef.current.modified,
-              [],
-            );
-            modifiedEditor.deltaDecorations(hoverDecorationsRef.current.modified, []);
-            modifiedEditor.deltaDecorations(
-              lineHighlightDecorationsRef.current.modified,
-              [],
-            );
-          } catch (error) {
-            console.debug('Error clearing modified decorations:', error);
-          }
-        }
-
-        // Reset decoration refs
-        commentDecorationsRef.current = { original: [], modified: [] };
-        hoverDecorationsRef.current = { original: [], modified: [] };
-        lineHighlightDecorationsRef.current = { original: [], modified: [] };
-
-        // CRITICAL: Set the diff editor's model to null before Monaco disposes it
-        // This prevents the "TextModel got disposed before DiffEditorWidget model got reset" error
-        try {
-          diffEditor.setModel(null);
-          console.log('✅ Cleared diff editor model');
-        } catch (error) {
-          console.debug('Error clearing diff editor model:', error);
-        }
-
-        console.log('✅ DiffEditor cleanup complete');
-      } catch (error) {
-        // Silently handle disposal errors that occur during unmount
-        console.debug('Editor cleanup handled during unmount:', error);
-      }
+      console.log('✅ Event listeners disposed');
     };
-  }, []);
+  }, [file.filename]); // Re-run when file changes (Monaco will remount)
 
   const getSelectionRangeForSide = useCallback(
     (side: CommentSide) => {
@@ -802,72 +747,76 @@ export function DiffEditor({
   }, [showFullFile, diffView, wordWrap, updateOverlayPosition]);
 
   useEffect(() => {
-    if (!diffEditorRef.current || !monacoRef.current) return;
-
-    const diffEditor = diffEditorRef.current;
-    const originalEditor = diffEditor.getOriginalEditor();
-    const modifiedEditor = diffEditor.getModifiedEditor();
-
-    // Check if models are valid before applying decorations
-    const originalModel = originalEditor.getModel();
-    const modifiedModel = modifiedEditor.getModel();
-
-    if (!originalModel || originalModel.isDisposed() || !modifiedModel || modifiedModel.isDisposed()) {
-      console.debug('Skipping line highlight update - models are disposed');
-      return;
-    }
-
-    const decorationForLine = (lineNumber: number) => ({
-      range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
-      options: {
-        isWholeLine: true,
-        className: "comment-line-highlight",
-        linesDecorationsClassName: "comment-line-highlight-margin",
-      },
-    });
-
-    const buildDecorations = (
-      startLine: number,
-      endLine: number,
-    ): MonacoEditorType.IModelDeltaDecoration[] => {
-      const decorations: MonacoEditorType.IModelDeltaDecoration[] = [];
-      for (let current = startLine; current <= endLine; current++) {
-        decorations.push(decorationForLine(current));
-      }
-      return decorations;
-    };
-
-    const activeStart =
-      activeOverlay?.target.startLineNumber ?? activeOverlay?.target.lineNumber;
-    const activeEnd =
-      activeOverlay?.target.endLineNumber ?? activeOverlay?.target.lineNumber;
+    if (!diffEditorRef.current || !monacoRef.current || !diffEditorReady) return;
 
     try {
-      lineHighlightDecorationsRef.current.original =
-        originalEditor.deltaDecorations(
-          lineHighlightDecorationsRef.current.original,
-          activeOverlay &&
-            activeOverlay.target.side === "LEFT" &&
-            activeStart !== undefined &&
-            activeEnd !== undefined
-            ? buildDecorations(activeStart, activeEnd)
-            : [],
-        );
+      const diffEditor = diffEditorRef.current;
+      const originalEditor = diffEditor.getOriginalEditor();
+      const modifiedEditor = diffEditor.getModifiedEditor();
 
-      lineHighlightDecorationsRef.current.modified =
-        modifiedEditor.deltaDecorations(
-          lineHighlightDecorationsRef.current.modified,
-          activeOverlay &&
-            activeOverlay.target.side === "RIGHT" &&
-            activeStart !== undefined &&
-            activeEnd !== undefined
-            ? buildDecorations(activeStart, activeEnd)
-            : [],
-        );
+      // Check if models are valid before applying decorations
+      const originalModel = originalEditor?.getModel();
+      const modifiedModel = modifiedEditor?.getModel();
+
+      if (!originalModel || originalModel.isDisposed() || !modifiedModel || modifiedModel.isDisposed()) {
+        console.debug('Skipping line highlight update - models are disposed');
+        return;
+      }
+
+      const decorationForLine = (lineNumber: number) => ({
+        range: new monacoRef.current!.Range(lineNumber, 1, lineNumber, 1),
+        options: {
+          isWholeLine: true,
+          className: "comment-line-highlight",
+          linesDecorationsClassName: "comment-line-highlight-margin",
+        },
+      });
+
+      const buildDecorations = (
+        startLine: number,
+        endLine: number,
+      ): MonacoEditorType.IModelDeltaDecoration[] => {
+        const decorations: MonacoEditorType.IModelDeltaDecoration[] = [];
+        for (let current = startLine; current <= endLine; current++) {
+          decorations.push(decorationForLine(current));
+        }
+        return decorations;
+      };
+
+      const activeStart =
+        activeOverlay?.target.startLineNumber ?? activeOverlay?.target.lineNumber;
+      const activeEnd =
+        activeOverlay?.target.endLineNumber ?? activeOverlay?.target.lineNumber;
+
+      try {
+        lineHighlightDecorationsRef.current.original =
+          originalEditor.deltaDecorations(
+            lineHighlightDecorationsRef.current.original,
+            activeOverlay &&
+              activeOverlay.target.side === "LEFT" &&
+              activeStart !== undefined &&
+              activeEnd !== undefined
+              ? buildDecorations(activeStart, activeEnd)
+              : [],
+          );
+
+        lineHighlightDecorationsRef.current.modified =
+          modifiedEditor.deltaDecorations(
+            lineHighlightDecorationsRef.current.modified,
+            activeOverlay &&
+              activeOverlay.target.side === "RIGHT" &&
+              activeStart !== undefined &&
+              activeEnd !== undefined
+              ? buildDecorations(activeStart, activeEnd)
+              : [],
+          );
+      } catch (error) {
+        console.debug('Error updating line highlights (likely during unmount):', error);
+      }
     } catch (error) {
-      console.debug('Error updating line highlights (likely during unmount):', error);
+      console.debug('Error in line highlight effect:', error);
     }
-  }, [activeOverlay]);
+  }, [activeOverlay, diffEditorReady]);
 
   useEffect(() => {
     if (activeOverlay?.type !== "thread") return;
@@ -927,21 +876,21 @@ export function DiffEditor({
         return null;
       }
 
-      if (showFullFile || !patchMappings) {
+      if (showFullFile || !patchData.mappings) {
         return editorLine;
       }
 
-      if (editorLine > patchMappings.rows.length) {
+      if (editorLine > patchData.mappings.rows.length) {
         return null;
       }
 
-      const row = patchMappings.rows[editorLine - 1];
+      const row = patchData.mappings.rows[editorLine - 1];
       const fileLine =
         side === "LEFT" ? row.originalLineNumber : row.modifiedLineNumber;
 
       return fileLine ?? null;
     },
-    [patchMappings, showFullFile],
+    [patchData.mappings, showFullFile],
   );
 
   // Get the position in the diff for a given editor line
@@ -951,7 +900,7 @@ export function DiffEditor({
         return undefined;
       }
 
-      if (!patchMappings) {
+      if (!patchData.mappings) {
         return undefined;
       }
 
@@ -959,7 +908,7 @@ export function DiffEditor({
       if (showFullFile) {
         const fileLine = editorLine; // In full file view, editor line = file line
         // Find the corresponding row in patch mappings
-        const row = patchMappings.rows.find((r) => {
+        const row = patchData.mappings.rows.find((r) => {
           if (side === "LEFT") {
             return r.originalLineNumber === fileLine;
           } else {
@@ -980,11 +929,11 @@ export function DiffEditor({
       }
 
       // In patch view, editor line directly maps to patch rows
-      if (editorLine <= 0 || editorLine > patchMappings.rows.length) {
+      if (editorLine <= 0 || editorLine > patchData.mappings.rows.length) {
         return undefined;
       }
 
-      const row = patchMappings.rows[editorLine - 1];
+      const row = patchData.mappings.rows[editorLine - 1];
       const position =
         side === "LEFT"
           ? row.originalDiffPosition
@@ -992,7 +941,7 @@ export function DiffEditor({
 
       return position ?? undefined;
     },
-    [file.patch, patchMappings, showFullFile],
+    [file.patch, patchData.mappings, showFullFile],
   );
 
   // Extract diff hunk for a given line
@@ -1264,11 +1213,19 @@ export function DiffEditor({
   const effectiveOriginalContent =
     showFullFile && originalContent !== undefined
       ? originalContent || ""
-      : patchOriginalContent || "";
+      : patchData.original || "";
   const effectiveModifiedContent =
     showFullFile && modifiedContent !== undefined
       ? modifiedContent || ""
-      : patchModifiedContent || "";
+      : patchData.modified || "";
+
+  // Check if content is ready to render
+  // In full file mode, wait for content to load to prevent flicker
+  const isContentReady = showFullFile
+    ? (originalContent !== undefined && modifiedContent !== undefined)
+    : true; // Patch content is always ready via useMemo
+
+  const shouldRenderEditor = !isInitializing && isContentReady;
 
   return (
     <div className="flex flex-col h-full">
@@ -1291,8 +1248,9 @@ export function DiffEditor({
       />
 
       <div className="flex-1 relative" ref={containerRef}>
-        {!isInitializing ? (
+        {shouldRenderEditor ? (
           <MonacoDiffEditor
+            key={file.filename} // Force remount when file changes to ensure clean Monaco disposal
             original={
               file.status === "added" ? "" : effectiveOriginalContent || ""
             }
@@ -1333,23 +1291,29 @@ export function DiffEditor({
             }}
             onMount={(editor, monaco) => {
               console.log('🏗️ Monaco editor mounted for:', file.filename);
+
+              // Store references
               diffEditorRef.current = editor;
               monacoRef.current = monaco;
-              setDiffEditorReady(true);
-              console.log('✅ diffEditorReady set to true');
 
               try {
                 const originalModel = editor.getOriginalEditor().getModel();
                 const modifiedModel = editor.getModifiedEditor().getModel();
 
+                // Ensure models have content
                 if (originalModel && originalModel.getLineCount() === 0) {
                   originalModel.setValue(" ");
                 }
                 if (modifiedModel && modifiedModel.getLineCount() === 0) {
                   modifiedModel.setValue(" ");
                 }
+
+                // Set ready state after models are initialized
+                setDiffEditorReady(true);
+                console.log('✅ Monaco initialized and ready');
               } catch (error) {
                 console.warn("Monaco Editor initialization warning:", error);
+                setDiffEditorReady(false);
               }
             }}
           />
