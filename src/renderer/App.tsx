@@ -9,6 +9,7 @@ import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import RightPanel from "./components/RightPanel";
 import CommandPalette from "./components/CommandPalette";
+import { FindBar } from "./components/FindBar";
 import { setupKeyboardShortcuts } from "./utils/keyboard";
 import { cn } from "./utils/cn";
 import { PerfLogger } from "./utils/perfLogger";
@@ -36,6 +37,7 @@ function App() {
   const { loadSettings } = useSettingsStore();
   const { fetchRepositories } = usePRStore();
   const [loading, setLoading] = useState(true);
+  const [findBarOpen, setFindBarOpen] = useState(false);
 
   PerfLogger.mark("App hooks initialized");
 
@@ -66,6 +68,11 @@ function App() {
       const keyboardStart = performance.now();
       const cleanup = setupKeyboardShortcuts();
       console.log(`⏱️ [APP] Keyboard shortcuts setup in ${(performance.now() - keyboardStart).toFixed(2)}ms`);
+
+      // Set up find bar toggle listener
+      window.electron.on("toggle-find", () => {
+        setFindBarOpen((prev) => !prev);
+      });
 
       return () => {
         clearTimeout(timeoutId);
@@ -204,6 +211,8 @@ function App() {
       </div>
       {/* Command Palette Overlay */}
       <CommandPalette />
+      {/* Find Bar */}
+      <FindBar isOpen={findBarOpen} onClose={() => setFindBarOpen(false)} />
     </div>
   );
 }

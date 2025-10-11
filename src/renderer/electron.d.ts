@@ -75,6 +75,16 @@ declare global {
         clear: () => Promise<{ success: boolean; error?: string }>;
       };
 
+      find: {
+        search: (
+          text: string,
+          options?: { forward?: boolean; findNext?: boolean },
+        ) => void;
+        stop: (
+          action?: "clearSelection" | "keepSelection" | "activateSelection",
+        ) => void;
+      };
+
       on: (
         channel: string,
         callback: (event: IpcRendererEvent, ...args: any[]) => void,

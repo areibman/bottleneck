@@ -93,6 +93,14 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
               { type: "separator" as const },
               { role: "selectAll" as const },
             ]),
+        { type: "separator" },
+        {
+          label: "Find",
+          accelerator: "CmdOrCtrl+F",
+          click: () => {
+            mainWindow.webContents.send("toggle-find");
+          },
+        },
       ],
     },
     {

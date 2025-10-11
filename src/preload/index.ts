@@ -34,6 +34,14 @@ const electronAPI = {
     getZoomLevel: () => ipcRenderer.invoke("app:get-zoom-level"),
   },
 
+  // Find-in-page
+  find: {
+    search: (text: string, options?: { forward?: boolean; findNext?: boolean }) =>
+      ipcRenderer.send("find-in-page", text, options),
+    stop: (action?: "clearSelection" | "keepSelection" | "activateSelection") =>
+      ipcRenderer.send("stop-find-in-page", action),
+  },
+
   // Auto-updater
   updater: {
     checkForUpdates: () => ipcRenderer.invoke("updater:check-for-updates"),
@@ -108,6 +116,7 @@ const electronAPI = {
       "toggle-diff-view",
       "toggle-whitespace",
       "show-shortcuts",
+      "toggle-find",
     ];
 
     if (validChannels.includes(channel)) {
