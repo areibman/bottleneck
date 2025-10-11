@@ -446,6 +446,23 @@ export default function PRListView() {
 
       setIsClosing(true);
 
+      // Optimistically mark PRs as closed to immediately update the UI
+      const optimisticPRs: PullRequest[] = [];
+      for (const id of closableIds) {
+        const pr = pullRequests.get(id);
+        if (!pr) continue;
+        optimisticPRs.push({
+          ...pr,
+          state: "closed",
+          draft: false,
+          merged: false,
+          closed_at: new Date().toISOString(),
+        });
+      }
+      if (optimisticPRs.length > 0) {
+        bulkUpdatePRs(optimisticPRs);
+      }
+
       const updatedPRs: PullRequest[] = [];
       const closedIds: string[] = [];
       const errors: string[] = [];
@@ -467,39 +484,46 @@ export default function PRListView() {
           }
         } else {
           const api = new GitHubAPI(authToken);
-          for (const id of closableIds) {
-            const pr = pullRequests.get(id);
-            if (!pr) continue;
-            try {
-              const closedData = await api.closePullRequest(
-                pr.base.repo.owner.login,
-                pr.base.repo.name,
-                pr.number,
-              );
+          const results = await Promise.all(
+            closableIds.map(async (id) => {
+              const pr = pullRequests.get(id);
+              if (!pr) return { id, pr: null as PullRequest | null, error: "PR not found" };
+              try {
+                const closedData = await api.closePullRequest(
+                  pr.base.repo.owner.login,
+                  pr.base.repo.name,
+                  pr.number,
+                );
 
-              const mergedClosedData: PullRequest = {
-                ...pr,
-                ...closedData,
-                state: "closed" as const,
-                draft: false,
-                merged: closedData?.merged ?? pr.merged,
-                closed_at: closedData?.closed_at ?? new Date().toISOString(),
-                // Ensure array fields are always arrays, not null
-                assignees: closedData?.assignees ?? pr.assignees ?? [],
-                requested_reviewers: closedData?.requested_reviewers ?? pr.requested_reviewers ?? [],
-              };
+                const mergedClosedData: PullRequest = {
+                  ...pr,
+                  ...closedData,
+                  state: "closed" as const,
+                  draft: false,
+                  merged: closedData?.merged ?? pr.merged,
+                  closed_at: closedData?.closed_at ?? new Date().toISOString(),
+                  // Ensure array fields are always arrays, not null
+                  assignees: closedData?.assignees ?? pr.assignees ?? [],
+                  requested_reviewers:
+                    closedData?.requested_reviewers ?? pr.requested_reviewers ?? [],
+                };
 
-              updatedPRs.push(mergedClosedData);
-              closedIds.push(id);
-            } catch (error: any) {
-              console.error(`Failed to close PR #${pr?.number}:`, error);
-              const message =
-                error?.response?.data?.message || error?.message || "Unknown error";
-              if (pr) {
-                errors.push(`PR #${pr.number}: ${message}`);
-              } else {
-                errors.push(message);
+                return { id, pr: mergedClosedData, error: null as string | null };
+              } catch (error: any) {
+                const message =
+                  error?.response?.data?.message || error?.message || "Unknown error";
+                console.error(`Failed to close PR #${pr?.number}:`, error);
+                return { id, pr: null as PullRequest | null, error: `PR #${pr.number}: ${message}` };
               }
+            })
+          );
+
+          for (const res of results) {
+            if (res.pr) {
+              updatedPRs.push(res.pr);
+              closedIds.push(res.id);
+            } else if (res.error) {
+              errors.push(res.error);
             }
           }
         }
@@ -511,12 +535,28 @@ export default function PRListView() {
 
         if (errors.length > 0) {
           alert(`Some pull requests could not be closed:\n${errors.join("\n")}`);
+          // Re-fetch failed PRs to correct optimistic UI state
+          if (selectedRepo) {
+            const failedIds = closableIds.filter((id) => !closedIds.includes(id));
+            await Promise.all(
+              failedIds.map(async (id) => {
+                const pr = pullRequests.get(id);
+                if (!pr) return;
+                await fetchPRDetails(
+                  selectedRepo.owner,
+                  selectedRepo.name,
+                  pr.number,
+                  { updateStore: true },
+                ).catch(() => {});
+              })
+            );
+          }
         }
       } finally {
         setIsClosing(false);
       }
     },
-    [isClosing, pullRequests, token, bulkUpdatePRs, deselectPR],
+    [isClosing, pullRequests, token, bulkUpdatePRs, deselectPR, fetchPRDetails, selectedRepo],
   );
 
   const handleCloseSelected = useCallback(async () => {
