@@ -81,6 +81,31 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
               { role: "selectAll" as const },
               { type: "separator" as const },
               {
+                label: "Find",
+                accelerator: "Cmd+F",
+                click: () => {
+                  // Start find with empty string to show find interface
+                  mainWindow.webContents.findInPage("");
+                },
+              },
+              {
+                label: "Find Next",
+                accelerator: "Cmd+G",
+                click: () => {
+                  // Find next occurrence
+                  mainWindow.webContents.findInPage("", { forward: true, findNext: true });
+                },
+              },
+              {
+                label: "Find Previous",
+                accelerator: "Cmd+Shift+G",
+                click: () => {
+                  // Find previous occurrence
+                  mainWindow.webContents.findInPage("", { forward: false, findNext: true });
+                },
+              },
+              { type: "separator" as const },
+              {
                 label: "Speech",
                 submenu: [
                   { role: "startSpeaking" as const },
@@ -92,6 +117,31 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
               { role: "delete" as const },
               { type: "separator" as const },
               { role: "selectAll" as const },
+              { type: "separator" as const },
+              {
+                label: "Find",
+                accelerator: "Ctrl+F",
+                click: () => {
+                  // Start find with empty string to show find interface
+                  mainWindow.webContents.findInPage("");
+                },
+              },
+              {
+                label: "Find Next",
+                accelerator: "F3",
+                click: () => {
+                  // Find next occurrence
+                  mainWindow.webContents.findInPage("", { forward: true, findNext: true });
+                },
+              },
+              {
+                label: "Find Previous",
+                accelerator: "Shift+F3",
+                click: () => {
+                  // Find previous occurrence
+                  mainWindow.webContents.findInPage("", { forward: false, findNext: true });
+                },
+              },
             ]),
       ],
     },

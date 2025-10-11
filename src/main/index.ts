@@ -155,6 +155,35 @@ function createWindow() {
   // Set up application menu
   const menu = createMenu(mainWindow);
   Menu.setApplicationMenu(menu);
+
+  // Enable native find-in-page functionality with keyboard shortcuts
+  let findActive = false;
+  
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    // Handle Cmd/Ctrl+F to start find
+    if (input.type === "keyDown" && input.key === "f" && (input.control || input.meta)) {
+      event.preventDefault();
+      // Start find with empty string to show the find interface
+      mainWindow?.webContents.findInPage("");
+      findActive = true;
+    }
+    // Handle Escape to stop find
+    else if (input.type === "keyDown" && input.key === "Escape" && findActive) {
+      event.preventDefault();
+      mainWindow?.webContents.stopFindInPage("clearSelection");
+      findActive = false;
+    }
+    // Handle Enter for find next (when find is active)
+    else if (input.type === "keyDown" && input.key === "Enter" && findActive && !input.shift) {
+      event.preventDefault();
+      mainWindow?.webContents.findInPage("", { forward: true, findNext: true });
+    }
+    // Handle Shift+Enter for find previous (when find is active)
+    else if (input.type === "keyDown" && input.key === "Enter" && findActive && input.shift) {
+      event.preventDefault();
+      mainWindow?.webContents.findInPage("", { forward: false, findNext: true });
+    }
+  });
 }
 
 // App event handlers
