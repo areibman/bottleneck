@@ -74,6 +74,23 @@ export function createMenu(mainWindow: BrowserWindow): Menu {
         { role: "cut" },
         { role: "copy" },
         { role: "paste" },
+        { type: "separator" },
+        {
+          label: "Find",
+          // Cast to any to support Electron versions without typed 'find' role
+          role: "find" as any,
+          accelerator: "CmdOrCtrl+F",
+          click: () => {
+            const wc: any = mainWindow.webContents as any;
+            if (wc && typeof wc.showFindBar === "function") {
+              wc.showFindBar();
+              return;
+            }
+            // Fallback for Electron versions without native showFindBar
+            // This opens Chromium's native find-in-page bar
+            mainWindow.webContents.executeJavaScript("document.execCommand('find')");
+          },
+        },
         ...(isMac
           ? [
               { role: "pasteAndMatchStyle" as const },
