@@ -73,6 +73,33 @@ export function setupKeyboardShortcuts() {
         useUIStore.getState().toggleWordWrap();
         return;
       }
+
+      // Find in page (Cmd/Ctrl + F)
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        if (window.electron) {
+          window.electron.find.start();
+        }
+        return;
+      }
+
+      // Find next (Cmd/Ctrl + G)
+      if (e.key === "g" || e.key === "G") {
+        e.preventDefault();
+        if (window.electron) {
+          window.electron.find.find("", { findNext: true });
+        }
+        return;
+      }
+    }
+
+    // Find previous (Cmd/Ctrl + Shift + G)
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "g" || e.key === "G")) {
+      e.preventDefault();
+      if (window.electron) {
+        window.electron.find.find("", { findNext: false });
+      }
+      return;
     }
   };
 

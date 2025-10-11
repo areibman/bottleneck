@@ -80,6 +80,14 @@ const electronAPI = {
     clear: () => ipcRenderer.invoke("settings:clear"),
   },
 
+  // Find-in-page operations
+  find: {
+    start: () => ipcRenderer.invoke("find:start"),
+    find: (text: string, options?: { forward?: boolean; matchCase?: boolean; findNext?: boolean }) =>
+      ipcRenderer.invoke("find:find", text, options),
+    stop: () => ipcRenderer.invoke("find:stop"),
+  },
+
   // IPC event listeners
   on: (
     channel: string,
