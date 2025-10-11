@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag, Users, Settings } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
+import { useTeamStore } from "../stores/teamStore";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import { getLabelColors } from "../utils/labelColors";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { TeamManagement } from "../components/TeamManagement";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 import LabelSelector from "../components/LabelSelector";
@@ -172,12 +174,14 @@ export default function IssuesView() {
   } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
+  const { teams, getAllAuthorsFromTeams } = useTeamStore();
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
   );
   const [bulkLabelsToAdd, setBulkLabelsToAdd] = useState<string[]>([]);
   const [bulkLabelsToRemove, setBulkLabelsToRemove] = useState<string[]>([]);
   const [showLabelFilterDropdown, setShowLabelFilterDropdown] = useState(false);
+  const [showTeamManagement, setShowTeamManagement] = useState(false);
   const labelFilterDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -287,11 +291,16 @@ export default function IssuesView() {
         }
       }
 
-      // Author filter
-      if (
-        filters.author !== "all" &&
-        issue.user.login !== filters.author
-      ) {
+      // Author filter (including team members)
+      let authorMatches = filters.author === "all" || issue.user.login === filters.author;
+      
+      // If no direct author match, check if user is in any selected teams
+      if (!authorMatches && filters.selectedTeams.length > 0) {
+        const teamAuthors = getAllAuthorsFromTeams(filters.selectedTeams);
+        authorMatches = teamAuthors.includes(issue.user.login);
+      }
+      
+      if (!authorMatches) {
         return false;
       }
 
@@ -339,7 +348,7 @@ export default function IssuesView() {
     });
 
     return issuesArray;
-  }, [issues, parsedDates, sortBy, filters]);
+  }, [issues, parsedDates, sortBy, filters, getAllAuthorsFromTeams]);
 
   const handleIssueClick = useCallback(
     (issue: Issue) => {
@@ -380,6 +389,22 @@ export default function IssuesView() {
       }
     },
     [filters.labels, repoLabels, setFilter]
+  );
+
+  const handleTeamToggle = useCallback(
+    (teamId: string) => {
+      const currentTeams = filters.selectedTeams;
+      if (currentTeams.includes(teamId)) {
+        setFilter("selectedTeams", currentTeams.filter(t => t !== teamId));
+      } else {
+        setFilter("selectedTeams", [...currentTeams, teamId]);
+        // Clear "all" authors selection when selecting teams
+        if (filters.author === "all") {
+          setFilter("author", "");
+        }
+      }
+    },
+    [filters.selectedTeams, filters.author, setFilter]
   );
 
   const handleCloseSelected = useCallback(async () => {
@@ -559,12 +584,94 @@ export default function IssuesView() {
                 onChange={setSortBy}
                 labelPrefix="Sort by: "
               />
-              <Dropdown
-                options={authors}
-                value={filters.author}
-                onChange={(value) => setFilter("author", value)}
-                labelPrefix="Author: "
-              />
+              {/* Author filter with teams */}
+              <div className="relative">
+                <Dropdown
+                  options={authors}
+                  value={filters.author}
+                  onChange={(value) => setFilter("author", value)}
+                  labelPrefix={
+                    filters.selectedTeams.length > 0
+                      ? `Teams (${filters.selectedTeams.length}): `
+                      : "Author: "
+                  }
+                />
+                
+                {/* Team selection indicator */}
+                {filters.selectedTeams.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {filters.selectedTeams.map((teamId) => {
+                      const team = teams.find(t => t.id === teamId);
+                      return team ? (
+                        <span
+                          key={teamId}
+                          className={cn(
+                            "inline-flex items-center px-2 py-0.5 text-xs rounded",
+                            theme === "dark"
+                              ? "bg-blue-900/20 text-blue-400"
+                              : "bg-blue-50 text-blue-600"
+                          )}
+                        >
+                          <span className="mr-1">{team.icon || "👥"}</span>
+                          {team.name}
+                          <button
+                            onClick={() => handleTeamToggle(teamId)}
+                            className="ml-1 hover:opacity-70"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                
+                {/* Team selection and management */}
+                <div className="mt-1 flex items-center space-x-2">
+                  {teams.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {teams.map((team) => (
+                        <button
+                          key={team.id}
+                          onClick={() => handleTeamToggle(team.id)}
+                          className={cn(
+                            "inline-flex items-center px-2 py-1 text-xs rounded border",
+                            filters.selectedTeams.includes(team.id)
+                              ? theme === "dark"
+                                ? "bg-blue-900/20 text-blue-400 border-blue-500"
+                                : "bg-blue-50 text-blue-600 border-blue-300"
+                              : theme === "dark"
+                                ? "text-gray-400 border-gray-600 hover:text-gray-300 hover:border-gray-500"
+                                : "text-gray-600 border-gray-300 hover:text-gray-700 hover:border-gray-400"
+                          )}
+                        >
+                          <span className="mr-1">{team.icon || "👥"}</span>
+                          {team.name}
+                          <span className={cn(
+                            "ml-1 text-xs px-1 rounded",
+                            theme === "dark" ? "bg-gray-700" : "bg-gray-200"
+                          )}>
+                            {team.members.length}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={() => setShowTeamManagement(true)}
+                    className={cn(
+                      "text-xs px-2 py-1 rounded flex items-center space-x-1",
+                      theme === "dark"
+                        ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
+                        : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
+                    )}
+                  >
+                    <Settings className="w-3 h-3" />
+                    <span>{teams.length > 0 ? "Manage" : "Create Teams"}</span>
+                  </button>
+                </div>
+              </div>
               <Dropdown
                 options={agents}
                 value={filters.assignee}
@@ -716,6 +823,15 @@ export default function IssuesView() {
           </div>
         )}
       </div>
+
+      {/* Team Management Modal */}
+      {showTeamManagement && (
+        <TeamManagement
+          theme={theme}
+          availableAuthors={Array.from(new Map(Array.from(issues.values()).map(issue => [issue.user.login, issue.user])).values())}
+          onClose={() => setShowTeamManagement(false)}
+        />
+      )}
     </div>
   );
 }
