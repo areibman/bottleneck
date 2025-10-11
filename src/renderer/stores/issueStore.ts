@@ -9,8 +9,19 @@ export interface IssueFilters {
   author: string;
 }
 
+export interface IssueWithMetadata extends Issue {
+  relatedPRs?: Array<{
+    number: number;
+    state: string;
+    merged: boolean;
+    title: string;
+  }>;
+  kanbanColumn?: "unassigned" | "todo" | "in-progress" | "in-review" | "done" | "closed";
+}
+
 interface IssueState {
   issues: Map<string, Issue>;
+  issuesMetadata: Map<string, { relatedPRs?: any[] }>;
   loadedRepos: Set<string>;
   loading: boolean;
   error: string | null;
@@ -19,6 +30,7 @@ interface IssueState {
   repoLabels: Array<{ name: string; color: string; description: string | null }>;
 
   fetchIssues: (owner: string, repo: string, force?: boolean) => Promise<void>;
+  fetchIssueMetadata: (owner: string, repo: string, issueNumber: number) => Promise<void>;
   updateIssue: (issue: Issue) => void;
   closeIssues: (owner: string, repo: string, issueNumbers: number[]) => Promise<void>;
   reopenIssues: (owner: string, repo: string, issueNumbers: number[]) => Promise<void>;
@@ -29,6 +41,8 @@ interface IssueState {
   createLabel: (owner: string, repo: string, name: string, color: string, description?: string) => Promise<void>;
   addLabelsToIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
   removeLabelsFromIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
+  assignIssue: (owner: string, repo: string, issueNumber: number, assignees: string[]) => Promise<void>;
+  unassignIssue: (owner: string, repo: string, issueNumber: number, assignees: string[]) => Promise<void>;
   setFilter: (key: keyof IssueFilters, value: any) => void;
   setFilters: (filters: IssueFilters) => void;
   resetFilters: () => void;
@@ -36,6 +50,7 @@ interface IssueState {
 
 export const useIssueStore = create<IssueState>((set, get) => ({
   issues: new Map(),
+  issuesMetadata: new Map(),
   loadedRepos: new Set(),
   loading: false,
   error: null,
@@ -418,6 +433,128 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
         // Refetch issues to get updated labels
         await get().fetchIssues(owner, repo, true);
+      }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  fetchIssueMetadata: async (owner: string, repo: string, issueNumber: number) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      if (token === "dev-token") {
+        // Mock metadata for dev mode
+        set((state) => {
+          const newMetadata = new Map(state.issuesMetadata);
+          newMetadata.set(`${owner}/${repo}#${issueNumber}`, {
+            relatedPRs: [],
+          });
+          return { issuesMetadata: newMetadata };
+        });
+      } else {
+        const api = new GitHubAPI(token);
+        const relatedPRs = await api.getRelatedPullRequests(owner, repo, issueNumber);
+        
+        set((state) => {
+          const newMetadata = new Map(state.issuesMetadata);
+          newMetadata.set(`${owner}/${repo}#${issueNumber}`, {
+            relatedPRs,
+          });
+          return { issuesMetadata: newMetadata };
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch issue metadata:", error);
+    }
+  },
+
+  assignIssue: async (owner: string, repo: string, issueNumber: number, assignees: string[]) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      if (token === "dev-token") {
+        // Mock assigning for dev mode
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        set((state) => {
+          const newIssues = new Map(state.issues);
+          const key = `${owner}/${repo}#${issueNumber}`;
+          const issue = newIssues.get(key);
+          if (issue) {
+            newIssues.set(key, {
+              ...issue,
+              assignees: [
+                ...issue.assignees,
+                ...assignees.map(login => ({
+                  login,
+                  avatar_url: `https://github.com/${login}.png`,
+                })),
+              ],
+            });
+          }
+          return { issues: newIssues };
+        });
+      } else {
+        const api = new GitHubAPI(token);
+        const updatedIssue = await api.assignIssueTo(owner, repo, issueNumber, assignees);
+        get().updateIssue(updatedIssue);
+      }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  unassignIssue: async (owner: string, repo: string, issueNumber: number, assignees: string[]) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      if (token === "dev-token") {
+        // Mock unassigning for dev mode
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        set((state) => {
+          const newIssues = new Map(state.issues);
+          const key = `${owner}/${repo}#${issueNumber}`;
+          const issue = newIssues.get(key);
+          if (issue) {
+            const assigneesToRemove = new Set(assignees);
+            newIssues.set(key, {
+              ...issue,
+              assignees: issue.assignees.filter(a => !assigneesToRemove.has(a.login)),
+            });
+          }
+          return { issues: newIssues };
+        });
+      } else {
+        const api = new GitHubAPI(token);
+        const updatedIssue = await api.unassignIssue(owner, repo, issueNumber, assignees);
+        get().updateIssue(updatedIssue);
       }
     } catch (error) {
       set({ error: (error as Error).message });
