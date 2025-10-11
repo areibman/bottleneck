@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag, Plus } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -11,6 +11,9 @@ import Dropdown, { DropdownOption } from "../components/Dropdown";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 import LabelSelector from "../components/LabelSelector";
+import { useSettingsStore } from "../stores/settingsStore";
+import TeamManagerModal from "../components/TeamManagerModal";
+import { toggleTeamInSelection, normalizeSelectionAgainstAllToken } from "../utils/teamUtils";
 
 const IssueItem = React.memo(
   ({
@@ -172,6 +175,9 @@ export default function IssuesView() {
   } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
+  const { settings } = useSettingsStore();
+  const [showTeamManager, setShowTeamManager] = useState(false);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
   );
@@ -226,6 +232,10 @@ export default function IssuesView() {
     ];
     return authorOptions;
   }, [issues]);
+
+  const teams = useMemo(() => {
+    return (settings.authorTeams || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  }, [settings.authorTeams]);
 
   const agents = useMemo(() => {
     const agentMap = new Map<string, { login: string; avatar_url: string }>();
@@ -565,6 +575,51 @@ export default function IssuesView() {
                 onChange={(value) => setFilter("author", value)}
                 labelPrefix="Author: "
               />
+
+              {/* Teams quick filter for issues */}
+              {teams.length > 0 && (
+                <div className="relative">
+                  <div className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[150px] cursor-pointer",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                  >
+                    <span>Teams:</span>
+                    <select
+                      className={cn(
+                        "bg-transparent outline-none",
+                        theme === "dark" ? "text-gray-300" : "text-gray-700",
+                      )}
+                      onChange={(e) => {
+                        const teamId = e.target.value;
+                        const team = teams.find(t => t.id === teamId);
+                        if (team) {
+                          const next = new Set<string>(filters.author === 'all' ? [] : [filters.author]);
+                          const toggled = toggleTeamInSelection(next, team.members);
+                          const normalized = normalizeSelectionAgainstAllToken(toggled, Array.from(new Set(issues.map(i => i.user.login))));
+                          // Issue filter currently supports a single author or 'all'; when multiple selected, clear to 'all'
+                          setFilter("author", normalized.size <= 1 ? Array.from(normalized)[0] || 'all' : 'all');
+                        }
+                      }}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Select team…</option>
+                      {teams.map(team => (
+                        <option key={team.id} value={team.id}>{team.icon ? `${team.icon} ` : ''}{team.name} ({team.members.length})</option>
+                      ))}
+                    </select>
+                    <button
+                      className={cn("p-1 rounded", theme === "dark" ? "hover:bg-gray-600" : "hover:bg-gray-100")}
+                      onClick={() => { setEditingTeamId(null); setShowTeamManager(true); }}
+                      title="Create new team"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
               <Dropdown
                 options={agents}
                 value={filters.assignee}
@@ -716,6 +771,12 @@ export default function IssuesView() {
           </div>
         )}
       </div>
+      <TeamManagerModal
+        isOpen={showTeamManager}
+        onClose={() => setShowTeamManager(false)}
+        availableAuthors={Array.from(new Map(issues.values()).values()).map((issue: any) => issue.user)}
+        initialEditingTeamId={editingTeamId}
+      />
     </div>
   );
 }
