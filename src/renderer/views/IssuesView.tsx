@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, X, CheckSquare, Square, Tag, Settings } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
+import { useTeamsStore } from "../stores/teamsStore";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import { getLabelColors } from "../utils/labelColors";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import TeamManager from "../components/TeamManager";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 import LabelSelector from "../components/LabelSelector";
@@ -179,6 +181,10 @@ export default function IssuesView() {
   const [bulkLabelsToRemove, setBulkLabelsToRemove] = useState<string[]>([]);
   const [showLabelFilterDropdown, setShowLabelFilterDropdown] = useState(false);
   const labelFilterDropdownRef = useRef<HTMLDivElement>(null);
+  const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
+  const authorDropdownRef = useRef<HTMLDivElement>(null);
+  const [showTeamManager, setShowTeamManager] = useState(false);
+  const { teams } = useTeamsStore();
 
   useEffect(() => {
     if (selectedRepo) {
@@ -187,45 +193,38 @@ export default function IssuesView() {
     }
   }, [selectedRepo, fetchIssues, fetchRepoLabels]);
 
-  // Close label filter dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (labelFilterDropdownRef.current && !labelFilterDropdownRef.current.contains(event.target as Node)) {
         setShowLabelFilterDropdown(false);
       }
+      if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
+        setShowAuthorDropdown(false);
+      }
     };
 
-    if (showLabelFilterDropdown) {
+    if (showLabelFilterDropdown || showAuthorDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showLabelFilterDropdown]);
+  }, [showLabelFilterDropdown, showAuthorDropdown]);
 
   const authors = useMemo(() => {
     const authorMap = new Map<string, { login: string; avatar_url: string }>();
     issues.forEach((issue) => {
       authorMap.set(issue.user.login, issue.user);
     });
-
-    const authorOptions: DropdownOption<string>[] = [
-      { value: "all", label: "All Authors" },
-      ...Array.from(authorMap.values()).map((author) => ({
-        value: author.login,
-        label: author.login,
-        icon: (
-          <img
-            src={author.avatar_url}
-            alt={author.login}
-            className="w-4 h-4 rounded-full"
-          />
-        ),
-      })),
-    ];
-    return authorOptions;
+    return Array.from(authorMap.values());
   }, [issues]);
+
+  const selectedAuthors = useMemo(
+    () => new Set(filters.selectedAuthors),
+    [filters.selectedAuthors]
+  );
 
   const agents = useMemo(() => {
     const agentMap = new Map<string, { login: string; avatar_url: string }>();
@@ -288,10 +287,11 @@ export default function IssuesView() {
       }
 
       // Author filter
-      if (
-        filters.author !== "all" &&
-        issue.user.login !== filters.author
-      ) {
+      const authorMatches =
+        selectedAuthors.size === 0 ||
+        selectedAuthors.has("all") ||
+        selectedAuthors.has(issue.user.login);
+      if (!authorMatches) {
         return false;
       }
 
@@ -339,7 +339,7 @@ export default function IssuesView() {
     });
 
     return issuesArray;
-  }, [issues, parsedDates, sortBy, filters]);
+  }, [issues, parsedDates, sortBy, filters, selectedAuthors]);
 
   const handleIssueClick = useCallback(
     (issue: Issue) => {
@@ -380,6 +380,62 @@ export default function IssuesView() {
       }
     },
     [filters.labels, repoLabels, setFilter]
+  );
+
+  const handleAuthorToggle = useCallback(
+    (authorLogin: string) => {
+      const newSet = new Set(filters.selectedAuthors);
+      if (authorLogin === "all") {
+        if (newSet.size === 0 || !newSet.has("all")) {
+          const allAuthors = [
+            "all",
+            ...authors.map((author) => author.login),
+          ];
+          setFilter("selectedAuthors", allAuthors);
+          return;
+        }
+        setFilter("selectedAuthors", []);
+        return;
+      }
+
+      if (newSet.has(authorLogin)) {
+        newSet.delete(authorLogin);
+        newSet.delete("all");
+      } else {
+        newSet.add(authorLogin);
+        if (authors.every((author) => newSet.has(author.login))) {
+          newSet.add("all");
+        }
+      }
+
+      setFilter("selectedAuthors", Array.from(newSet));
+    },
+    [authors, filters.selectedAuthors, setFilter]
+  );
+
+  const handleTeamToggle = useCallback(
+    (teamId: string) => {
+      const team = teams.find((t) => t.id === teamId);
+      if (!team) return;
+
+      const newSet = new Set(filters.selectedAuthors);
+      const allMembersSelected = team.members.every((member) =>
+        newSet.has(member)
+      );
+
+      if (allMembersSelected) {
+        team.members.forEach((member) => newSet.delete(member));
+        newSet.delete("all");
+      } else {
+        team.members.forEach((member) => newSet.add(member));
+        if (authors.every((author) => newSet.has(author.login))) {
+          newSet.add("all");
+        }
+      }
+
+      setFilter("selectedAuthors", Array.from(newSet));
+    },
+    [teams, authors, filters.selectedAuthors, setFilter]
   );
 
   const handleCloseSelected = useCallback(async () => {
@@ -449,6 +505,13 @@ export default function IssuesView() {
   }
 
   return (
+    <>
+      {showTeamManager && (
+        <TeamManager
+          availableAuthors={authors}
+          onClose={() => setShowTeamManager(false)}
+        />
+      )}
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
@@ -559,12 +622,252 @@ export default function IssuesView() {
                 onChange={setSortBy}
                 labelPrefix="Sort by: "
               />
-              <Dropdown
-                options={authors}
-                value={filters.author}
-                onChange={(value) => setFilter("author", value)}
-                labelPrefix="Author: "
-              />
+
+              {/* Author filter with checkbox list and teams */}
+              <div className="relative" ref={authorDropdownRef}>
+                <button
+                  onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[150px] max-w-[250px]",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                >
+                  {selectedAuthors.size === 1 && !selectedAuthors.has("all") ? (
+                    <>
+                      {(() => {
+                        const authorLogin = Array.from(selectedAuthors)[0];
+                        const author = authors.find(a => a.login === authorLogin);
+                        return author ? (
+                          <>
+                            <img
+                              src={author.avatar_url}
+                              alt={author.login}
+                              className="w-4 h-4 rounded-full flex-shrink-0"
+                            />
+                            <span className={cn(
+                              "truncate",
+                              theme === "dark" ? "text-gray-300" : "text-gray-700"
+                            )}>
+                              {author.login}
+                            </span>
+                          </>
+                        ) : (
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {authorLogin}
+                          </span>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      {selectedAuthors.size > 1 && !selectedAuthors.has("all") ? (
+                        <>
+                          <div className="flex -space-x-2">
+                            {Array.from(selectedAuthors)
+                              .slice(0, 3)
+                              .map(authorLogin => {
+                                const author = authors.find(a => a.login === authorLogin);
+                                return author ? (
+                                  <img
+                                    key={author.login}
+                                    src={author.avatar_url}
+                                    alt={author.login}
+                                    className="w-4 h-4 rounded-full border border-gray-800"
+                                    style={{
+                                      borderColor: theme === "dark" ? "#1f2937" : "#ffffff"
+                                    }}
+                                  />
+                                ) : null;
+                              })}
+                            {selectedAuthors.size > 3 && (
+                              <div className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-medium border",
+                                theme === "dark"
+                                  ? "bg-gray-700 text-gray-300 border-gray-800"
+                                  : "bg-gray-200 text-gray-700 border-white"
+                              )}>
+                                +{selectedAuthors.size - 3}
+                              </div>
+                            )}
+                          </div>
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {selectedAuthors.size} selected
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Authors:</span>
+                          <span className={cn(
+                            "truncate",
+                            theme === "dark" ? "text-gray-300" : "text-gray-700"
+                          )}>
+                            {selectedAuthors.size === 0 || selectedAuthors.has("all")
+                              ? "All"
+                              : `${selectedAuthors.size} selected`}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </button>
+
+                {showAuthorDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[250px] rounded-md shadow-lg border",
+                      theme === "dark"
+                        ? "bg-gray-800 border-gray-700"
+                        : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2 max-h-96 overflow-y-auto">
+                      {/* All Authors option */}
+                      <label
+                        className={cn(
+                          "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                          theme === "dark"
+                            ? "hover:bg-gray-700"
+                            : "hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAuthors.size === 0 || selectedAuthors.has("all")}
+                          onChange={() => handleAuthorToggle("all")}
+                          className="rounded"
+                        />
+                        <span className="text-sm font-medium">All Authors</span>
+                      </label>
+
+                      {/* Teams Section */}
+                      {teams.length > 0 && (
+                        <>
+                          <div className={cn(
+                            "my-1 border-t",
+                            theme === "dark" ? "border-gray-700" : "border-gray-200"
+                          )} />
+
+                          <div className={cn(
+                            "px-2 py-1 text-xs font-medium",
+                            theme === "dark" ? "text-gray-400" : "text-gray-600"
+                          )}>
+                            Teams
+                          </div>
+
+                          {teams.map((team) => {
+                            const allMembersSelected = team.members.every((member) =>
+                              selectedAuthors.has(member)
+                            );
+                            return (
+                              <label
+                                key={team.id}
+                                className={cn(
+                                  "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                                  theme === "dark"
+                                    ? "hover:bg-gray-700"
+                                    : "hover:bg-gray-50"
+                                )}
+                                title={team.description || `${team.members.length} members`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={allMembersSelected}
+                                  onChange={() => handleTeamToggle(team.id)}
+                                  className="rounded"
+                                />
+                                <span className="text-lg" style={{ color: team.color }}>
+                                  {team.icon || "🏢"}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium truncate">
+                                    {team.name}
+                                  </div>
+                                  <div className={cn(
+                                    "text-xs",
+                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                  )}>
+                                    {team.members.length} member{team.members.length !== 1 ? 's' : ''}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      <div className={cn(
+                        "my-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )} />
+
+                      <div className={cn(
+                        "px-2 py-1 text-xs font-medium",
+                        theme === "dark" ? "text-gray-400" : "text-gray-600"
+                      )}>
+                        Individual Authors
+                      </div>
+
+                      {/* Individual authors */}
+                      {authors.map(author => (
+                        <label
+                          key={author.login}
+                          className={cn(
+                            "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                            theme === "dark"
+                              ? "hover:bg-gray-700"
+                              : "hover:bg-gray-50"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAuthors.has(author.login)}
+                            onChange={() => handleAuthorToggle(author.login)}
+                            className="rounded"
+                          />
+                          <img
+                            src={author.avatar_url}
+                            alt={author.login}
+                            className="w-5 h-5 rounded-full"
+                          />
+                          <span className="text-sm">{author.login}</span>
+                        </label>
+                      ))}
+
+                      {/* Manage Teams Button */}
+                      <div className={cn(
+                        "mt-1 pt-1 border-t",
+                        theme === "dark" ? "border-gray-700" : "border-gray-200"
+                      )}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowTeamManager(true);
+                            setShowAuthorDropdown(false);
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-center space-x-2 p-2 rounded text-sm font-medium",
+                            theme === "dark"
+                              ? "text-blue-400 hover:bg-gray-700"
+                              : "text-blue-600 hover:bg-gray-50"
+                          )}
+                        >
+                          <Settings className="w-4 h-4" />
+                          <span>Manage Teams</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Dropdown
                 options={agents}
                 value={filters.assignee}
@@ -717,5 +1020,6 @@ export default function IssuesView() {
         )}
       </div>
     </div>
+    </>
   );
 }
