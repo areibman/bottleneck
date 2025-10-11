@@ -8,6 +8,8 @@ import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import { getLabelColors } from "../utils/labelColors";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
+import { useSettingsStore, type AuthorTeam } from "../stores/settingsStore";
+import { Users, Plus, Pencil, Trash2 } from "lucide-react";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 import LabelSelector from "../components/LabelSelector";
@@ -172,6 +174,15 @@ export default function IssuesView() {
   } = useIssueStore();
   const { selectedRepo } = usePRStore();
   const { theme } = useUIStore();
+  const { settings, addAuthorTeam, updateAuthorTeam, deleteAuthorTeam } = useSettingsStore();
+  const teams = settings.authorTeams || [];
+  const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
+  const authorDropdownRef = useRef<HTMLDivElement>(null);
+  const [showTeamEditor, setShowTeamEditor] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<AuthorTeam | null>(null);
+  const [teamForm, setTeamForm] = useState<{ name: string; members: string[]; color?: string; icon?: string; description?: string }>(
+    { name: "", members: [], color: "", icon: "", description: "" }
+  );
   const [sortBy, setSortBy] = useState<"updated" | "created" | "comments">(
     "updated",
   );
@@ -186,6 +197,23 @@ export default function IssuesView() {
       fetchRepoLabels(selectedRepo.owner, selectedRepo.name);
     }
   }, [selectedRepo, fetchIssues, fetchRepoLabels]);
+
+  // Close author filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
+        setShowAuthorDropdown(false);
+      }
+    };
+
+    if (showAuthorDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAuthorDropdown]);
 
   // Close label filter dropdown when clicking outside
   useEffect(() => {
@@ -226,6 +254,66 @@ export default function IssuesView() {
     ];
     return authorOptions;
   }, [issues]);
+
+  const isTeamSelected = useCallback(
+    (team: AuthorTeam) => {
+      if (filters.author === "all") return false; // multi-select is not supported in issues filter dropdown
+      // Treat selected single author as team selection match if equals all members
+      const selectedSet = new Set([filters.author]);
+      return team.members.length > 0 && team.members.every((m) => selectedSet.has(m));
+    },
+    [filters.author],
+  );
+
+  const handleTeamApply = useCallback(
+    (team: AuthorTeam) => {
+      // For issues view, author filter is a single-select. Apply team only if size=1 or set to "all" sentinel.
+      if (team.members.length === 1) {
+        setFilter("author", team.members[0]);
+      } else {
+        // For multi-member teams, we cannot express as a single author; set to "all" and rely on label/assignee filters elsewhere.
+        setFilter("author", "all");
+      }
+    },
+    [setFilter],
+  );
+
+  const startCreateTeam = useCallback(() => {
+    // Use current author selection if specific, else none
+    const currentMembers = filters.author !== "all" ? [filters.author] : [];
+    setEditingTeam(null);
+    setTeamForm({ name: "", members: currentMembers, color: "", icon: "", description: "" });
+    setShowTeamEditor(true);
+  }, [filters.author]);
+
+  const startEditTeam = useCallback((team: AuthorTeam) => {
+    setEditingTeam(team);
+    setTeamForm({
+      name: team.name,
+      members: [...team.members],
+      color: team.color || "",
+      icon: team.icon || "",
+      description: team.description || "",
+    });
+    setShowTeamEditor(true);
+  }, []);
+
+  const saveTeam = useCallback(async () => {
+    const payload = {
+      name: teamForm.name.trim() || "Untitled Team",
+      members: Array.from(new Set(teamForm.members)).filter(Boolean),
+      color: teamForm.color || undefined,
+      icon: teamForm.icon || undefined,
+      description: teamForm.description || undefined,
+    };
+    if (editingTeam) {
+      await updateAuthorTeam({ ...editingTeam, ...payload });
+    } else {
+      await addAuthorTeam(payload);
+    }
+    setShowTeamEditor(false);
+    setEditingTeam(null);
+  }, [teamForm, editingTeam, addAuthorTeam, updateAuthorTeam]);
 
   const agents = useMemo(() => {
     const agentMap = new Map<string, { login: string; avatar_url: string }>();
@@ -559,12 +647,218 @@ export default function IssuesView() {
                 onChange={setSortBy}
                 labelPrefix="Sort by: "
               />
-              <Dropdown
-                options={authors}
-                value={filters.author}
-                onChange={(value) => setFilter("author", value)}
-                labelPrefix="Author: "
-              />
+              {/* Enhanced Author filter with Teams */}
+              <div className="relative" ref={authorDropdownRef}>
+                <div
+                  onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
+                  className={cn(
+                    "px-3 py-1.5 rounded border flex items-center space-x-2 text-xs min-w-[160px] cursor-pointer",
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 hover:bg-gray-600"
+                      : "bg-white border-gray-300 hover:bg-gray-100"
+                  )}
+                >
+                  <span>Author:</span>
+                  <span className={cn("truncate", theme === "dark" ? "text-gray-300" : "text-gray-700")}>
+                    {filters.author === "all" ? "All" : filters.author}
+                  </span>
+                </div>
+
+                {showAuthorDropdown && (
+                  <div
+                    className={cn(
+                      "absolute top-full mt-1 right-0 z-50 min-w-[240px] rounded-md shadow-lg border",
+                      theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+                    )}
+                  >
+                    <div className="p-2 max-h-96 overflow-y-auto">
+                      {/* Teams section */}
+                      <div className="px-1 py-1">
+                        <div className={cn(
+                          "text-[11px] font-semibold uppercase tracking-wide mb-1",
+                          theme === "dark" ? "text-gray-400" : "text-gray-500"
+                        )}>Teams</div>
+
+                        {teams.length === 0 ? (
+                          <div className={cn("text-xs px-2 py-1", theme === "dark" ? "text-gray-400" : "text-gray-600")}>No saved teams yet.</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {teams.map((team) => (
+                              <div key={team.id} className="flex items-center justify-between group">
+                                <div
+                                  onClick={() => handleTeamApply(team)}
+                                  className={cn(
+                                    "flex items-center space-x-2 p-2 rounded cursor-pointer flex-1",
+                                    theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50"
+                                  )}
+                                >
+                                  <span className="flex items-center space-x-2 min-w-0">
+                                    <span className={cn(
+                                      "w-5 h-5 inline-flex items-center justify-center rounded-sm border text-[11px]",
+                                      theme === "dark" ? "border-gray-600" : "border-gray-300"
+                                    )}
+                                      style={{ backgroundColor: team.color && team.color.startsWith('#') ? team.color : (team.color ? `#${team.color}` : undefined) }}
+                                      title={team.description || undefined}
+                                    >
+                                      {team.icon ? team.icon : <Users className="w-3.5 h-3.5" />}
+                                    </span>
+                                    <span className="truncate text-sm">
+                                      {team.name}
+                                      <span className={cn("ml-1 text-[11px]", theme === "dark" ? "text-gray-400" : "text-gray-500")}>
+                                        ({team.members.length})
+                                      </span>
+                                    </span>
+                                  </span>
+                                </div>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 pr-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); startEditTeam(team); }}
+                                    className={cn("p-1 rounded", theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100")}
+                                    title="Edit team"
+                                  >
+                                    <Pencil className={cn("w-3.5 h-3.5", theme === "dark" ? "text-gray-300" : "text-gray-600")} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); deleteAuthorTeam(team.id); }}
+                                    className={cn("p-1 rounded", theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100")}
+                                    title="Delete team"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div
+                          onClick={(e) => { e.stopPropagation(); startCreateTeam(); }}
+                          className={cn(
+                            "mt-1 text-xs px-2 py-1 rounded cursor-pointer inline-flex items-center",
+                            theme === "dark" ? "hover:bg-gray-700 text-gray-200" : "hover:bg-gray-100 text-gray-700"
+                          )}
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Create New Team…
+                        </div>
+                      </div>
+
+                      {showTeamEditor && (
+                        <div className={cn(
+                          "mt-2 p-2 rounded border",
+                          theme === "dark" ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-gray-50"
+                        )}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="text-xs font-medium mb-2">{editingTeam ? "Edit Team" : "Create Team"}</div>
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="text"
+                                value={teamForm.name}
+                                onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })}
+                                placeholder="Team name"
+                                className={cn(
+                                  "text-xs px-2 py-1 rounded border w-full",
+                                  theme === "dark" ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-300 text-gray-900"
+                                )}
+                              />
+                            </div>
+                            <div className={cn("text-[11px] font-semibold uppercase tracking-wide", theme === "dark" ? "text-gray-400" : "text-gray-500")}>
+                              Members
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 max-h-32 overflow-auto pr-1">
+                              {Array.from(new Map(issues).values()).map((issue) => (
+                                <label key={issue.user.login} className="flex items-center space-x-2 p-1 rounded cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={teamForm.members.includes(issue.user.login)}
+                                    onChange={(e) => {
+                                      const next = new Set(teamForm.members);
+                                      if (e.target.checked) next.add(issue.user.login); else next.delete(issue.user.login);
+                                      setTeamForm({ ...teamForm, members: Array.from(next) });
+                                    }}
+                                    className="rounded"
+                                  />
+                                  <img src={issue.user.avatar_url} alt={issue.user.login} className="w-4 h-4 rounded-full" />
+                                  <span className="text-xs">{issue.user.login}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="text"
+                                value={teamForm.icon}
+                                onChange={(e) => setTeamForm({ ...teamForm, icon: e.target.value })}
+                                placeholder="Icon (emoji or text)"
+                                className={cn(
+                                  "text-xs px-2 py-1 rounded border w-1/3",
+                                  theme === "dark" ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-300 text-gray-900"
+                                )}
+                              />
+                              <input
+                                type="text"
+                                value={teamForm.color}
+                                onChange={(e) => setTeamForm({ ...teamForm, color: e.target.value })}
+                                placeholder="Color (hex)"
+                                className={cn(
+                                  "text-xs px-2 py-1 rounded border w-1/3",
+                                  theme === "dark" ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-300 text-gray-900"
+                                )}
+                              />
+                              <input
+                                type="text"
+                                value={teamForm.description}
+                                onChange={(e) => setTeamForm({ ...teamForm, description: e.target.value })}
+                                placeholder="Description (optional)"
+                                className={cn(
+                                  "text-xs px-2 py-1 rounded border flex-1",
+                                  theme === "dark" ? "bg-gray-800 border-gray-700 text-gray-200" : "bg-white border-gray-300 text-gray-900"
+                                )}
+                              />
+                            </div>
+                            <div className="flex items-center justify-end space-x-2">
+                              <button
+                                onClick={() => { setShowTeamEditor(false); setEditingTeam(null); }}
+                                className={cn(
+                                  "px-2 py-1 text-xs rounded border",
+                                  theme === "dark" ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                                )}
+                              >Cancel</button>
+                              <button
+                                onClick={saveTeam}
+                                disabled={teamForm.members.length === 0 || teamForm.name.trim().length === 0}
+                                className={cn(
+                                  "px-2 py-1 text-xs rounded border font-medium",
+                                  theme === "dark" ? "border-blue-700 bg-blue-900/40 text-blue-300 hover:bg-blue-900/60" : "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100",
+                                  (teamForm.members.length === 0 || teamForm.name.trim().length === 0) && "opacity-60 cursor-not-allowed"
+                                )}
+                              >Save</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className={cn("my-1 border-t", theme === "dark" ? "border-gray-700" : "border-gray-200")} />
+
+                      {/* Individual authors */}
+                      {authors.map((option) => (
+                        <div
+                          key={option.value}
+                          onClick={() => setFilter("author", option.value)}
+                          className={cn(
+                            "w-full text-left px-3 py-1.5 my-1 text-xs rounded flex items-center cursor-pointer min-w-0",
+                            theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-100",
+                            filters.author === option.value && (theme === "dark" ? "bg-gray-700" : "bg-gray-100")
+                          )}
+                        >
+                          {option.icon && <span className="mr-2 flex-shrink-0">{option.icon}</span>}
+                          <span className="truncate">{option.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Dropdown
                 options={agents}
                 value={filters.assignee}
