@@ -51,18 +51,22 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   fetchIssues: async (owner: string, repo: string, force = false) => {
     const repoFullName = `${owner}/${repo}`;
+    console.log(`[STORE] 🔄 fetchIssues: ${repoFullName} (force=${force})`);
 
     // Skip if already loading
     if (get().loading) {
+      console.log(`[STORE] ⏸️  fetchIssues: Already loading, skipping`);
       return;
     }
 
     // Skip if already loaded (unless forced)
     if (get().loadedRepos.has(repoFullName) && !force) {
+      console.log(`[STORE] ✅ fetchIssues: Already loaded and not forced, skipping`);
       // Still have data, just return without setting loading
       return;
     }
 
+    console.log(`[STORE] 📡 fetchIssues: Starting fetch...`);
     set({ loading: true, error: null });
 
     try {
@@ -93,6 +97,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         issueMap.set(`${owner}/${repo}#${issue.number}`, issue);
       });
 
+      console.log(`[STORE] ✅ fetchIssues: Loaded ${issues.length} issues`);
       set({
         issues: issueMap,
         loading: false,
@@ -108,9 +113,13 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   },
 
   updateIssue: (issue) => {
+    const key = `${issue.repository.owner.login}/${issue.repository.name}#${issue.number}`;
+    console.log(`[STORE] 📝 updateIssue: #${issue.number}`, {
+      labels: issue.labels.map(l => l.name),
+      state: issue.state
+    });
     set((state) => {
       const newIssues = new Map(state.issues);
-      const key = `${issue.repository.owner.login}/${issue.repository.name}#${issue.number}`;
       newIssues.set(key, issue);
       return { issues: newIssues };
     });
@@ -426,6 +435,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
   },
 
   setIssueLabels: async (owner: string, repo: string, issueNumber: number, labels: string[]) => {
+    console.log(`[STORE] 🏷️  setIssueLabels: #${issueNumber} → [${labels.join(', ')}]`);
     try {
       let token: string | null = null;
 
@@ -440,12 +450,14 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
       if (token === "dev-token") {
         // Mock setting labels for dev mode
+        console.log(`[STORE] 💤 setIssueLabels: Using dev-token, simulating delay...`);
         await new Promise((resolve) => setTimeout(resolve, 500));
         set((state) => {
           const newIssues = new Map(state.issues);
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
+            console.log(`[STORE] ✅ setIssueLabels: Updating #${issueNumber} in store (dev mode)`);
             newIssues.set(key, {
               ...issue,
               labels: labels.map(name => ({
@@ -457,20 +469,26 @@ export const useIssueStore = create<IssueState>((set, get) => ({
           return { issues: newIssues };
         });
       } else {
+        console.log(`[STORE] 🌐 setIssueLabels: Calling GitHub API...`);
         const api = new GitHubAPI(token);
         const updatedLabels = await api.setIssueLabels(owner, repo, issueNumber, labels);
+        console.log(`[STORE] 📥 setIssueLabels: Received response from GitHub:`, updatedLabels.map(l => l.name));
 
         set((state) => {
           const newIssues = new Map(state.issues);
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
+            console.log(`[STORE] ✅ setIssueLabels: Updating #${issueNumber} in store with GitHub response`);
             newIssues.set(key, { ...issue, labels: updatedLabels });
+          } else {
+            console.warn(`[STORE] ⚠️  setIssueLabels: Issue #${issueNumber} not found in store`);
           }
           return { issues: newIssues };
         });
       }
     } catch (error) {
+      console.error(`[STORE] ❌ setIssueLabels: Error for #${issueNumber}:`, error);
       set({ error: (error as Error).message });
     }
   },

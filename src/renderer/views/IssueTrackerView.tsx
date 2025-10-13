@@ -664,16 +664,23 @@ export default function IssueTrackerView() {
 
   const handleDrop = useCallback(
     async (issueData: any, targetColumn: KanbanColumn) => {
-      console.log("Moving issue", issueData, "to column", targetColumn);
+      const operationId = `${issueData.issueNumber}-${Date.now()}`;
+      console.log(`[${operationId}] 🎯 DROP: Moving issue #${issueData.issueNumber} to column ${targetColumn}`);
 
       // Find the issue
       const issueKey = `${issueData.owner}/${issueData.repo}#${issueData.issueNumber}`;
       const issue = issues.get(issueKey);
 
       if (!issue || !selectedRepo) {
-        console.error("Issue not found or no repo selected:", issueKey);
+        console.error(`[${operationId}] ❌ ERROR: Issue not found or no repo selected:`, issueKey);
         return;
       }
+
+      console.log(`[${operationId}] 📋 Current state:`, {
+        currentLabels: issue.labels.map(l => l.name),
+        currentState: issue.state,
+        targetColumn
+      });
 
       try {
         setIsUpdatingIssue(true);
@@ -735,48 +742,6 @@ export default function IssueTrackerView() {
             break;
         }
 
-        // Update the issue in the store immediately for responsive UI
-        const updatedIssue = {
-          ...issue,
-          repository: issue.repository || {
-            owner: { login: selectedRepo.owner },
-            name: selectedRepo.name,
-          }
-        };
-
-        // Remove old status labels
-        updatedIssue.labels = issue.labels.filter(label =>
-          !statusLabelPatterns.some(pattern => label.name.toLowerCase().includes(pattern))
-        );
-
-        // Add new status labels
-        labelsToAdd.forEach(labelName => {
-          if (!updatedIssue.labels.some(l => l.name === labelName)) {
-            const labelColors: Record<string, string> = {
-              "ready": "0052cc",
-              "in-progress": "fbca04",
-              "in-review": "d876e3",
-              "done": "0e8a16"
-            };
-
-            updatedIssue.labels.push({
-              name: labelName,
-              color: labelColors[labelName] || "cccccc"
-            });
-          }
-        });
-
-        if (shouldCloseIssue) {
-          updatedIssue.state = "closed";
-        } else if (shouldReopenIssue) {
-          updatedIssue.state = "open";
-        }
-
-        updateIssue(updatedIssue);
-
-        // Make actual GitHub API calls
-        const promises: Promise<any>[] = [];
-
         // Calculate the final set of labels we want
         // Start with all non-status labels, then add the new status label
         const finalLabels = [
@@ -786,50 +751,98 @@ export default function IssueTrackerView() {
           ...labelsToAdd
         ];
 
+        console.log(`[${operationId}] 🔄 Changes to apply:`, {
+          labelsToRemove: existingStatusLabels,
+          labelsToAdd,
+          finalLabels,
+          shouldCloseIssue,
+          shouldReopenIssue
+        });
+
+        // Optimistically update the UI immediately for responsiveness
+        const optimisticIssue = {
+          ...issue,
+          repository: issue.repository || {
+            owner: { login: selectedRepo.owner },
+            name: selectedRepo.name,
+          },
+          labels: finalLabels.map(name => {
+            // Try to preserve existing label colors
+            const existingLabel = issue.labels.find(l => l.name === name);
+            if (existingLabel) return existingLabel;
+
+            // For new status labels, use predefined colors
+            const labelColors: Record<string, string> = {
+              "ready": "0052cc",
+              "in-progress": "fbca04",
+              "in-review": "d876e3",
+              "done": "0e8a16"
+            };
+            return {
+              name,
+              color: labelColors[name] || "cccccc"
+            };
+          }),
+          state: shouldCloseIssue ? "closed" : shouldReopenIssue ? "open" : issue.state
+        };
+
+        console.log(`[${operationId}] ⚡ OPTIMISTIC UPDATE: Applying to local store`);
+        updateIssue(optimisticIssue);
+
+        // Make actual GitHub API calls
+        console.log(`[${operationId}] 🌐 Starting API calls to GitHub...`);
+        const promises: Promise<any>[] = [];
+
         // Use setIssueLabels to atomically replace all labels at once
         // This is more reliable than removing then adding individual labels
+        // Note: setIssueLabels will update the store when it completes
         if (labelsToRemove.length > 0 || labelsToAdd.length > 0) {
+          console.log(`[${operationId}] 🏷️  API: Setting labels to:`, finalLabels);
           promises.push(
             setIssueLabels(
               selectedRepo.owner,
               selectedRepo.name,
               issue.number,
               finalLabels
-            )
+            ).then(() => {
+              console.log(`[${operationId}] ✅ API: Labels updated successfully`);
+            })
           );
         }
 
         // Close or reopen issue if needed
         if (shouldCloseIssue) {
+          console.log(`[${operationId}] 🔒 API: Closing issue`);
           promises.push(
             closeIssues(selectedRepo.owner, selectedRepo.name, [issue.number])
+              .then(() => {
+                console.log(`[${operationId}] ✅ API: Issue closed successfully`);
+              })
           );
         } else if (shouldReopenIssue) {
+          console.log(`[${operationId}] 🔓 API: Reopening issue`);
           promises.push(
             reopenIssues(selectedRepo.owner, selectedRepo.name, [issue.number])
+              .then(() => {
+                console.log(`[${operationId}] ✅ API: Issue reopened successfully`);
+              })
           );
         }
 
         // Execute all API calls
         await Promise.all(promises);
 
-        console.log(`Successfully moved issue #${issue.number} to ${targetColumn}`);
-
-        // Refetch the issues to ensure our local state is in sync with GitHub
-        // This prevents issues where the local state gets out of sync
-        if (selectedRepo) {
-          await fetchIssues(selectedRepo.owner, selectedRepo.name, true);
-        }
+        console.log(`[${operationId}] ✨ SUCCESS: All API calls completed for issue #${issue.number} → ${targetColumn}`);
 
       } catch (error) {
-        console.error("Failed to move issue:", error);
-        // Revert the change if API call fails
-        // In a real implementation, you'd want to show an error message to the user
-        // For now, just refetch the issues to get the correct state
+        console.error(`[${operationId}] ❌ ERROR: Failed to move issue:`, error);
+        // Refetch to revert the optimistic update and get the correct state from GitHub
         if (selectedRepo) {
+          console.log(`[${operationId}] 🔄 REFETCH: Reverting optimistic update by refetching from GitHub`);
           await fetchIssues(selectedRepo.owner, selectedRepo.name, true);
         }
       } finally {
+        console.log(`[${operationId}] 🏁 COMPLETE: Operation finished`);
         setIsUpdatingIssue(false);
       }
     },
