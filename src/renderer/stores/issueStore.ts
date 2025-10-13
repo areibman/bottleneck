@@ -29,6 +29,7 @@ interface IssueState {
   createLabel: (owner: string, repo: string, name: string, color: string, description?: string) => Promise<void>;
   addLabelsToIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
   removeLabelsFromIssues: (owner: string, repo: string, issueNumbers: number[], labels: string[]) => Promise<void>;
+  setIssueLabels: (owner: string, repo: string, issueNumber: number, labels: string[]) => Promise<void>;
   setFilter: (key: keyof IssueFilters, value: any) => void;
   setFilters: (filters: IssueFilters) => void;
   resetFilters: () => void;
@@ -418,6 +419,56 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
         // Refetch issues to get updated labels
         await get().fetchIssues(owner, repo, true);
+      }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  setIssueLabels: async (owner: string, repo: string, issueNumber: number, labels: string[]) => {
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = require("./authStore").useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      if (token === "dev-token") {
+        // Mock setting labels for dev mode
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        set((state) => {
+          const newIssues = new Map(state.issues);
+          const key = `${owner}/${repo}#${issueNumber}`;
+          const issue = newIssues.get(key);
+          if (issue) {
+            newIssues.set(key, {
+              ...issue,
+              labels: labels.map(name => ({
+                name,
+                color: Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+              })),
+            });
+          }
+          return { issues: newIssues };
+        });
+      } else {
+        const api = new GitHubAPI(token);
+        const updatedLabels = await api.setIssueLabels(owner, repo, issueNumber, labels);
+
+        set((state) => {
+          const newIssues = new Map(state.issues);
+          const key = `${owner}/${repo}#${issueNumber}`;
+          const issue = newIssues.get(key);
+          if (issue) {
+            newIssues.set(key, { ...issue, labels: updatedLabels });
+          }
+          return { issues: newIssues };
+        });
       }
     } catch (error) {
       set({ error: (error as Error).message });

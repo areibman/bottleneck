@@ -1393,12 +1393,19 @@ export class GitHubAPI {
     issueNumber: number,
     label: string,
   ): Promise<void> {
-    await this.octokit.issues.removeLabel({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      name: label,
-    });
+    try {
+      await this.octokit.issues.removeLabel({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        name: label,
+      });
+    } catch (error: any) {
+      // If label doesn't exist (404), that's fine - it's already not there
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
   }
 
   async setIssueLabels(

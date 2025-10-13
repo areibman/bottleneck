@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare, User, GitBranch, GitPullRequest, Plus, Edit3, X } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, User, GitBranch, GitPullRequest, Edit3, X } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -78,18 +78,18 @@ interface IssueCardProps {
   onIssueClick: (issue: Issue) => void;
   onQuickEdit: (issue: Issue) => void;
   theme: "light" | "dark";
-  isDragging?: boolean;
+  repoOwner: string;
+  repoName: string;
 }
 
-const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, isDragging }: IssueCardProps) => {
-  const [dragOver, setDragOver] = useState(false);
+const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwner, repoName }: IssueCardProps) => {
   const [isBeingDragged, setIsBeingDragged] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData("text/plain", JSON.stringify({
       issueNumber: issue.number,
-      owner: issue.repository?.owner.login,
-      repo: issue.repository?.name,
+      owner: repoOwner,
+      repo: repoName,
     }));
     e.dataTransfer.effectAllowed = "move";
     setIsBeingDragged(true);
@@ -116,7 +116,6 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, isDragg
           ? "bg-gray-800 border-gray-700 hover:bg-gray-750 hover:border-gray-600"
           : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300",
         isBeingDragged && "opacity-50 rotate-1 scale-105 shadow-lg z-50",
-        dragOver && "ring-2 ring-blue-400",
         "hover:shadow-md"
       )}
     >
@@ -275,9 +274,11 @@ interface KanbanColumnProps {
   onQuickEdit: (issue: Issue) => void;
   onDrop: (issueData: any, targetColumn: KanbanColumn) => void;
   theme: "light" | "dark";
+  repoOwner: string;
+  repoName: string;
 }
 
-const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, onDrop, theme }: KanbanColumnProps) => {
+const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, onDrop, theme, repoOwner, repoName }: KanbanColumnProps) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -294,7 +295,7 @@ const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, on
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    
+
     try {
       const issueData = JSON.parse(e.dataTransfer.getData("text/plain"));
       onDrop(issueData, column.id);
@@ -366,6 +367,8 @@ const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, on
               onIssueClick={onIssueClick}
               onQuickEdit={onQuickEdit}
               theme={theme}
+              repoOwner={repoOwner}
+              repoName={repoName}
             />
           ))
         )}
@@ -387,18 +390,16 @@ interface QuickEditModalProps {
 
 const QuickEditModal = React.memo(({ issue, isOpen, onClose, onSave, theme }: QuickEditModalProps) => {
   const [title, setTitle] = useState("");
-  const [assignees, setAssignees] = useState<string[]>([]);
 
   useEffect(() => {
     if (issue) {
       setTitle(issue.title);
-      setAssignees(issue.assignees.map(a => a.login));
     }
   }, [issue]);
 
   const handleSave = () => {
     if (!issue) return;
-    
+
     const updates: Partial<Issue> = {
       title: title.trim(),
       // Note: In a real implementation, you'd handle assignee updates properly
@@ -482,8 +483,7 @@ export default function IssueTrackerView() {
     loading,
     fetchIssues,
     updateIssue,
-    addLabelsToIssues,
-    removeLabelsFromIssues,
+    setIssueLabels,
     closeIssues,
     reopenIssues,
   } = useIssueStore();
@@ -493,7 +493,7 @@ export default function IssueTrackerView() {
   // Quick edit modal state
   const [quickEditIssue, setQuickEditIssue] = useState<Issue | null>(null);
   const [showQuickEdit, setShowQuickEdit] = useState(false);
-  
+
   // Loading state for drag operations
   const [isUpdatingIssue, setIsUpdatingIssue] = useState(false);
 
@@ -528,7 +528,7 @@ export default function IssueTrackerView() {
       const associatedPR = prArray.find(pr => {
         // Strategy 1: PR title mentions the issue number
         if (pr.title.includes(`#${issue.number}`)) return true;
-        
+
         // Strategy 2: PR body mentions the issue with closing keywords
         if (pr.body) {
           const closingKeywords = [
@@ -540,16 +540,16 @@ export default function IssueTrackerView() {
             `resolve #${issue.number}`,
             `#${issue.number}` // Simple mention
           ];
-          
+
           const bodyLower = pr.body.toLowerCase();
           if (closingKeywords.some(keyword => bodyLower.includes(keyword.toLowerCase()))) {
             return true;
           }
         }
-        
+
         // Strategy 3: Branch name contains issue number
         if (pr.head?.ref && pr.head.ref.includes(`${issue.number}`)) return true;
-        
+
         return false;
       });
 
@@ -571,12 +571,12 @@ export default function IssueTrackerView() {
 
       // Check labels for explicit status indicators (higher priority than assignees)
       const labelNames = issue.labels.map(l => l.name.toLowerCase());
-      
-      const hasInReviewLabel = labelNames.some(name => 
+
+      const hasInReviewLabel = labelNames.some(name =>
         name.includes("review") || name.includes("reviewing")
       );
-      
-      const hasInProgressLabel = labelNames.some(name => 
+
+      const hasInProgressLabel = labelNames.some(name =>
         name.includes("progress") ||
         name.includes("working") ||
         name.includes("development") ||
@@ -625,7 +625,7 @@ export default function IssueTrackerView() {
     // Sort issues within each category by updated date (most recent first)
     Object.keys(categories).forEach(key => {
       const column = key as KanbanColumn;
-      categories[column].sort((a, b) => 
+      categories[column].sort((a, b) =>
         new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
       );
     });
@@ -657,7 +657,7 @@ export default function IssueTrackerView() {
   const handleQuickEditSave = useCallback((issue: Issue, updates: Partial<Issue>) => {
     const updatedIssue = { ...issue, ...updates };
     updateIssue(updatedIssue);
-    
+
     // TODO: Make GitHub API call to update the issue
     console.log("Would update issue via GitHub API:", updates);
   }, [updateIssue]);
@@ -665,11 +665,11 @@ export default function IssueTrackerView() {
   const handleDrop = useCallback(
     async (issueData: any, targetColumn: KanbanColumn) => {
       console.log("Moving issue", issueData, "to column", targetColumn);
-      
+
       // Find the issue
       const issueKey = `${issueData.owner}/${issueData.repo}#${issueData.issueNumber}`;
       const issue = issues.get(issueKey);
-      
+
       if (!issue || !selectedRepo) {
         console.error("Issue not found or no repo selected:", issueKey);
         return;
@@ -677,19 +677,20 @@ export default function IssueTrackerView() {
 
       try {
         setIsUpdatingIssue(true);
-        
+
         // Determine what changes need to be made based on target column
         const labelsToAdd: string[] = [];
         const labelsToRemove: string[] = [];
         let shouldCloseIssue = false;
         let shouldReopenIssue = false;
 
-        // Remove existing status labels first
-        const statusLabels = ["unassigned", "todo", "ready", "backlog", "in-progress", "working", "development", "in-review", "reviewing", "done", "completed"];
+        // Remove existing status labels first (only the ones that actually exist on the issue)
+        // These are the labels we manage for status tracking
+        const statusLabelPatterns = ["ready", "in-progress", "in-review", "done", "backlog", "working", "development", "reviewing", "completed"];
         const existingStatusLabels = issue.labels
-          .filter(label => statusLabels.some(status => label.name.toLowerCase().includes(status)))
+          .filter(label => statusLabelPatterns.some(pattern => label.name.toLowerCase().includes(pattern)))
           .map(label => label.name);
-        
+
         labelsToRemove.push(...existingStatusLabels);
 
         // Add appropriate labels and handle special cases for each column
@@ -698,35 +699,35 @@ export default function IssueTrackerView() {
             // No specific labels needed for unassigned
             // Note: In a real implementation, you might want to remove assignees
             break;
-            
+
           case "todo":
             labelsToAdd.push("ready");
             if (issue.state === "closed") {
               shouldReopenIssue = true;
             }
             break;
-            
+
           case "in_progress":
             labelsToAdd.push("in-progress");
             if (issue.state === "closed") {
               shouldReopenIssue = true;
             }
             break;
-            
+
           case "in_review":
             labelsToAdd.push("in-review");
             if (issue.state === "closed") {
               shouldReopenIssue = true;
             }
             break;
-            
+
           case "done":
             labelsToAdd.push("done");
             if (issue.state === "closed") {
               shouldReopenIssue = true;
             }
             break;
-            
+
           case "closed":
             if (issue.state === "open") {
               shouldCloseIssue = true;
@@ -735,11 +736,17 @@ export default function IssueTrackerView() {
         }
 
         // Update the issue in the store immediately for responsive UI
-        const updatedIssue = { ...issue };
-        
+        const updatedIssue = {
+          ...issue,
+          repository: issue.repository || {
+            owner: { login: selectedRepo.owner },
+            name: selectedRepo.name,
+          }
+        };
+
         // Remove old status labels
-        updatedIssue.labels = issue.labels.filter(label => 
-          !statusLabels.some(status => label.name.toLowerCase().includes(status))
+        updatedIssue.labels = issue.labels.filter(label =>
+          !statusLabelPatterns.some(pattern => label.name.toLowerCase().includes(pattern))
         );
 
         // Add new status labels
@@ -747,14 +754,14 @@ export default function IssueTrackerView() {
           if (!updatedIssue.labels.some(l => l.name === labelName)) {
             const labelColors: Record<string, string> = {
               "ready": "0052cc",
-              "in-progress": "fbca04", 
+              "in-progress": "fbca04",
               "in-review": "d876e3",
               "done": "0e8a16"
             };
-            
-            updatedIssue.labels.push({ 
-              name: labelName, 
-              color: labelColors[labelName] || "cccccc" 
+
+            updatedIssue.labels.push({
+              name: labelName,
+              color: labelColors[labelName] || "cccccc"
             });
           }
         });
@@ -770,26 +777,24 @@ export default function IssueTrackerView() {
         // Make actual GitHub API calls
         const promises: Promise<any>[] = [];
 
-        // Remove old status labels
-        if (labelsToRemove.length > 0) {
-          promises.push(
-            removeLabelsFromIssues(
-              selectedRepo.owner,
-              selectedRepo.name,
-              [issue.number],
-              labelsToRemove
-            )
-          );
-        }
+        // Calculate the final set of labels we want
+        // Start with all non-status labels, then add the new status label
+        const finalLabels = [
+          ...issue.labels
+            .filter(label => !statusLabelPatterns.some(pattern => label.name.toLowerCase().includes(pattern)))
+            .map(label => label.name),
+          ...labelsToAdd
+        ];
 
-        // Add new status labels
-        if (labelsToAdd.length > 0) {
+        // Use setIssueLabels to atomically replace all labels at once
+        // This is more reliable than removing then adding individual labels
+        if (labelsToRemove.length > 0 || labelsToAdd.length > 0) {
           promises.push(
-            addLabelsToIssues(
+            setIssueLabels(
               selectedRepo.owner,
               selectedRepo.name,
-              [issue.number],
-              labelsToAdd
+              issue.number,
+              finalLabels
             )
           );
         }
@@ -807,22 +812,28 @@ export default function IssueTrackerView() {
 
         // Execute all API calls
         await Promise.all(promises);
-        
+
         console.log(`Successfully moved issue #${issue.number} to ${targetColumn}`);
-        
+
+        // Refetch the issues to ensure our local state is in sync with GitHub
+        // This prevents issues where the local state gets out of sync
+        if (selectedRepo) {
+          await fetchIssues(selectedRepo.owner, selectedRepo.name, true);
+        }
+
       } catch (error) {
         console.error("Failed to move issue:", error);
         // Revert the change if API call fails
         // In a real implementation, you'd want to show an error message to the user
         // For now, just refetch the issues to get the correct state
         if (selectedRepo) {
-          fetchIssues(selectedRepo.owner, selectedRepo.name, true);
+          await fetchIssues(selectedRepo.owner, selectedRepo.name, true);
         }
       } finally {
         setIsUpdatingIssue(false);
       }
     },
-    [issues, updateIssue, selectedRepo, addLabelsToIssues, removeLabelsFromIssues, closeIssues, reopenIssues, fetchIssues]
+    [issues, updateIssue, selectedRepo, setIssueLabels, closeIssues, reopenIssues, fetchIssues]
   );
 
   if (!selectedRepo) {
@@ -891,6 +902,8 @@ export default function IssueTrackerView() {
                   onQuickEdit={handleQuickEdit}
                   onDrop={handleDrop}
                   theme={theme}
+                  repoOwner={selectedRepo.owner}
+                  repoName={selectedRepo.name}
                 />
               ))}
             </div>
