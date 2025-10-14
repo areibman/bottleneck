@@ -66,6 +66,8 @@ export interface PullRequest {
     login: string;
     avatar_url: string;
   }>;
+  // Linked issue
+  linkedIssueNumber?: number;
 }
 
 export interface Repository {
@@ -111,6 +113,17 @@ export interface Issue {
     };
     name: string;
   };
+  linkedPRs?: Array<{
+    id: number;
+    number: number;
+    state: "open" | "closed";
+    merged: boolean;
+    draft: boolean;
+    title: string;
+    head?: {
+      ref: string;
+    };
+  }>;
 }
 
 export interface Comment {
@@ -702,16 +715,44 @@ export class GitHubAPI {
     repo: string,
     state: "open" | "closed" | "all" = "open",
   ) {
-    const { data } = await this.octokit.issues.listForRepo({
-      owner,
-      repo,
-      state,
-      per_page: 500,
-    });
+    console.log(`[API] 📡 Fetching issues for ${owner}/${repo} with state=${state}`);
+
+    // Use pagination to get all issues
+    const allIssues: any[] = [];
+    let page = 1;
+    const per_page = 100;
+
+    while (true) {
+      const { data } = await this.octokit.issues.listForRepo({
+        owner,
+        repo,
+        state,
+        per_page,
+        page,
+      });
+
+      if (data.length === 0) break;
+
+      allIssues.push(...data);
+      console.log(`[API] 📄 Fetched page ${page}: ${data.length} items (total so far: ${allIssues.length})`);
+
+      // If we got less than per_page, we're on the last page
+      if (data.length < per_page) break;
+
+      page++;
+
+      // Safety limit to avoid infinite loops
+      if (page > 10) {
+        console.warn(`[API] ⚠️ Reached page limit of 10, stopping pagination`);
+        break;
+      }
+    }
 
     // Filter out pull requests - GitHub API returns both issues and PRs from this endpoint
     // Pull requests have a pull_request property
-    const issues = data.filter((item) => !("pull_request" in item));
+    const issues = allIssues.filter((item) => !("pull_request" in item));
+
+    console.log(`[API] ✅ Total issues fetched: ${issues.length} (filtered from ${allIssues.length} items)`);
 
     return issues as Issue[];
   }
@@ -1517,5 +1558,284 @@ export class GitHubAPI {
       ...currentPR,
       draft: isDraft !== undefined ? isDraft : draft,
     };
+  }
+
+  /**
+   * Get linked PRs for an issue using GitHub's linkedBranches GraphQL query
+   * This uses the official Development section links
+   */
+  async getLinkedPRsForIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number
+  ): Promise<Array<{
+    id: number;
+    number: number;
+    state: "open" | "closed";
+    merged: boolean;
+    draft: boolean;
+    title: string;
+    head?: { ref: string };
+  }>> {
+    const query = `
+      query($owner: String!, $repo: String!, $issueNumber: Int!) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $issueNumber) {
+            linkedBranches(first: 100) {
+              nodes {
+                ref {
+                  name
+                  associatedPullRequests(first: 10) {
+                    nodes {
+                      number
+                      title
+                      state
+                      merged
+                      isDraft
+                      headRefName
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        repo,
+        issueNumber,
+      });
+
+      const linkedBranches = response.repository?.issue?.linkedBranches?.nodes || [];
+      const prs: any[] = [];
+      const seenPRNumbers = new Set<number>();
+
+      // Extract PRs from linked branches
+      for (const branch of linkedBranches) {
+        const associatedPRs = branch.ref?.associatedPullRequests?.nodes || [];
+        for (const pr of associatedPRs) {
+          if (pr && pr.number && !seenPRNumbers.has(pr.number)) {
+            seenPRNumbers.add(pr.number);
+            prs.push({
+              id: pr.number,
+              number: pr.number,
+              state: pr.state === 'MERGED' || pr.merged ? 'closed' : pr.state.toLowerCase(),
+              merged: pr.merged || pr.state === 'MERGED',
+              draft: pr.isDraft || false,
+              title: pr.title,
+              head: pr.headRefName ? { ref: pr.headRefName } : undefined,
+            });
+          }
+        }
+      }
+
+      console.log(`✅ Fetched ${prs.length} linked PRs for issue #${issueNumber} from linkedBranches`);
+      return prs;
+    } catch (error) {
+      console.error('Error fetching linked PRs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get the issue linked to a PR using GitHub GraphQL API
+   */
+  async getIssueForPR(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<number | null> {
+    const query = `
+      query($owner: String!, $repo: String!, $prNumber: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $prNumber) {
+            closingIssuesReferences(first: 1) {
+              nodes {
+                number
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        repo,
+        prNumber,
+      });
+
+      const issues = response.repository?.pullRequest?.closingIssuesReferences?.nodes || [];
+      return issues.length > 0 ? issues[0].number : null;
+    } catch (error) {
+      console.error('Error fetching linked issue for PR:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Link a PR's branch to an issue using GitHub's createLinkedBranch GraphQL mutation
+   * This creates the proper "Development" section link in GitHub's UI
+   */
+  async linkPRToIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    prNumber: number
+  ): Promise<void> {
+    try {
+      // Get the repository and issue node IDs
+      const repoQuery = `
+        query($owner: String!, $repo: String!, $issueNumber: Int!, $prNumber: Int!) {
+          repository(owner: $owner, name: $repo) {
+            id
+            issue(number: $issueNumber) {
+              id
+            }
+            pullRequest(number: $prNumber) {
+              id
+              headRef {
+                id
+                target {
+                  oid
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const response: any = await this.octokit.graphql(repoQuery, {
+        owner,
+        repo,
+        issueNumber,
+        prNumber,
+      });
+
+      const repositoryId = response.repository.id;
+      const issueId = response.repository.issue.id;
+      const headRefId = response.repository.pullRequest.headRef?.id;
+      const oid = response.repository.pullRequest.headRef?.target?.oid;
+
+      if (!headRefId || !oid) {
+        console.error(`PR #${prNumber} has no branch information`);
+        return;
+      }
+
+      // Create the linked branch using GraphQL mutation
+      const mutation = `
+        mutation($input: CreateLinkedBranchInput!) {
+          createLinkedBranch(input: $input) {
+            linkedBranch {
+              id
+              ref {
+                name
+              }
+            }
+          }
+        }
+      `;
+
+      await this.octokit.graphql(mutation, {
+        input: {
+          repositoryId,
+          issueId,
+          oid,
+        },
+      });
+
+      console.log(`✅ Linked PR #${prNumber}'s branch to issue #${issueNumber} using GitHub's Development section`);
+    } catch (error: any) {
+      // If branch is already linked, that's okay
+      if (error.message?.includes('already linked') || error.message?.includes('already exists')) {
+        console.log(`PR #${prNumber} branch already linked to issue #${issueNumber}`);
+        return;
+      }
+      console.error(`Error linking PR #${prNumber} to issue #${issueNumber}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unlink a PR's branch from an issue using GitHub's deleteLinkedBranch GraphQL mutation
+   */
+  async unlinkPRFromIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    prNumber: number
+  ): Promise<void> {
+    try {
+      // First, find the linked branch ID
+      const query = `
+        query($owner: String!, $repo: String!, $issueNumber: Int!) {
+          repository(owner: $owner, name: $repo) {
+            issue(number: $issueNumber) {
+              linkedBranches(first: 100) {
+                nodes {
+                  id
+                  ref {
+                    name
+                    associatedPullRequests(first: 1) {
+                      nodes {
+                        number
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        repo,
+        issueNumber,
+      });
+
+      const linkedBranches = response.repository?.issue?.linkedBranches?.nodes || [];
+
+      // Find the linked branch that corresponds to this PR
+      let linkedBranchId: string | null = null;
+      for (const branch of linkedBranches) {
+        const prs = branch.ref?.associatedPullRequests?.nodes || [];
+        if (prs.some((pr: any) => pr.number === prNumber)) {
+          linkedBranchId = branch.id;
+          break;
+        }
+      }
+
+      if (!linkedBranchId) {
+        console.log(`No linked branch found for PR #${prNumber} on issue #${issueNumber}`);
+        return;
+      }
+
+      // Delete the linked branch using GraphQL mutation
+      const mutation = `
+        mutation($input: DeleteLinkedBranchInput!) {
+          deleteLinkedBranch(input: $input) {
+            clientMutationId
+          }
+        }
+      `;
+
+      await this.octokit.graphql(mutation, {
+        input: {
+          linkedBranchId,
+        },
+      });
+
+      console.log(`✅ Unlinked PR #${prNumber}'s branch from issue #${issueNumber}`);
+    } catch (error: any) {
+      console.error(`Error unlinking PR #${prNumber} from issue #${issueNumber}:`, error);
+      throw error;
+    }
   }
 }

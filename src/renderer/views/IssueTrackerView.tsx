@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, MessageSquare, User, GitBranch, GitPullRequest, Edit3, X } from "lucide-react";
+import { AlertCircle, CheckCircle, MessageSquare, User, GitBranch, GitPullRequest, Edit3, X, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
@@ -8,7 +8,9 @@ import { formatDistanceToNow } from "date-fns";
 import { cn } from "../utils/cn";
 import { getLabelColors } from "../utils/labelColors";
 import WelcomeView from "./WelcomeView";
-import { Issue } from "../services/github";
+import { Issue, PullRequest } from "../services/github";
+import { PRAssignmentModal } from "../components/PRAssignmentModal";
+import { getPRMetadata, groupPRsByAgent, groupPRsByPrefix, isGroupClosed, PRMetadata } from "../utils/prGrouping";
 
 // Define the Kanban column types
 type KanbanColumn = "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed";
@@ -77,12 +79,27 @@ interface IssueCardProps {
   issue: Issue;
   onIssueClick: (issue: Issue) => void;
   onQuickEdit: (issue: Issue) => void;
+  onOpenPRAssignment: (issue: Issue) => void;
+  onUnlinkPR: (issueNumber: number, prNumber: number) => void;
+  expandedPRGroups: Set<string>;
+  onTogglePRGroup: (groupKey: string) => void;
   theme: "light" | "dark";
   repoOwner: string;
   repoName: string;
 }
 
-const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwner, repoName }: IssueCardProps) => {
+const IssueCard = React.memo(({
+  issue,
+  onIssueClick,
+  onQuickEdit,
+  onOpenPRAssignment,
+  onUnlinkPR,
+  expandedPRGroups,
+  onTogglePRGroup,
+  theme,
+  repoOwner,
+  repoName
+}: IssueCardProps) => {
   const [isBeingDragged, setIsBeingDragged] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -104,6 +121,67 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
     onQuickEdit(issue);
   };
 
+  const handleOpenPRAssignment = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOpenPRAssignment(issue);
+  };
+
+  // Group linked PRs by agent, then by task prefix within each agent
+  const groupedPRs = useMemo((): Map<string, Map<string, PRMetadata[]>> => {
+    if (!issue.linkedPRs || issue.linkedPRs.length === 0) {
+      return new Map();
+    }
+
+    const linkedPRsWithMetadata = issue.linkedPRs.map(pr => {
+      // Convert linkedPR to PullRequest format for getPRMetadata
+      const fakePR: PullRequest = {
+        ...pr,
+        user: { login: "", avatar_url: "" },
+        body: null,
+        labels: [],
+        head: pr.head ? {
+          ref: pr.head.ref,
+          sha: "",
+          repo: null
+        } : {
+          ref: "",
+          sha: "",
+          repo: null
+        },
+        base: {
+          ref: "",
+          sha: "",
+          repo: {
+            name: repoName,
+            owner: { login: repoOwner }
+          }
+        },
+        assignees: [],
+        requested_reviewers: [],
+        comments: 0,
+        created_at: "",
+        updated_at: "",
+        closed_at: null,
+        merged_at: null,
+        mergeable: null,
+        merge_commit_sha: null,
+      };
+      return getPRMetadata(fakePR);
+    });
+
+    // First group by agent
+    const byAgent = groupPRsByAgent(linkedPRsWithMetadata);
+
+    // Then group each agent's PRs by task prefix
+    const nestedGroups = new Map<string, Map<string, PRMetadata[]>>();
+    for (const [agent, agentPRs] of byAgent) {
+      const byPrefix = groupPRsByPrefix(agentPRs);
+      nestedGroups.set(agent, byPrefix);
+    }
+
+    return nestedGroups;
+  }, [issue.linkedPRs, repoOwner, repoName]);
+
   return (
     <div
       draggable
@@ -111,36 +189,36 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
       onDragEnd={handleDragEnd}
       onClick={() => onIssueClick(issue)}
       className={cn(
-        "p-3 rounded-lg border cursor-pointer transition-all duration-200 group relative",
+        "p-2 rounded border cursor-pointer transition-all duration-200 group relative",
         theme === "dark"
           ? "bg-gray-800 border-gray-700 hover:bg-gray-750 hover:border-gray-600"
           : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300",
         isBeingDragged && "opacity-50 rotate-1 scale-105 shadow-lg z-50",
-        "hover:shadow-md"
+        "hover:shadow-sm"
       )}
     >
       {/* Quick edit button - only visible on hover */}
       <button
         onClick={handleQuickEdit}
         className={cn(
-          "absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity",
+          "absolute top-1 right-1 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity",
           theme === "dark"
             ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
             : "bg-gray-100 hover:bg-gray-200 text-gray-600"
         )}
         title="Quick edit"
       >
-        <Edit3 className="w-3 h-3" />
+        <Edit3 className="w-2.5 h-2.5" />
       </button>
 
       {/* Issue header */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center space-x-2 flex-1 min-w-0">
+      <div className="flex items-start justify-between mb-1.5">
+        <div className="flex items-center space-x-1.5 flex-1 min-w-0">
           <div className="flex-shrink-0">
             {issue.state === "open" ? (
-              <AlertCircle className="w-4 h-4 text-green-400" />
+              <AlertCircle className="w-3.5 h-3.5 text-green-400" />
             ) : (
-              <CheckCircle className="w-4 h-4 text-purple-400" />
+              <CheckCircle className="w-3.5 h-3.5 text-purple-400" />
             )}
           </div>
           <span
@@ -154,7 +232,7 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
         </div>
         {issue.comments > 0 && (
           <div className="flex items-center text-xs text-gray-500">
-            <MessageSquare className="w-3 h-3 mr-1" />
+            <MessageSquare className="w-2.5 h-2.5 mr-0.5" />
             {issue.comments}
           </div>
         )}
@@ -163,7 +241,7 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
       {/* Issue title */}
       <h3
         className={cn(
-          "text-sm font-medium mb-2 leading-tight",
+          "text-xs font-medium mb-1.5 leading-tight",
           theme === "dark" ? "text-white" : "text-gray-900"
         )}
         style={{
@@ -178,47 +256,51 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
 
       {/* Labels */}
       {issue.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {issue.labels.slice(0, 3).map((label) => {
+        <div className="flex flex-wrap gap-0.5 mb-1.5">
+          {issue.labels.slice(0, 2).map((label) => {
             const labelColors = getLabelColors(label.color, theme);
             return (
               <span
                 key={label.name}
-                className="px-1.5 py-0.5 text-xs rounded font-medium"
+                className="px-1 py-0.5 text-xs rounded font-medium"
                 style={{
                   backgroundColor: labelColors.backgroundColor,
                   color: labelColors.color,
+                  fontSize: "0.625rem"
                 }}
               >
                 {label.name}
               </span>
             );
           })}
-          {issue.labels.length > 3 && (
+          {issue.labels.length > 2 && (
             <span
               className={cn(
-                "px-1.5 py-0.5 text-xs rounded",
+                "px-1 py-0.5 rounded font-medium",
                 theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"
               )}
+              style={{ fontSize: "0.625rem" }}
             >
-              +{issue.labels.length - 3}
+              +{issue.labels.length - 2}
             </span>
           )}
         </div>
       )}
 
       {/* Issue footer */}
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-between text-xs mb-1.5">
+        <div className="flex items-center space-x-1.5">
           <img
             src={issue.user.avatar_url}
             alt={issue.user.login}
-            className="w-4 h-4 rounded-full"
+            className="w-3 h-3 rounded-full"
           />
           <span
             className={cn(
+              "text-xs",
               theme === "dark" ? "text-gray-400" : "text-gray-600"
             )}
+            style={{ fontSize: "0.625rem" }}
           >
             {issue.user.login}
           </span>
@@ -227,6 +309,7 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
           className={cn(
             theme === "dark" ? "text-gray-500" : "text-gray-500"
           )}
+          style={{ fontSize: "0.625rem" }}
         >
           {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
         </span>
@@ -234,14 +317,14 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
 
       {/* Assignees */}
       {issue.assignees.length > 0 && (
-        <div className="flex items-center mt-2 -space-x-1">
+        <div className="flex items-center mb-1.5 -space-x-1">
           {issue.assignees.slice(0, 3).map((assignee) => (
             <img
               key={assignee.login}
               src={assignee.avatar_url}
               alt={assignee.login}
               className={cn(
-                "w-5 h-5 rounded-full border-2",
+                "w-4 h-4 rounded-full border",
                 theme === "dark" ? "border-gray-800" : "border-white"
               )}
               title={`Assigned to: ${assignee.login}`}
@@ -250,17 +333,222 @@ const IssueCard = React.memo(({ issue, onIssueClick, onQuickEdit, theme, repoOwn
           {issue.assignees.length > 3 && (
             <div
               className={cn(
-                "w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-medium",
+                "w-4 h-4 rounded-full border flex items-center justify-center font-medium",
                 theme === "dark"
                   ? "bg-gray-700 border-gray-800 text-gray-300"
                   : "bg-gray-200 border-white text-gray-600"
               )}
+              style={{ fontSize: "0.625rem" }}
             >
               +{issue.assignees.length - 3}
             </div>
           )}
         </div>
       )}
+
+      {/* PR Groups Section */}
+      <div className={cn(
+        "mt-2 pt-2 border-t",
+        theme === "dark" ? "border-gray-700" : "border-gray-200"
+      )}>
+        {groupedPRs.size === 0 ? (
+          <button
+            onClick={handleOpenPRAssignment}
+            className={cn(
+              "w-full flex items-center justify-center space-x-1 py-1.5 px-2 rounded transition-colors",
+              theme === "dark"
+                ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+            )}
+            style={{ fontSize: "0.625rem" }}
+          >
+            <Plus className="w-2.5 h-2.5" />
+            <span>Add PRs</span>
+          </button>
+        ) : (
+          <div className="space-y-1">
+            {Array.from(groupedPRs.entries()).map(([agent, taskGroups]) => {
+              const groupKey = `${issue.id}-${agent}`;
+              const isExpanded = expandedPRGroups.has(groupKey);
+
+              // Calculate total PRs and if any are closed
+              const allAgentPRs = Array.from(taskGroups.values()).flat();
+              const groupIsClosed = isGroupClosed(allAgentPRs);
+              const prCount = allAgentPRs.length;
+
+              return (
+                <div key={agent}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePRGroup(groupKey);
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between p-1.5 rounded transition-colors",
+                      theme === "dark"
+                        ? "bg-gray-700 hover:bg-gray-600"
+                        : "bg-gray-100 hover:bg-gray-200"
+                    )}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      {isExpanded ? (
+                        <ChevronDown className="w-2.5 h-2.5" />
+                      ) : (
+                        <ChevronRight className="w-2.5 h-2.5" />
+                      )}
+                      <span className="font-medium capitalize" style={{ fontSize: "0.625rem" }}>{agent}</span>
+                      <span
+                        className={cn(
+                          "px-1 py-0.5 rounded",
+                          theme === "dark" ? "bg-gray-600" : "bg-gray-200"
+                        )}
+                        style={{ fontSize: "0.625rem" }}
+                      >
+                        {prCount}
+                      </span>
+                      {groupIsClosed && (
+                        <span className="px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" style={{ fontSize: "0.625rem" }}>
+                          Closed
+                        </span>
+                      )}
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="ml-3 mt-0.5 space-y-0.5">
+                      {Array.from(taskGroups.entries()).map(([taskPrefix, taskPRs]) => {
+                        const taskKey = `${issue.id}-${agent}-${taskPrefix}`;
+                        const isTaskExpanded = expandedPRGroups.has(taskKey);
+                        const taskClosed = isGroupClosed(taskPRs);
+
+                        // If only 1 PR in task group, show it directly without nested collapsible
+                        if (taskPRs.length === 1) {
+                          const prMeta = taskPRs[0];
+                          return (
+                            <div
+                              key={taskPrefix}
+                              className={cn(
+                                "flex items-center justify-between py-0.5 px-1.5 rounded",
+                                theme === "dark" ? "bg-gray-800" : "bg-white border border-gray-200"
+                              )}
+                            >
+                              <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                                <GitPullRequest className="w-2.5 h-2.5 flex-shrink-0" />
+                                <span className="font-mono" style={{ fontSize: "0.625rem" }}>#{prMeta.pr.number}</span>
+                                <span className="truncate" style={{ fontSize: "0.625rem" }}>{prMeta.pr.title}</span>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onUnlinkPR(issue.number, prMeta.pr.number);
+                                }}
+                                className={cn(
+                                  "ml-1 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30",
+                                  "text-red-600 dark:text-red-400"
+                                )}
+                                title="Unlink PR"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        // Multiple PRs in task group - show as nested collapsible
+                        return (
+                          <div key={taskPrefix}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onTogglePRGroup(taskKey);
+                              }}
+                              className={cn(
+                                "w-full flex items-center justify-between p-1 rounded transition-colors",
+                                theme === "dark"
+                                  ? "bg-gray-800 hover:bg-gray-750"
+                                  : "bg-white hover:bg-gray-50 border border-gray-200"
+                              )}
+                            >
+                              <div className="flex items-center space-x-1 flex-1 min-w-0">
+                                {isTaskExpanded ? (
+                                  <ChevronDown className="w-2 h-2" />
+                                ) : (
+                                  <ChevronRight className="w-2 h-2" />
+                                )}
+                                <span className="truncate" style={{ fontSize: "0.625rem" }}>{taskPrefix}</span>
+                                <span
+                                  className={cn(
+                                    "px-1 py-0.5 rounded flex-shrink-0",
+                                    theme === "dark" ? "bg-gray-700" : "bg-gray-200"
+                                  )}
+                                  style={{ fontSize: "0.625rem" }}
+                                >
+                                  {taskPRs.length}
+                                </span>
+                                {taskClosed && (
+                                  <span className="px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 flex-shrink-0" style={{ fontSize: "0.625rem" }}>
+                                    Closed
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+
+                            {isTaskExpanded && (
+                              <div className="ml-2 mt-0.5 space-y-0.5">
+                                {taskPRs.map((prMeta) => (
+                                  <div
+                                    key={prMeta.pr.number}
+                                    className={cn(
+                                      "flex items-center justify-between py-0.5 px-1.5 rounded",
+                                      theme === "dark" ? "bg-gray-850" : "bg-gray-50 border border-gray-200"
+                                    )}
+                                  >
+                                    <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                                      <GitPullRequest className="w-2.5 h-2.5 flex-shrink-0" />
+                                      <span className="font-mono" style={{ fontSize: "0.625rem" }}>#{prMeta.pr.number}</span>
+                                      <span className="truncate" style={{ fontSize: "0.625rem" }}>{prMeta.pr.title}</span>
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onUnlinkPR(issue.number, prMeta.pr.number);
+                                      }}
+                                      className={cn(
+                                        "ml-1 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30",
+                                        "text-red-600 dark:text-red-400"
+                                      )}
+                                      title="Unlink PR"
+                                    >
+                                      <X className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              onClick={handleOpenPRAssignment}
+              className={cn(
+                "w-full flex items-center justify-center space-x-1 py-1 px-2 rounded transition-colors",
+                theme === "dark"
+                  ? "text-blue-400 hover:bg-gray-700"
+                  : "text-blue-600 hover:bg-gray-100"
+              )}
+              style={{ fontSize: "0.625rem" }}
+            >
+              <Plus className="w-2.5 h-2.5" />
+              <span>Add more</span>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 });
@@ -272,13 +560,17 @@ interface KanbanColumnProps {
   issues: Issue[];
   onIssueClick: (issue: Issue) => void;
   onQuickEdit: (issue: Issue) => void;
+  onOpenPRAssignment: (issue: Issue) => void;
+  onUnlinkPR: (issueNumber: number, prNumber: number) => void;
+  expandedPRGroups: Set<string>;
+  onTogglePRGroup: (groupKey: string) => void;
   onDrop: (issueData: any, targetColumn: KanbanColumn) => void;
   theme: "light" | "dark";
   repoOwner: string;
   repoName: string;
 }
 
-const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, onDrop, theme, repoOwner, repoName }: KanbanColumnProps) => {
+const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, onOpenPRAssignment, onUnlinkPR, expandedPRGroups, onTogglePRGroup, onDrop, theme, repoOwner, repoName }: KanbanColumnProps) => {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -309,9 +601,9 @@ const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, on
   return (
     <div
       className={cn(
-        "flex flex-col h-full min-w-80 max-w-80",
+        "flex flex-col h-full min-w-72 max-w-72",
         column.bgColor,
-        "rounded-lg border transition-all duration-200",
+        "border-r transition-all duration-200",
         theme === "dark" ? "border-gray-700" : "border-gray-200",
         dragOver && "ring-2 ring-blue-400 ring-opacity-50"
       )}
@@ -320,35 +612,25 @@ const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, on
       onDrop={handleDrop}
     >
       {/* Column header */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Icon className={cn("w-4 h-4", column.color)} />
-            <h3 className={cn("font-semibold", column.color)}>
-              {column.title}
-            </h3>
-            <span
-              className={cn(
-                "px-2 py-0.5 text-xs rounded-full font-medium",
-                theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"
-              )}
-            >
-              {issues.length}
-            </span>
-          </div>
+      <div className="p-2.5 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center space-x-1.5">
+          <Icon className={cn("w-3.5 h-3.5", column.color)} />
+          <h3 className={cn("text-sm font-semibold", column.color)}>
+            {column.title}
+          </h3>
+          <span
+            className={cn(
+              "px-1.5 py-0.5 text-xs rounded-full font-medium",
+              theme === "dark" ? "bg-gray-700 text-gray-300" : "bg-gray-200 text-gray-600"
+            )}
+          >
+            {issues.length}
+          </span>
         </div>
-        <p
-          className={cn(
-            "text-xs mt-1",
-            theme === "dark" ? "text-gray-400" : "text-gray-600"
-          )}
-        >
-          {column.description}
-        </p>
       </div>
 
       {/* Column content */}
-      <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+      <div className="flex-1 p-2 space-y-2 overflow-y-auto">
         {issues.length === 0 ? (
           <div
             className={cn(
@@ -366,6 +648,10 @@ const KanbanColumn = React.memo(({ column, issues, onIssueClick, onQuickEdit, on
               issue={issue}
               onIssueClick={onIssueClick}
               onQuickEdit={onQuickEdit}
+              onOpenPRAssignment={onOpenPRAssignment}
+              onUnlinkPR={onUnlinkPR}
+              expandedPRGroups={expandedPRGroups}
+              onTogglePRGroup={onTogglePRGroup}
               theme={theme}
               repoOwner={repoOwner}
               repoName={repoName}
@@ -486,8 +772,11 @@ export default function IssueTrackerView() {
     setIssueLabels,
     closeIssues,
     reopenIssues,
+    linkPRsToIssue,
+    unlinkPRFromIssue,
+    refreshIssueLinks,
   } = useIssueStore();
-  const { selectedRepo, pullRequests } = usePRStore();
+  const { selectedRepo, pullRequests, fetchPullRequests } = usePRStore();
   const { theme } = useUIStore();
 
   // Quick edit modal state
@@ -497,11 +786,44 @@ export default function IssueTrackerView() {
   // Loading state for drag operations
   const [isUpdatingIssue, setIsUpdatingIssue] = useState(false);
 
+  // PR assignment modal state
+  const [selectedIssueForPRAssignment, setSelectedIssueForPRAssignment] = useState<Issue | null>(null);
+  const [showPRAssignmentModal, setShowPRAssignmentModal] = useState(false);
+
+  // PR group expansion state
+  const [expandedPRGroups, setExpandedPRGroups] = useState<Set<string>>(new Set());
+
+  // Fetch issues and PRs when repo changes
   useEffect(() => {
     if (selectedRepo) {
       fetchIssues(selectedRepo.owner, selectedRepo.name);
+      // Also fetch PRs so they're available for assignment
+      fetchPullRequests(selectedRepo.owner, selectedRepo.name);
     }
-  }, [selectedRepo, fetchIssues]);
+  }, [selectedRepo, fetchIssues, fetchPullRequests]);
+
+  // Note: Auto-fetching linked PRs disabled for now due to API limitations
+  // PRs are fetched on-demand when user opens the assignment modal
+  // TODO: Re-enable when we have a more efficient batch query
+
+  // const [hasLoadedLinks, setHasLoadedLinks] = useState(false);
+  // useEffect(() => {
+  //   const fetchLinkedPRs = async () => {
+  //     if (!selectedRepo || issues.size === 0 || hasLoadedLinks) return;
+  //     console.log(`[TRACKER] 🔗 Loading linked PRs for ${issues.size} issues...`);
+  //     setHasLoadedLinks(true);
+  //     const issuesArray = Array.from(issues.values());
+  //     for (const issue of issuesArray) {
+  //       await refreshIssueLinks(selectedRepo.owner, selectedRepo.name, issue.number);
+  //     }
+  //     console.log(`[TRACKER] ✅ Finished loading linked PRs`);
+  //   };
+  //   fetchLinkedPRs();
+  // }, [selectedRepo, issues.size]);
+
+  // useEffect(() => {
+  //   setHasLoadedLinks(false);
+  // }, [selectedRepo]);
 
   // Categorize issues into Kanban columns
   const categorizedIssues = useMemo(() => {
@@ -524,7 +846,69 @@ export default function IssueTrackerView() {
         return;
       }
 
-      // Check if there's an associated PR using multiple strategies
+      // Check labels for explicit status indicators FIRST (highest priority - manual overrides)
+      const labelNames = issue.labels.map(l => l.name.toLowerCase());
+
+      const hasInReviewLabel = labelNames.some(name =>
+        name.includes("review") || name.includes("reviewing")
+      );
+
+      const hasInProgressLabel = labelNames.some(name =>
+        name.includes("progress") ||
+        name.includes("working") ||
+        name.includes("development") ||
+        name.includes("implementing") ||
+        name.includes("coding")
+      );
+
+      const hasReadyLabel = labelNames.some(name =>
+        name.includes("ready") ||
+        name.includes("todo") ||
+        name.includes("backlog") ||
+        name.includes("planned")
+      );
+
+      const hasDoneLabel = labelNames.some(name =>
+        name.includes("done") ||
+        name.includes("completed")
+      );
+
+      // If explicit status label exists, use it (manual categorization wins)
+      if (hasInReviewLabel) {
+        categories.in_review.push(issue);
+        return;
+      } else if (hasInProgressLabel) {
+        categories.in_progress.push(issue);
+        return;
+      } else if (hasReadyLabel) {
+        categories.todo.push(issue);
+        return;
+      } else if (hasDoneLabel) {
+        categories.done.push(issue);
+        return;
+      }
+
+      // Check linkedPRs second (automatic categorization from PR state)
+      if (issue.linkedPRs && issue.linkedPRs.length > 0) {
+        // Categorize based on the state of linked PRs
+        const hasAnyMergedPR = issue.linkedPRs.some(pr => pr.merged);
+        const hasAnyOpenPR = issue.linkedPRs.some(pr => pr.state === "open" && !pr.merged);
+        const allPRsAreDraft = issue.linkedPRs.every(pr => pr.draft);
+        const hasAnyNonDraftPR = issue.linkedPRs.some(pr => !pr.draft && pr.state === "open");
+
+        if (hasAnyMergedPR) {
+          categories.done.push(issue);
+        } else if (hasAnyNonDraftPR) {
+          categories.in_review.push(issue);
+        } else if (hasAnyOpenPR && allPRsAreDraft) {
+          categories.in_progress.push(issue);
+        } else {
+          categories.in_progress.push(issue);
+        }
+        return;
+      }
+
+      // Fallback: Check if there's an associated PR using search strategies
       const associatedPR = prArray.find(pr => {
         // Strategy 1: PR title mentions the issue number
         if (pr.title.includes(`#${issue.number}`)) return true;
@@ -569,28 +953,7 @@ export default function IssueTrackerView() {
         return;
       }
 
-      // Check labels for explicit status indicators (higher priority than assignees)
-      const labelNames = issue.labels.map(l => l.name.toLowerCase());
-
-      const hasInReviewLabel = labelNames.some(name =>
-        name.includes("review") || name.includes("reviewing")
-      );
-
-      const hasInProgressLabel = labelNames.some(name =>
-        name.includes("progress") ||
-        name.includes("working") ||
-        name.includes("development") ||
-        name.includes("implementing") ||
-        name.includes("coding")
-      );
-
-      const hasReadyLabel = labelNames.some(name =>
-        name.includes("ready") ||
-        name.includes("todo") ||
-        name.includes("backlog") ||
-        name.includes("planned")
-      );
-
+      // Final fallback: Check other labels and assignees
       const hasBugLabel = labelNames.some(name =>
         name.includes("bug") ||
         name.includes("defect") ||
@@ -603,14 +966,8 @@ export default function IssueTrackerView() {
         name.includes("improvement")
       );
 
-      // Categorize based on labels first
-      if (hasInReviewLabel) {
-        categories.in_review.push(issue);
-      } else if (hasInProgressLabel) {
-        categories.in_progress.push(issue);
-      } else if (hasReadyLabel) {
-        categories.todo.push(issue);
-      } else if (issue.assignees.length > 0) {
+      // Categorize based on other indicators
+      if (issue.assignees.length > 0) {
         // If assigned but no explicit status label, assume in progress
         categories.in_progress.push(issue);
       } else if (hasBugLabel || hasEnhancementLabel) {
@@ -661,6 +1018,81 @@ export default function IssueTrackerView() {
     // TODO: Make GitHub API call to update the issue
     console.log("Would update issue via GitHub API:", updates);
   }, [updateIssue]);
+
+  const handleOpenPRAssignment = useCallback(async (issue: Issue) => {
+    console.log(`[TRACKER] 🔗 Opening PR assignment for issue #${issue.number}`);
+    console.log(`[TRACKER] 📊 Total PRs in store: ${pullRequests.size}`);
+    console.log(`[TRACKER] 📋 Selected repo: ${selectedRepo?.owner}/${selectedRepo?.name}`);
+
+    setSelectedIssueForPRAssignment(issue);
+    setShowPRAssignmentModal(true);
+
+    // Only fetch linked PRs if we don't already have them cached
+    if (selectedRepo && !issue.linkedPRs) {
+      console.log(`[TRACKER] 🔄 Fetching linked PRs for issue #${issue.number} (not cached)`);
+      await refreshIssueLinks(selectedRepo.owner, selectedRepo.name, issue.number);
+    } else {
+      console.log(`[TRACKER] ✅ Using cached linked PRs for issue #${issue.number}`);
+    }
+  }, [selectedRepo, refreshIssueLinks, pullRequests]);
+
+  const handleClosePRAssignmentModal = useCallback(() => {
+    setShowPRAssignmentModal(false);
+    setSelectedIssueForPRAssignment(null);
+  }, []);
+
+  const handleAssignPRs = useCallback(async (prNumbers: number[]) => {
+    if (!selectedIssueForPRAssignment || !selectedRepo) return;
+
+    console.log(`Assigning PRs ${prNumbers.join(', ')} to issue #${selectedIssueForPRAssignment.number}`);
+
+    try {
+      await linkPRsToIssue(
+        selectedRepo.owner,
+        selectedRepo.name,
+        selectedIssueForPRAssignment.number,
+        prNumbers
+      );
+      handleClosePRAssignmentModal();
+    } catch (error) {
+      console.error("Failed to assign PRs:", error);
+      // TODO: Show error message to user
+    }
+  }, [selectedIssueForPRAssignment, selectedRepo, linkPRsToIssue, handleClosePRAssignmentModal]);
+
+  const handleUnlinkPR = useCallback(async (issueNumber: number, prNumber: number) => {
+    if (!selectedRepo) return;
+
+    console.log(`Unlinking PR #${prNumber} from issue #${issueNumber}`);
+
+    try {
+      // The store will handle the optimistic update
+      await unlinkPRFromIssue(
+        selectedRepo.owner,
+        selectedRepo.name,
+        issueNumber,
+        prNumber
+      );
+    } catch (error) {
+      console.error("Failed to unlink PR:", error);
+      // Revert by refetching
+      if (selectedRepo) {
+        await refreshIssueLinks(selectedRepo.owner, selectedRepo.name, issueNumber);
+      }
+    }
+  }, [selectedRepo, unlinkPRFromIssue, refreshIssueLinks]);
+
+  const handleTogglePRGroup = useCallback((groupKey: string) => {
+    setExpandedPRGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupKey)) {
+        newSet.delete(groupKey);
+      } else {
+        newSet.add(groupKey);
+      }
+      return newSet;
+    });
+  }, []);
 
   const handleDrop = useCallback(
     async (issueData: any, targetColumn: KanbanColumn) => {
@@ -858,7 +1290,7 @@ export default function IssueTrackerView() {
       {/* Header */}
       <div
         className={cn(
-          "p-4 border-b",
+          "px-3 py-2 border-b",
           theme === "dark"
             ? "bg-gray-800 border-gray-700"
             : "bg-gray-50 border-gray-200"
@@ -866,24 +1298,24 @@ export default function IssueTrackerView() {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <h1 className="text-xl font-semibold flex items-center">
-              <GitBranch className="w-5 h-5 mr-2" />
+            <h1 className="text-base font-semibold flex items-center">
+              <GitBranch className="w-4 h-4 mr-1.5" />
               Issue Tracker
               <span
                 className={cn(
-                  "ml-2 text-sm",
+                  "ml-2 text-xs",
                   theme === "dark" ? "text-gray-500" : "text-gray-600"
                 )}
               >
-                ({Array.from(issues.values()).length} issues)
+                ({Array.from(issues.values()).length})
               </span>
             </h1>
           </div>
-          <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <span>Drag and drop issues between columns to update their status</span>
+          <div className="flex items-center space-x-2 text-xs text-gray-500">
+            <span>Drag and drop to update status</span>
             {isUpdatingIssue && (
               <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-2.5 h-2.5 border border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <span className="text-blue-600">Updating...</span>
               </div>
             )}
@@ -905,7 +1337,7 @@ export default function IssueTrackerView() {
           </div>
         ) : (
           <div className="h-full overflow-x-auto">
-            <div className="flex space-x-4 p-4 h-full min-w-max">
+            <div className="flex h-full min-w-max">
               {KANBAN_COLUMNS.map((column) => (
                 <KanbanColumn
                   key={column.id}
@@ -913,6 +1345,10 @@ export default function IssueTrackerView() {
                   issues={categorizedIssues[column.id]}
                   onIssueClick={handleIssueClick}
                   onQuickEdit={handleQuickEdit}
+                  onOpenPRAssignment={handleOpenPRAssignment}
+                  onUnlinkPR={handleUnlinkPR}
+                  expandedPRGroups={expandedPRGroups}
+                  onTogglePRGroup={handleTogglePRGroup}
                   onDrop={handleDrop}
                   theme={theme}
                   repoOwner={selectedRepo.owner}
@@ -932,6 +1368,35 @@ export default function IssueTrackerView() {
         onSave={handleQuickEditSave}
         theme={theme}
       />
+
+      {/* PR Assignment Modal */}
+      {showPRAssignmentModal && selectedRepo && (() => {
+        const allPRs = Array.from(pullRequests.values());
+        const repoPRs = allPRs.filter(pr => {
+          // Only show PRs from the current repo
+          const prRepo = pr.base?.repo?.owner?.login;
+          const prRepoName = pr.base?.repo?.name;
+          const matches = prRepo === selectedRepo.owner && prRepoName === selectedRepo.name;
+          if (!matches) {
+            console.log(`[TRACKER] ⏭️  Skipping PR #${pr.number}: ${prRepo}/${prRepoName} != ${selectedRepo.owner}/${selectedRepo.name}`);
+          }
+          return matches;
+        });
+
+        console.log(`[TRACKER] ✅ Passing ${repoPRs.length} PRs to modal (filtered from ${allPRs.length} total)`);
+
+        return (
+          <PRAssignmentModal
+            isOpen={showPRAssignmentModal}
+            onClose={handleClosePRAssignmentModal}
+            onAssign={handleAssignPRs}
+            availablePRs={repoPRs}
+            issueNumber={selectedIssueForPRAssignment?.number || 0}
+            issueTitle={selectedIssueForPRAssignment?.title || ""}
+            theme={theme}
+          />
+        );
+      })()}
     </div>
   );
 }
