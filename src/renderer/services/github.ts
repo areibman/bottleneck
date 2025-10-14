@@ -194,6 +194,31 @@ export class GitHubAPI {
     });
   }
 
+  async getRepositoryLabels(
+    owner: string,
+    repo: string,
+  ): Promise<Array<{ name: string; color: string }>> {
+    const allLabels: Array<{ name: string; color: string }> = [];
+    let page = 1;
+    const perPage = 100;
+    while (true) {
+      const { data } = await this.octokit.issues.listLabelsForRepo({
+        owner,
+        repo,
+        per_page: perPage,
+        page,
+      });
+      if (!Array.isArray(data) || data.length === 0) break;
+      for (const l of data) {
+        if (!l) continue;
+        allLabels.push({ name: l.name, color: (l as any).color || "000000" });
+      }
+      if (data.length < perPage) break;
+      page++;
+    }
+    return allLabels;
+  }
+
   async getRepositories(page = 1, perPage = 100): Promise<Repository[]> {
     const { data } = await this.octokit.repos.listForAuthenticatedUser({
       page,
