@@ -670,28 +670,56 @@ export const useIssueStore = create<IssueState>((set, get) => ({
             head: { ref: "devin/resolve-issue-" + issueNumber }
           }
         ];
+        const mockLinkedBranches = [
+          {
+            id: `mock-branch-${issueNumber}-1`,
+            refName: `hotfix/${issueNumber}-alpha`,
+            repository: {
+              owner,
+              name: repo,
+              url: `https://github.com/${owner}/${repo}`,
+            },
+            latestCommit: {
+              abbreviatedOid: "abc1234",
+              committedDate: new Date().toISOString(),
+              messageHeadline: "chore: update dependencies",
+              url: `https://github.com/${owner}/${repo}/commit/abc1234`,
+            },
+            associatedPullRequests: [mockLinkedPRs[0]],
+          },
+          {
+            id: `mock-branch-${issueNumber}-2`,
+            refName: `feature/${issueNumber}-beta`,
+            repository: {
+              owner,
+              name: repo,
+              url: `https://github.com/${owner}/${repo}`,
+            },
+            associatedPullRequests: [],
+          },
+        ];
 
         set((state) => {
           const newIssues = new Map(state.issues);
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
-            newIssues.set(key, { ...issue, linkedPRs: mockLinkedPRs });
+            newIssues.set(key, { ...issue, linkedPRs: mockLinkedPRs, linkedBranches: mockLinkedBranches });
           }
           return { issues: newIssues };
         });
       } else {
         const api = new GitHubAPI(token);
-        const linkedPRs = await api.getLinkedPRsForIssue(owner, repo, issueNumber);
+        const { branches, pullRequests } = await api.getIssueDevelopment(owner, repo, issueNumber);
 
-        console.log(`[STORE] 📥 refreshIssueLinks: Fetched ${linkedPRs.length} linked PRs for issue #${issueNumber}`);
+        console.log(`[STORE] 📥 refreshIssueLinks: Fetched ${branches.length} branches and ${pullRequests.length} PRs for issue #${issueNumber}`);
 
         set((state) => {
           const newIssues = new Map(state.issues);
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
-            newIssues.set(key, { ...issue, linkedPRs });
+            newIssues.set(key, { ...issue, linkedPRs: pullRequests, linkedBranches: branches });
           }
           return { issues: newIssues };
         });

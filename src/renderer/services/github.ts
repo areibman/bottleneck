@@ -85,6 +85,40 @@ export interface Repository {
   open_issues_count: number;
 }
 
+export interface IssueLinkedPullRequest {
+  id: number;
+  number: number;
+  state: "open" | "closed";
+  merged: boolean;
+  draft: boolean;
+  title: string;
+  head?: {
+    ref: string;
+  };
+  url?: string;
+  repository?: {
+    owner: string;
+    name: string;
+  };
+}
+
+export interface IssueLinkedBranch {
+  id: string;
+  refName: string;
+  repository: {
+    owner: string;
+    name: string;
+    url?: string | null;
+  };
+  latestCommit?: {
+    abbreviatedOid: string;
+    committedDate: string;
+    messageHeadline: string | null;
+    url?: string | null;
+  };
+  associatedPullRequests: IssueLinkedPullRequest[];
+}
+
 export interface Issue {
   id: number;
   number: number;
@@ -113,17 +147,8 @@ export interface Issue {
     };
     name: string;
   };
-  linkedPRs?: Array<{
-    id: number;
-    number: number;
-    state: "open" | "closed";
-    merged: boolean;
-    draft: boolean;
-    title: string;
-    head?: {
-      ref: string;
-    };
-  }>;
+  linkedPRs?: IssueLinkedPullRequest[];
+  linkedBranches?: IssueLinkedBranch[];
 }
 
 export interface Comment {
@@ -1561,39 +1586,75 @@ export class GitHubAPI {
   }
 
   /**
-   * Get linked PRs for an issue using GitHub's linkedBranches GraphQL query
-   * This uses the official Development section links
+   * Fetch the issue's development information (linked branches and pull requests).
    */
-  async getLinkedPRsForIssue(
+  async getIssueDevelopment(
     owner: string,
     repo: string,
     issueNumber: number
-  ): Promise<Array<{
-    id: number;
-    number: number;
-    state: "open" | "closed";
-    merged: boolean;
-    draft: boolean;
-    title: string;
-    head?: { ref: string };
-  }>> {
+  ): Promise<{
+    branches: IssueLinkedBranch[];
+    pullRequests: IssueLinkedPullRequest[];
+  }> {
     const query = `
       query($owner: String!, $repo: String!, $issueNumber: Int!) {
         repository(owner: $owner, name: $repo) {
           issue(number: $issueNumber) {
             linkedBranches(first: 100) {
               nodes {
+                id
                 ref {
                   name
+                  repository {
+                    name
+                    url
+                    owner {
+                      login
+                    }
+                  }
+                  target {
+                    ... on Commit {
+                      abbreviatedOid
+                      committedDate
+                      messageHeadline
+                      url
+                    }
+                  }
                   associatedPullRequests(first: 10) {
                     nodes {
+                      databaseId
                       number
                       title
                       state
                       merged
                       isDraft
                       headRefName
+                      url
+                      headRepository {
+                        name
+                        owner {
+                          login
+                        }
+                      }
                     }
+                  }
+                }
+              }
+            }
+            closedByPullRequestsReferences(first: 100) {
+              nodes {
+                databaseId
+                number
+                title
+                state
+                merged
+                isDraft
+                headRefName
+                url
+                headRepository {
+                  name
+                  owner {
+                    login
                   }
                 }
               }
@@ -1610,35 +1671,145 @@ export class GitHubAPI {
         issueNumber,
       });
 
-      const linkedBranches = response.repository?.issue?.linkedBranches?.nodes || [];
-      const prs: any[] = [];
-      const seenPRNumbers = new Set<number>();
+      const issueNode = response.repository?.issue;
 
-      // Extract PRs from linked branches
-      for (const branch of linkedBranches) {
-        const associatedPRs = branch.ref?.associatedPullRequests?.nodes || [];
-        for (const pr of associatedPRs) {
-          if (pr && pr.number && !seenPRNumbers.has(pr.number)) {
-            seenPRNumbers.add(pr.number);
-            prs.push({
-              id: pr.number,
-              number: pr.number,
-              state: pr.state === 'MERGED' || pr.merged ? 'closed' : pr.state.toLowerCase(),
-              merged: pr.merged || pr.state === 'MERGED',
-              draft: pr.isDraft || false,
-              title: pr.title,
-              head: pr.headRefName ? { ref: pr.headRefName } : undefined,
-            });
+      const mapPullRequest = (prNode: any): IssueLinkedPullRequest | null => {
+        if (!prNode || typeof prNode.number !== "number") {
+          return null;
+        }
+
+        const rawState = typeof prNode.state === "string" ? prNode.state.toUpperCase() : "";
+        const merged = Boolean(prNode.merged) || rawState === "MERGED";
+        const state: "open" | "closed" =
+          rawState === "OPEN" ? "open" : "closed";
+
+        const idCandidate =
+          typeof prNode.databaseId === "number" ? prNode.databaseId : prNode.number;
+
+        const pullRequest: IssueLinkedPullRequest = {
+          id: idCandidate,
+          number: prNode.number,
+          title: typeof prNode.title === "string" ? prNode.title : `PR #${prNode.number}`,
+          state,
+          merged,
+          draft: Boolean(prNode.isDraft),
+          head: prNode.headRefName ? { ref: prNode.headRefName } : undefined,
+          url: typeof prNode.url === "string" ? prNode.url : undefined,
+          repository: prNode.headRepository
+            ? {
+                owner: prNode.headRepository.owner?.login ?? owner,
+                name: prNode.headRepository.name ?? repo,
+              }
+            : undefined,
+        };
+
+        return pullRequest;
+      };
+
+      const branchNodes = issueNode?.linkedBranches?.nodes ?? [];
+      const branches: IssueLinkedBranch[] = [];
+      const prMap = new Map<number, IssueLinkedPullRequest>();
+
+      for (const branchNode of branchNodes) {
+        const ref = branchNode?.ref;
+        if (!ref || typeof ref.name !== "string") {
+          continue;
+        }
+
+        const repoInfo = ref.repository ?? {};
+        const associatedNodes = ref.associatedPullRequests?.nodes ?? [];
+        const associatedPullRequests: IssueLinkedPullRequest[] = [];
+
+        for (const prNode of associatedNodes) {
+          const mapped = mapPullRequest(prNode);
+          if (mapped && !prMap.has(mapped.number)) {
+            prMap.set(mapped.number, { ...mapped });
           }
+          if (mapped) {
+            associatedPullRequests.push(mapped);
+          }
+        }
+
+        const target = ref.target ?? {};
+        let latestCommit: IssueLinkedBranch["latestCommit"];
+        if (
+          typeof target === "object" &&
+          target !== null &&
+          typeof target.abbreviatedOid === "string" &&
+          typeof target.committedDate === "string"
+        ) {
+          latestCommit = {
+            abbreviatedOid: target.abbreviatedOid,
+            committedDate: target.committedDate,
+            messageHeadline:
+              typeof target.messageHeadline === "string" ? target.messageHeadline : null,
+            url: typeof target.url === "string" ? target.url : null,
+          };
+        }
+
+        const repositoryOwner =
+          repoInfo?.owner?.login ?? owner;
+        const repositoryName =
+          repoInfo?.name ?? repo;
+
+        branches.push({
+          id:
+            typeof branchNode?.id === "string"
+              ? branchNode.id
+              : `${repositoryOwner}/${repositoryName}#${ref.name}`,
+          refName: ref.name,
+          repository: {
+            owner: repositoryOwner,
+            name: repositoryName,
+            url: typeof repoInfo?.url === "string" ? repoInfo.url : null,
+          },
+          latestCommit,
+          associatedPullRequests,
+        });
+      }
+
+      const closingPRNodes =
+        issueNode?.closedByPullRequestsReferences?.nodes ?? [];
+      for (const prNode of closingPRNodes) {
+        const mapped = mapPullRequest(prNode);
+        if (mapped) {
+          prMap.set(mapped.number, mapped);
         }
       }
 
-      console.log(`✅ Fetched ${prs.length} linked PRs for issue #${issueNumber} from linkedBranches`);
-      return prs;
+      const pullRequests = Array.from(prMap.values());
+
+      console.log(
+        `[API] ✅ getIssueDevelopment: ${branches.length} branches, ${pullRequests.length} PRs for issue #${issueNumber}`,
+      );
+
+      return {
+        branches,
+        pullRequests,
+      };
     } catch (error) {
-      console.error('Error fetching linked PRs:', error);
-      return [];
+      console.error(
+        `[API] ❌ getIssueDevelopment: Failed for issue #${issueNumber}`,
+        error,
+      );
+      return {
+        branches: [],
+        pullRequests: [],
+      };
     }
+  }
+
+  /**
+   * Get linked PRs for an issue using the Development section links.
+   * Provided for compatibility with existing callers.
+   */
+  async getLinkedPRsForIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number
+  ): Promise<IssueLinkedPullRequest[]> {
+    const { pullRequests } = await this.getIssueDevelopment(owner, repo, issueNumber);
+    return pullRequests;
   }
 
   /**
