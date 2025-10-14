@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle,
@@ -75,7 +76,10 @@ export const IssueCard = React.memo(function IssueCard({
   repoOwner,
   repoName,
 }: IssueCardProps) {
+  const navigate = useNavigate();
   const [isBeingDragged, setIsBeingDragged] = useState(false);
+  const [showAllBranches, setShowAllBranches] = useState(false);
+  const [showAllPRs, setShowAllPRs] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData(
@@ -115,15 +119,15 @@ export const IssueCard = React.memo(function IssueCard({
         labels: [],
         head: pr.head
           ? {
-              ref: pr.head.ref,
-              sha: "",
-              repo: null,
-            }
+            ref: pr.head.ref,
+            sha: "",
+            repo: null,
+          }
           : {
-              ref: "",
-              sha: "",
-              repo: null,
-            },
+            ref: "",
+            sha: "",
+            repo: null,
+          },
         base: {
           ref: "",
           sha: "",
@@ -158,8 +162,13 @@ export const IssueCard = React.memo(function IssueCard({
   const linkedBranches = issue.linkedBranches ?? [];
   const linkedPRs = issue.linkedPRs ?? [];
   const hasDevelopment = linkedBranches.length > 0 || linkedPRs.length > 0;
+
   const maxBranchesToShow = 3;
   const maxPRsToShow = 3;
+  const branchesToShow = showAllBranches ? linkedBranches : linkedBranches.slice(0, maxBranchesToShow);
+  const prsToShow = showAllPRs ? linkedPRs : linkedPRs.slice(0, maxPRsToShow);
+  const hasMoreBranches = linkedBranches.length > maxBranchesToShow;
+  const hasMorePRs = linkedPRs.length > maxPRsToShow;
 
   const branchChipClasses =
     theme === "dark"
@@ -332,7 +341,7 @@ export const IssueCard = React.memo(function IssueCard({
         <div className="mt-2 space-y-1 text-[0.625rem]">
           {linkedBranches.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {linkedBranches.slice(0, maxBranchesToShow).map((branch) => {
+              {branchesToShow.map((branch) => {
                 const branchOwner = branch.repository.owner || repoOwner;
                 const branchRepo = branch.repository.name || repoName;
                 const repoSlug = `${branchOwner}/${branchRepo}`;
@@ -363,42 +372,48 @@ export const IssueCard = React.memo(function IssueCard({
                   </a>
                 );
               })}
-              {linkedBranches.length > maxBranchesToShow && (
-                <span
+              {hasMoreBranches && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAllBranches(!showAllBranches);
+                  }}
                   className={cn(
-                    "inline-flex items-center px-1.5 py-0.5 rounded border",
+                    "inline-flex items-center px-1.5 py-0.5 rounded border cursor-pointer",
                     moreChipClasses,
                   )}
+                  title={showAllBranches ? "Show less" : "Show all branches"}
                 >
-                  +{linkedBranches.length - maxBranchesToShow} more
-                </span>
+                  {showAllBranches ? "Show less" : `+${linkedBranches.length - maxBranchesToShow} more`}
+                </div>
               )}
             </div>
           )}
 
           {linkedPRs.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {linkedPRs.slice(0, maxPRsToShow).map((pr) => {
-                const prUrl =
-                  pr.url ||
-                  `https://github.com/${repoOwner}/${repoName}/pull/${pr.number}`;
+              {prsToShow.map((pr) => {
                 const statusLabel = pr.merged
                   ? "Merged"
                   : pr.state === "open"
-                  ? pr.draft
-                    ? "Draft"
-                    : "Open"
-                  : "Closed";
+                    ? pr.draft
+                      ? "Draft"
+                      : "Open"
+                    : "Closed";
+
+                const handlePRClick = (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  const prOwner = pr.repository?.owner || repoOwner;
+                  const prRepo = pr.repository?.name || repoName;
+                  navigate(`/pulls/${prOwner}/${prRepo}/${pr.number}`);
+                };
 
                 return (
-                  <a
+                  <div
                     key={`card-pr-${pr.number}`}
-                    href={prUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={handlePRClick}
                     className={cn(
-                      "inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors",
+                      "inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer",
                       getPRChipClasses(pr, theme),
                     )}
                     title={`PR #${pr.number} • ${statusLabel}`}
@@ -409,18 +424,23 @@ export const IssueCard = React.memo(function IssueCard({
                       <GitPullRequest className="w-2.5 h-2.5" />
                     )}
                     <span className="font-mono">#{pr.number}</span>
-                  </a>
+                  </div>
                 );
               })}
-              {linkedPRs.length > maxPRsToShow && (
-                <span
+              {hasMorePRs && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAllPRs(!showAllPRs);
+                  }}
                   className={cn(
-                    "inline-flex items-center px-1.5 py-0.5 rounded border",
+                    "inline-flex items-center px-1.5 py-0.5 rounded border cursor-pointer",
                     moreChipClasses,
                   )}
+                  title={showAllPRs ? "Show less" : "Show all PRs"}
                 >
-                  +{linkedPRs.length - maxPRsToShow} more
-                </span>
+                  {showAllPRs ? "Show less" : `+${linkedPRs.length - maxPRsToShow} more`}
+                </div>
               )}
             </div>
           )}
@@ -445,7 +465,7 @@ export const IssueCard = React.memo(function IssueCard({
             style={{ fontSize: "0.625rem" }}
           >
             <Plus className="w-2.5 h-2.5" />
-            <span>Add PRs</span>
+            <span>Link PRs</span>
           </button>
         ) : (
           <div className="space-y-1">

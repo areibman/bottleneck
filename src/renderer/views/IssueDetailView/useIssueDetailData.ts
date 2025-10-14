@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuthStore } from "../../stores/authStore";
 import { useIssueStore } from "../../stores/issueStore";
 import {
@@ -90,9 +90,28 @@ export function useIssueDetailData(
   { owner, repo, number }: UseIssueDetailParams,
 ): UseIssueDetailResult {
   const { token } = useAuthStore();
-  const { fetchRepoLabels, repoLabels } = useIssueStore();
+  const {
+    issues,
+    fetchRepoLabels,
+    repoLabels,
+    updateIssue,
+    closeIssues,
+    reopenIssues,
+    setIssueLabels,
+  } = useIssueStore();
 
-  const [issue, setIssue] = useState<Issue | null>(null);
+  // Compute issue key for looking up in the store
+  const issueKey = useMemo(() => {
+    if (!owner || !repo || !number) return null;
+    return `${owner}/${repo}#${number}`;
+  }, [owner, repo, number]);
+
+  // Get issue from store instead of local state
+  const issue = useMemo(() => {
+    if (!issueKey) return null;
+    return issues.get(issueKey) || null;
+  }, [issues, issueKey]);
+
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -183,7 +202,7 @@ export function useIssueDetailData(
           },
         ];
 
-        setIssue({
+        const issueWithMetadata = {
           ...(mockIssue as Issue),
           repository: {
             owner: { login: repoOwner },
@@ -191,7 +210,10 @@ export function useIssueDetailData(
           },
           linkedPRs: mockLinkedPullRequests,
           linkedBranches: mockLinkedBranches,
-        });
+        };
+
+        // Update the global store
+        updateIssue(issueWithMetadata);
         setComments(mockComments);
       } else {
         const api = new GitHubAPI(token);
@@ -203,11 +225,18 @@ export function useIssueDetailData(
           api.getIssueDevelopment(owner, repo, issueNumber),
         ]);
 
-        setIssue({
+        const issueWithMetadata = {
           ...issueData,
+          repository: {
+            owner: { login: owner },
+            name: repo,
+          },
           linkedPRs: development.pullRequests,
           linkedBranches: development.branches,
-        });
+        };
+
+        // Update the global store
+        updateIssue(issueWithMetadata);
         setComments(commentsData);
       }
     } catch (error) {
@@ -215,7 +244,7 @@ export function useIssueDetailData(
     } finally {
       setLoading(false);
     }
-  }, [owner, repo, number, token]);
+  }, [owner, repo, number, token, updateIssue]);
 
   useEffect(() => {
     if (owner && repo && number) {
@@ -285,7 +314,8 @@ export function useIssueDetailData(
 
       try {
         if (!token || token === "dev-token") {
-          setIssue({ ...issue, body: issueText });
+          const updatedIssue = { ...issue, body: issueText };
+          updateIssue(updatedIssue);
           setEditingIssue(false);
         } else {
           const api = new GitHubAPI(token);
@@ -295,14 +325,22 @@ export function useIssueDetailData(
             parseInt(numberArg),
             issueText,
           );
-          setIssue(updatedIssue);
+          // Ensure repository metadata is present
+          const issueWithMetadata = {
+            ...updatedIssue,
+            repository: {
+              owner: { login: ownerArg },
+              name: repoArg,
+            },
+          };
+          updateIssue(issueWithMetadata);
           setEditingIssue(false);
         }
       } catch (error) {
         console.error("Failed to update issue:", error);
       }
     },
-    [issue, owner, repo, number, token],
+    [issue, owner, repo, number, token, updateIssue],
   );
 
   const handleUpdateComment = useCallback(
@@ -375,29 +413,19 @@ export function useIssueDetailData(
       const ownerArg = issueOwner ?? owner;
       const repoArg = issueRepo ?? repo;
       const numberArg = issueNumber ?? number;
-      if (!ownerArg || !repoArg || !numberArg || !issue) return;
+      if (!ownerArg || !repoArg || !numberArg) return;
 
       setIsClosing(true);
       try {
-        if (!token || token === "dev-token") {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          setIssue({ ...issue, state: "closed" });
-        } else {
-          const api = new GitHubAPI(token);
-          const closedIssue = await api.closeIssue(
-            ownerArg,
-            repoArg,
-            parseInt(numberArg),
-          );
-          setIssue(closedIssue);
-        }
+        // Use the store action which handles both dev and real API calls
+        await closeIssues(ownerArg, repoArg, [parseInt(numberArg)]);
       } catch (error) {
         console.error("Failed to close issue:", error);
       } finally {
         setIsClosing(false);
       }
     },
-    [issue, owner, repo, number, token],
+    [owner, repo, number, closeIssues],
   );
 
   const handleReopenIssue = useCallback(
@@ -405,29 +433,19 @@ export function useIssueDetailData(
       const ownerArg = issueOwner ?? owner;
       const repoArg = issueRepo ?? repo;
       const numberArg = issueNumber ?? number;
-      if (!ownerArg || !repoArg || !numberArg || !issue) return;
+      if (!ownerArg || !repoArg || !numberArg) return;
 
       setIsReopening(true);
       try {
-        if (!token || token === "dev-token") {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          setIssue({ ...issue, state: "open" });
-        } else {
-          const api = new GitHubAPI(token);
-          const openedIssue = await api.reopenIssue(
-            ownerArg,
-            repoArg,
-            parseInt(numberArg),
-          );
-          setIssue(openedIssue);
-        }
+        // Use the store action which handles both dev and real API calls
+        await reopenIssues(ownerArg, repoArg, [parseInt(numberArg)]);
       } catch (error) {
         console.error("Failed to reopen issue:", error);
       } finally {
         setIsReopening(false);
       }
     },
-    [issue, owner, repo, number, token],
+    [owner, repo, number, reopenIssues],
   );
 
   const handleUpdateLabels = useCallback(
@@ -435,40 +453,17 @@ export function useIssueDetailData(
       const ownerArg = issueOwner ?? owner;
       const repoArg = issueRepo ?? repo;
       const numberArg = issueNumber ?? number;
-      if (!ownerArg || !repoArg || !numberArg || !issue) return;
+      if (!ownerArg || !repoArg || !numberArg) return;
 
       try {
-        if (!token || token === "dev-token") {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          const mockLabels = selectedLabels.map((name) => {
-            const existing = repoLabels.find((label) => label.name === name);
-            return existing
-              ? { name: existing.name, color: existing.color }
-              : {
-                  name,
-                  color: Math.floor(Math.random() * 16777215)
-                    .toString(16)
-                    .padStart(6, "0"),
-                };
-          });
-          setIssue({ ...issue, labels: mockLabels });
-          setEditingLabels(false);
-        } else {
-          const api = new GitHubAPI(token);
-          const updatedLabels = await api.setIssueLabels(
-            ownerArg,
-            repoArg,
-            parseInt(numberArg),
-            selectedLabels,
-          );
-          setIssue({ ...issue, labels: updatedLabels });
-          setEditingLabels(false);
-        }
+        // Use the store action which handles both dev and real API calls
+        await setIssueLabels(ownerArg, repoArg, parseInt(numberArg), selectedLabels);
+        setEditingLabels(false);
       } catch (error) {
         console.error("Failed to update labels:", error);
       }
     },
-    [issue, owner, repo, number, repoLabels, selectedLabels, token],
+    [owner, repo, number, selectedLabels, setIssueLabels],
   );
 
   const startEditingIssue = useCallback(() => {

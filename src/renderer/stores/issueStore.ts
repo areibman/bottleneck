@@ -719,7 +719,16 @@ export const useIssueStore = create<IssueState>((set, get) => ({
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
-            newIssues.set(key, { ...issue, linkedPRs: pullRequests, linkedBranches: branches });
+            const updatedIssue = { ...issue, linkedPRs: pullRequests, linkedBranches: branches };
+            newIssues.set(key, updatedIssue);
+            console.log(`[STORE] ✅ refreshIssueLinks: Updated issue #${issueNumber} in store`, {
+              oldBranches: issue.linkedBranches?.length ?? 'undefined',
+              newBranches: branches.length,
+              oldPRs: issue.linkedPRs?.length ?? 'undefined',
+              newPRs: pullRequests.length
+            });
+          } else {
+            console.warn(`[STORE] ⚠️  refreshIssueLinks: Issue #${issueNumber} not found in store with key: ${key}`);
           }
           return { issues: newIssues };
         });
