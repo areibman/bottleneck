@@ -13,6 +13,7 @@ import WelcomeView from "./WelcomeView";
 import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
+import { useAuthorTeamStore } from "../stores/authorTeamStore";
 
 type StatusType = PRStatusType; // Use the centralized type
 
@@ -50,6 +51,7 @@ export default function PRListView() {
     setPRListFilters,
   } = useUIStore();
   const { token } = useAuthStore();
+  const { teams } = useAuthorTeamStore();
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -221,6 +223,26 @@ export default function PRListView() {
           ...prev,
           selectedAuthors: Array.from(newSet),
         };
+      });
+    },
+    [authors, setPRListFilters],
+  );
+
+  const handleTeamToggle = useCallback(
+    (teamMembers: string[]) => {
+      setPRListFilters(prev => {
+        const newSet = new Set(prev.selectedAuthors);
+        const allSelected = teamMembers.every(m => newSet.has(m));
+        if (allSelected) {
+          teamMembers.forEach(m => newSet.delete(m));
+          newSet.delete("all");
+        } else {
+          teamMembers.forEach(m => newSet.add(m));
+          if (authors.every(a => newSet.has(a.login))) {
+            newSet.add("all");
+          }
+        }
+        return { ...prev, selectedAuthors: Array.from(newSet) };
       });
     },
     [authors, setPRListFilters],
@@ -846,6 +868,39 @@ export default function PRListView() {
                         theme === "dark" ? "border-gray-700" : "border-gray-200"
                       )} />
 
+                      {/* Individual authors */}
+                      {/* Teams section */}
+                      {teams.length > 0 && (
+                        <>
+                          <div className={cn(
+                            "my-1 border-t",
+                            theme === "dark" ? "border-gray-700" : "border-gray-200",
+                          )} />
+                          <div className="px-2 py-1 text-xs font-semibold opacity-70">Teams</div>
+                          {teams.map(team => {
+                            const allSelected = team.members.every(m => selectedAuthors.has(m));
+                            return (
+                              <label
+                                key={team.id}
+                                className={cn(
+                                  "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                                  theme === "dark" ? "hover:bg-gray-700" : "hover:bg-gray-50",
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={allSelected}
+                                  onChange={() => handleTeamToggle(team.members)}
+                                  className="rounded"
+                                />
+                                <span className="text-sm font-medium truncate">
+                                  {team.name} ({team.members.length})
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </>
+                      )}
                       {/* Individual authors */}
                       {authors.map(author => (
                         <label
