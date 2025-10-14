@@ -226,6 +226,7 @@ export function PRTreeView({
   );
 
   const [hoveredGroup, setHoveredGroup] = useState<TreeItemIndex | null>(null);
+  const [closingGroup, setClosingGroup] = useState<TreeItemIndex | null>(null);
 
   return (
     <span className="pr-tree-view-container">
@@ -414,31 +415,54 @@ export function PRTreeView({
                       )}
                     </div>
 
-                    {item.data.closablePRIds && item.data.closablePRIds.length > 0 && hoveredGroup === item.index && (
+                    {item.data.closablePRIds && item.data.closablePRIds.length > 0 && (hoveredGroup === item.index || closingGroup === item.index) && (
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          onCloseGroup(item.data.closablePRIds ?? []);
+                          if (closingGroup === item.index) return; // Prevent double-click
+                          
+                          setClosingGroup(item.index);
                           setHoveredGroup(null);
+                          
+                          try {
+                            await onCloseGroup(item.data.closablePRIds ?? []);
+                          } finally {
+                            setClosingGroup(null);
+                          }
                         }}
-                        onKeyDown={(event) => {
+                        onKeyDown={async (event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             event.stopPropagation();
-                            onCloseGroup(item.data.closablePRIds ?? []);
+                            if (closingGroup === item.index) return; // Prevent double-action
+                            
+                            setClosingGroup(item.index);
                             setHoveredGroup(null);
+                            
+                            try {
+                              await onCloseGroup(item.data.closablePRIds ?? []);
+                            } finally {
+                              setClosingGroup(null);
+                            }
                           }
                         }}
                         className={cn(
-                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors cursor-pointer",
+                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors",
+                          closingGroup === item.index
+                            ? "cursor-not-allowed opacity-75"
+                            : "cursor-pointer",
                           theme === "dark"
-                            ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
-                            : "border-red-400 text-red-600 hover:bg-red-50"
+                            ? closingGroup === item.index
+                              ? "border-red-500/40 text-red-400 bg-red-900/20"
+                              : "border-red-500/60 text-red-300 hover:bg-red-900/40"
+                            : closingGroup === item.index
+                              ? "border-red-300 text-red-500 bg-red-50"
+                              : "border-red-400 text-red-600 hover:bg-red-50"
                         )}
                       >
-                        Close unmerged PRs?
+                        {closingGroup === item.index ? "Closing..." : "Close unmerged PRs?"}
                       </div>
                     )}
                   </>
