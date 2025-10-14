@@ -55,6 +55,7 @@ export default function PRListView() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [closingGroupId, setClosingGroupId] = useState<string | null>(null);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -524,8 +525,10 @@ export default function PRListView() {
   }, [closePRIds, closableSelectedPRIds]);
 
   const handleCloseGroup = useCallback(
-    async (prIds: string[]) => {
+    async (groupId: string, prIds: string[]) => {
+      setClosingGroupId(groupId);
       await closePRIds(prIds);
+      setClosingGroupId(null);
     },
     [closePRIds],
   );
@@ -920,6 +923,7 @@ export default function PRListView() {
             onToggleGroupSelection={handleGroupSelection}
             onPRClick={handlePRClick}
             onCloseGroup={handleCloseGroup}
+            closingGroupId={closingGroupId}
           />
         )}
       </div>
