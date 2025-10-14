@@ -80,9 +80,6 @@ interface KanbanColumnProps {
   onIssueClick: (issue: Issue) => void;
   onQuickEdit: (issue: Issue) => void;
   onOpenPRAssignment: (issue: Issue) => void;
-  onUnlinkPR: (issueNumber: number, prNumber: number) => void;
-  expandedPRGroups: Set<string>;
-  onTogglePRGroup: (groupKey: string) => void;
   onDrop: (issueData: any, targetColumn: KanbanColumn) => void;
   theme: "light" | "dark";
   repoOwner: string;
@@ -95,9 +92,6 @@ const KanbanColumnComponent = React.memo(function KanbanColumnComponent({
   onIssueClick,
   onQuickEdit,
   onOpenPRAssignment,
-  onUnlinkPR,
-  expandedPRGroups,
-  onTogglePRGroup,
   onDrop,
   theme,
   repoOwner,
@@ -177,9 +171,6 @@ const KanbanColumnComponent = React.memo(function KanbanColumnComponent({
               onIssueClick={onIssueClick}
               onQuickEdit={onQuickEdit}
               onOpenPRAssignment={onOpenPRAssignment}
-              onUnlinkPR={onUnlinkPR}
-              expandedPRGroups={expandedPRGroups}
-              onTogglePRGroup={onTogglePRGroup}
               theme={theme}
               repoOwner={repoOwner}
               repoName={repoName}
@@ -204,7 +195,6 @@ export default function IssueTrackerView() {
     closeIssues,
     reopenIssues,
     linkPRsToIssue,
-    unlinkPRFromIssue,
     refreshIssueLinks,
   } = useIssueStore();
   const { selectedRepo, pullRequests, fetchPullRequests } = usePRStore();
@@ -215,7 +205,6 @@ export default function IssueTrackerView() {
   const [isUpdatingIssue, setIsUpdatingIssue] = useState(false);
   const [selectedIssueForPRAssignment, setSelectedIssueForPRAssignment] = useState<Issue | null>(null);
   const [showPRAssignmentModal, setShowPRAssignmentModal] = useState(false);
-  const [expandedPRGroups, setExpandedPRGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (selectedRepo) {
@@ -427,39 +416,6 @@ export default function IssueTrackerView() {
     ],
   );
 
-  const handleUnlinkPR = useCallback(
-    async (issueNumber: number, prNumber: number) => {
-      if (!selectedRepo) return;
-      try {
-        await unlinkPRFromIssue(
-          selectedRepo.owner,
-          selectedRepo.name,
-          issueNumber,
-          prNumber,
-        );
-      } catch (error) {
-        console.error("Failed to unlink PR:", error);
-        await refreshIssueLinks(
-          selectedRepo.owner,
-          selectedRepo.name,
-          issueNumber,
-        );
-      }
-    },
-    [selectedRepo, unlinkPRFromIssue, refreshIssueLinks],
-  );
-
-  const handleTogglePRGroup = useCallback((groupKey: string) => {
-    setExpandedPRGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) {
-        next.delete(groupKey);
-      } else {
-        next.add(groupKey);
-      }
-      return next;
-    });
-  }, []);
 
   const handleDrop = useCallback(
     async (issueData: any, targetColumn: KanbanColumn) => {
@@ -636,9 +592,6 @@ export default function IssueTrackerView() {
                   onIssueClick={handleIssueClick}
                   onQuickEdit={handleQuickEdit}
                   onOpenPRAssignment={handleOpenPRAssignment}
-                  onUnlinkPR={handleUnlinkPR}
-                  expandedPRGroups={expandedPRGroups}
-                  onTogglePRGroup={handleTogglePRGroup}
                   onDrop={handleDrop}
                   theme={theme}
                   repoOwner={selectedRepo.owner}

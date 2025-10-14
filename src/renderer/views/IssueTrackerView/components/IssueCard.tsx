@@ -1,85 +1,37 @@
-import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
 import {
   AlertCircle,
   CheckCircle,
   MessageSquare,
-  GitBranch,
-  GitPullRequest,
-  GitMerge,
   Edit3,
-  X,
-  ChevronDown,
-  ChevronRight,
   Plus,
 } from "lucide-react";
-import { Issue, PullRequest } from "../../../services/github";
+import { Issue } from "../../../services/github";
 import { cn } from "../../../utils/cn";
 import { formatDistanceToNow } from "date-fns";
 import { getLabelColors } from "../../../utils/labelColors";
-import {
-  PRMetadata,
-  getPRMetadata,
-  groupPRsByAgent,
-  groupPRsByPrefix,
-  isGroupClosed,
-} from "../../../utils/prGrouping";
+import { IssueDevelopmentTreeView } from "./IssueDevelopmentTreeView";
 
 export interface IssueCardProps {
   issue: Issue;
   onIssueClick: (issue: Issue) => void;
   onQuickEdit: (issue: Issue) => void;
   onOpenPRAssignment: (issue: Issue) => void;
-  onUnlinkPR: (issueNumber: number, prNumber: number) => void;
-  expandedPRGroups: Set<string>;
-  onTogglePRGroup: (groupKey: string) => void;
   theme: "light" | "dark";
   repoOwner: string;
   repoName: string;
 }
-
-type LinkedPR = NonNullable<Issue["linkedPRs"]>[number];
-
-const getPRChipClasses = (pr: LinkedPR, theme: "light" | "dark") => {
-  if (pr.merged) {
-    return theme === "dark"
-      ? "bg-green-900/40 text-green-200 border border-green-700 hover:bg-green-900/60"
-      : "bg-green-100 text-green-700 border border-green-200 hover:bg-green-200";
-  }
-
-  if (pr.state === "open") {
-    if (pr.draft) {
-      return theme === "dark"
-        ? "bg-purple-900/40 text-purple-200 border border-purple-700 hover:bg-purple-900/60"
-        : "bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200";
-    }
-
-    return theme === "dark"
-      ? "bg-blue-900/40 text-blue-200 border border-blue-700 hover:bg-blue-900/60"
-      : "bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200";
-  }
-
-  return theme === "dark"
-    ? "bg-gray-700 text-gray-300 border border-gray-600 hover:bg-gray-600"
-    : "bg-gray-200 text-gray-700 border border-gray-300 hover:bg-gray-300";
-};
 
 export const IssueCard = React.memo(function IssueCard({
   issue,
   onIssueClick,
   onQuickEdit,
   onOpenPRAssignment,
-  onUnlinkPR,
-  expandedPRGroups,
-  onTogglePRGroup,
   theme,
   repoOwner,
   repoName,
 }: IssueCardProps) {
-  const navigate = useNavigate();
   const [isBeingDragged, setIsBeingDragged] = useState(false);
-  const [showAllBranches, setShowAllBranches] = useState(false);
-  const [showAllPRs, setShowAllPRs] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData(
@@ -106,78 +58,9 @@ export const IssueCard = React.memo(function IssueCard({
     onOpenPRAssignment(issue);
   };
 
-  const groupedPRs = useMemo((): Map<string, Map<string, PRMetadata[]>> => {
-    if (!issue.linkedPRs || issue.linkedPRs.length === 0) {
-      return new Map();
-    }
-
-    const linkedPRsWithMetadata = issue.linkedPRs.map((pr) => {
-      const fakePR: PullRequest = {
-        ...pr,
-        user: { login: "", avatar_url: "" },
-        body: null,
-        labels: [],
-        head: pr.head
-          ? {
-            ref: pr.head.ref,
-            sha: "",
-            repo: null,
-          }
-          : {
-            ref: "",
-            sha: "",
-            repo: null,
-          },
-        base: {
-          ref: "",
-          sha: "",
-          repo: {
-            name: repoName,
-            owner: { login: repoOwner },
-          },
-        },
-        assignees: [],
-        requested_reviewers: [],
-        comments: 0,
-        created_at: "",
-        updated_at: "",
-        closed_at: null,
-        merged_at: null,
-        mergeable: null,
-        merge_commit_sha: null,
-      };
-      return getPRMetadata(fakePR);
-    });
-
-    const byAgent = groupPRsByAgent(linkedPRsWithMetadata);
-    const nestedGroups = new Map<string, Map<string, PRMetadata[]>>();
-
-    for (const [agent, agentPRs] of byAgent) {
-      nestedGroups.set(agent, groupPRsByPrefix(agentPRs));
-    }
-
-    return nestedGroups;
-  }, [issue.linkedPRs, repoOwner, repoName]);
-
-  const linkedBranches = issue.linkedBranches ?? [];
-  const linkedPRs = issue.linkedPRs ?? [];
-  const hasDevelopment = linkedBranches.length > 0 || linkedPRs.length > 0;
-
-  const maxBranchesToShow = 3;
-  const maxPRsToShow = 3;
-  const branchesToShow = showAllBranches ? linkedBranches : linkedBranches.slice(0, maxBranchesToShow);
-  const prsToShow = showAllPRs ? linkedPRs : linkedPRs.slice(0, maxPRsToShow);
-  const hasMoreBranches = linkedBranches.length > maxBranchesToShow;
-  const hasMorePRs = linkedPRs.length > maxPRsToShow;
-
-  const branchChipClasses =
-    theme === "dark"
-      ? "bg-gray-800 text-gray-200 border border-gray-700 hover:bg-gray-700"
-      : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200";
-  const moreChipClasses =
-    theme === "dark"
-      ? "bg-gray-700 text-gray-300 border border-gray-600"
-      : "bg-gray-200 text-gray-600 border border-gray-300";
+  const hasDevelopment =
+    (issue.linkedBranches && issue.linkedBranches.length > 0) ||
+    (issue.linkedPRs && issue.linkedPRs.length > 0);
 
   return (
     <div
@@ -337,353 +220,35 @@ export const IssueCard = React.memo(function IssueCard({
         </div>
       )}
 
-      {hasDevelopment && (
-        <div className="mt-2 space-y-1 text-[0.625rem]">
-          {linkedBranches.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {branchesToShow.map((branch) => {
-                const branchOwner = branch.repository.owner || repoOwner;
-                const branchRepo = branch.repository.name || repoName;
-                const repoSlug = `${branchOwner}/${branchRepo}`;
-                const baseUrl = branch.repository.url
-                  ? branch.repository.url.replace(/\/$/, "")
-                  : `https://github.com/${repoSlug}`;
-                const branchUrl = `${baseUrl}/tree/${encodeURIComponent(
-                  branch.refName,
-                )}`;
-
-                return (
-                  <a
-                    key={branch.id}
-                    href={branchUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      "inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors",
-                      branchChipClasses,
-                    )}
-                    title={`${repoSlug}:${branch.refName}`}
-                  >
-                    <GitBranch className="w-2.5 h-2.5" />
-                    <span className="max-w-[7rem] truncate">
-                      {branch.refName}
-                    </span>
-                  </a>
-                );
-              })}
-              {hasMoreBranches && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowAllBranches(!showAllBranches);
-                  }}
-                  className={cn(
-                    "inline-flex items-center px-1.5 py-0.5 rounded border cursor-pointer",
-                    moreChipClasses,
-                  )}
-                  title={showAllBranches ? "Show less" : "Show all branches"}
-                >
-                  {showAllBranches ? "Show less" : `+${linkedBranches.length - maxBranchesToShow} more`}
-                </div>
-              )}
-            </div>
-          )}
-
-          {linkedPRs.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {prsToShow.map((pr) => {
-                const statusLabel = pr.merged
-                  ? "Merged"
-                  : pr.state === "open"
-                    ? pr.draft
-                      ? "Draft"
-                      : "Open"
-                    : "Closed";
-
-                const handlePRClick = (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  const prOwner = pr.repository?.owner || repoOwner;
-                  const prRepo = pr.repository?.name || repoName;
-                  navigate(`/pulls/${prOwner}/${prRepo}/${pr.number}`);
-                };
-
-                return (
-                  <div
-                    key={`card-pr-${pr.number}`}
-                    onClick={handlePRClick}
-                    className={cn(
-                      "inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer",
-                      getPRChipClasses(pr, theme),
-                    )}
-                    title={`PR #${pr.number} • ${statusLabel}`}
-                  >
-                    {pr.merged ? (
-                      <GitMerge className="w-2.5 h-2.5" />
-                    ) : (
-                      <GitPullRequest className="w-2.5 h-2.5" />
-                    )}
-                    <span className="font-mono">#{pr.number}</span>
-                  </div>
-                );
-              })}
-              {hasMorePRs && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowAllPRs(!showAllPRs);
-                  }}
-                  className={cn(
-                    "inline-flex items-center px-1.5 py-0.5 rounded border cursor-pointer",
-                    moreChipClasses,
-                  )}
-                  title={showAllPRs ? "Show less" : "Show all PRs"}
-                >
-                  {showAllPRs ? "Show less" : `+${linkedPRs.length - maxPRsToShow} more`}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       <div
         className={cn(
           "mt-2 pt-2 border-t",
           theme === "dark" ? "border-gray-700" : "border-gray-200",
         )}
       >
-        {groupedPRs.size === 0 ? (
-          <button
-            onClick={handleOpenPRAssignmentClick}
-            className={cn(
-              "w-full flex items-center justify-center space-x-1 py-1.5 px-2 rounded transition-colors",
-              theme === "dark"
-                ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                : "bg-gray-100 hover:bg-gray-200 text-gray-600",
-            )}
-            style={{ fontSize: "0.625rem" }}
-          >
-            <Plus className="w-2.5 h-2.5" />
-            <span>Link PRs</span>
-          </button>
-        ) : (
-          <div className="space-y-1">
-            {Array.from(groupedPRs.entries()).map(([agent, taskGroups]) => {
-              const groupKey = `${issue.id}-${agent}`;
-              const isExpanded = expandedPRGroups.has(groupKey);
-              const allAgentPRs = Array.from(taskGroups.values()).flat();
-              const groupIsClosed = isGroupClosed(allAgentPRs);
-              const prCount = allAgentPRs.length;
+        {hasDevelopment ? (
+          <IssueDevelopmentTreeView
+            issue={issue}
+            theme={theme}
+            repoOwner={repoOwner}
+            repoName={repoName}
+          />
+        ) : null}
 
-              return (
-                <div key={agent}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTogglePRGroup(groupKey);
-                    }}
-                    className={cn(
-                      "w-full flex items-center justify-between p-1.5 rounded transition-colors",
-                      theme === "dark"
-                        ? "bg-gray-700 hover:bg-gray-600"
-                        : "bg-gray-100 hover:bg-gray-200",
-                    )}
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      {isExpanded ? (
-                        <ChevronDown className="w-2.5 h-2.5" />
-                      ) : (
-                        <ChevronRight className="w-2.5 h-2.5" />
-                      )}
-                      <span
-                        className="font-medium capitalize"
-                        style={{ fontSize: "0.625rem" }}
-                      >
-                        {agent}
-                      </span>
-                      <span
-                        className={cn(
-                          "px-1 py-0.5 rounded",
-                          theme === "dark" ? "bg-gray-600" : "bg-gray-200",
-                        )}
-                        style={{ fontSize: "0.625rem" }}
-                      >
-                        {prCount}
-                      </span>
-                      {groupIsClosed && (
-                        <span
-                          className="px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          style={{ fontSize: "0.625rem" }}
-                        >
-                          Closed
-                        </span>
-                      )}
-                    </div>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="ml-3 mt-0.5 space-y-0.5">
-                      {Array.from(taskGroups.entries()).map(
-                        ([taskPrefix, taskPRs]) => {
-                          const taskKey = `${issue.id}-${agent}-${taskPrefix}`;
-                          const isTaskExpanded =
-                            expandedPRGroups.has(taskKey);
-                          const taskClosed = isGroupClosed(taskPRs);
-
-                          if (taskPRs.length === 1) {
-                            const prMeta = taskPRs[0];
-                            return (
-                              <div
-                                key={taskPrefix}
-                                className={cn(
-                                  "flex items-center justify-between py-0.5 px-1.5 rounded",
-                                  theme === "dark"
-                                    ? "bg-gray-800"
-                                    : "bg-white border border-gray-200",
-                                )}
-                              >
-                                <div className="flex items-center space-x-1.5 flex-1 min-w-0">
-                                  <GitPullRequest className="w-2.5 h-2.5 flex-shrink-0" />
-                                  <span
-                                    className="font-mono"
-                                    style={{ fontSize: "0.625rem" }}
-                                  >
-                                    #{prMeta.pr.number}
-                                  </span>
-                                  <span
-                                    className="truncate"
-                                    style={{ fontSize: "0.625rem" }}
-                                  >
-                                    {prMeta.pr.title}
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onUnlinkPR(
-                                      issue.number,
-                                      prMeta.pr.number,
-                                    );
-                                  }}
-                                  className={cn(
-                                    "ml-1 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30",
-                                    "text-red-600 dark:text-red-400",
-                                  )}
-                                  title="Unlink PR"
-                                >
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div key={taskPrefix}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onTogglePRGroup(taskKey);
-                                }}
-                                className={cn(
-                                  "w-full flex items-center justify-between p-1 rounded transition-colors",
-                                  theme === "dark"
-                                    ? "bg-gray-800 hover:bg-gray-750"
-                                    : "bg-white hover:bg-gray-50 border border-gray-200",
-                                )}
-                              >
-                                <div className="flex items-center space-x-1 flex-1 min-w-0">
-                                  {isTaskExpanded ? (
-                                    <ChevronDown className="w-2 h-2" />
-                                  ) : (
-                                    <ChevronRight className="w-2 h-2" />
-                                  )}
-                                  <span
-                                    className="truncate"
-                                    style={{ fontSize: "0.625rem" }}
-                                  >
-                                    {taskPrefix}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "px-1 py-0.5 rounded flex-shrink-0",
-                                      theme === "dark"
-                                        ? "bg-gray-700"
-                                        : "bg-gray-200",
-                                    )}
-                                    style={{ fontSize: "0.625rem" }}
-                                  >
-                                    {taskPRs.length}
-                                  </span>
-                                  {taskClosed && (
-                                    <span
-                                      className="px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 flex-shrink-0"
-                                      style={{ fontSize: "0.625rem" }}
-                                    >
-                                      Closed
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-
-                              {isTaskExpanded && (
-                                <div className="ml-3 mt-0.5 space-y-0.5">
-                                  {taskPRs.map((prMeta) => (
-                                    <div
-                                      key={prMeta.pr.number}
-                                      className={cn(
-                                        "flex items-center justify-between py-0.5 px-1.5 rounded",
-                                        theme === "dark"
-                                          ? "bg-gray-900"
-                                          : "bg-gray-50 border border-gray-200",
-                                      )}
-                                    >
-                                      <div className="flex items-center space-x-1.5 flex-1 min-w-0">
-                                        <GitPullRequest className="w-2 h-2 flex-shrink-0" />
-                                        <span
-                                          className="font-mono"
-                                          style={{ fontSize: "0.625rem" }}
-                                        >
-                                          #{prMeta.pr.number}
-                                        </span>
-                                        <span
-                                          className="truncate"
-                                          style={{ fontSize: "0.625rem" }}
-                                        >
-                                          {prMeta.pr.title}
-                                        </span>
-                                      </div>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onUnlinkPR(
-                                            issue.number,
-                                            prMeta.pr.number,
-                                          );
-                                        }}
-                                        className={cn(
-                                          "ml-1 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30",
-                                          "text-red-600 dark:text-red-400",
-                                        )}
-                                        title="Unlink PR"
-                                      >
-                                        <X className="w-2 h-2" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        },
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div
+          onClick={handleOpenPRAssignmentClick}
+          className={cn(
+            "w-full flex items-center justify-center space-x-1 py-1.5 px-2 rounded transition-colors cursor-pointer",
+            theme === "dark"
+              ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              : "bg-gray-100 hover:bg-gray-200 text-gray-600",
+            hasDevelopment && "mt-2",
+          )}
+          style={{ fontSize: "0.625rem" }}
+        >
+          <Plus className="w-2.5 h-2.5" />
+          <span>Link PRs</span>
+        </div>
       </div>
     </div>
   );
