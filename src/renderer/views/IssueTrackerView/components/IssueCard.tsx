@@ -58,9 +58,7 @@ export const IssueCard = React.memo(function IssueCard({
     onOpenPRAssignment(issue);
   };
 
-  const hasDevelopment =
-    (issue.linkedBranches && issue.linkedBranches.length > 0) ||
-    (issue.linkedPRs && issue.linkedPRs.length > 0);
+  const hasDevelopment = issue.linkedPRs && issue.linkedPRs.length > 0;
 
   return (
     <div

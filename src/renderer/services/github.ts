@@ -148,6 +148,7 @@ export interface Issue {
     name: string;
   };
   linkedPRs?: IssueLinkedPullRequest[];
+  /** @deprecated Branch linking is no longer used. Use linkedPRs only. */
   linkedBranches?: IssueLinkedBranch[];
 }
 
@@ -1586,61 +1587,21 @@ export class GitHubAPI {
   }
 
   /**
-   * Fetch the issue's development information (linked branches and pull requests).
+   * Fetch the issue's development information (linked pull requests via closing keywords).
+   * Note: This only returns PRs that reference the issue via closing keywords (Fixes/Closes/Resolves).
+   * Branches are no longer tracked to avoid unnecessary branch creation.
    */
   async getIssueDevelopment(
     owner: string,
     repo: string,
     issueNumber: number
   ): Promise<{
-    branches: IssueLinkedBranch[];
     pullRequests: IssueLinkedPullRequest[];
   }> {
     const query = `
       query($owner: String!, $repo: String!, $issueNumber: Int!) {
         repository(owner: $owner, name: $repo) {
           issue(number: $issueNumber) {
-            linkedBranches(first: 100) {
-              nodes {
-                id
-                ref {
-                  name
-                  repository {
-                    name
-                    url
-                    owner {
-                      login
-                    }
-                  }
-                  target {
-                    ... on Commit {
-                      abbreviatedOid
-                      committedDate
-                      messageHeadline
-                      url
-                    }
-                  }
-                  associatedPullRequests(first: 10) {
-                    nodes {
-                      databaseId
-                      number
-                      title
-                      state
-                      merged
-                      isDraft
-                      headRefName
-                      url
-                      headRepository {
-                        name
-                        owner {
-                          login
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
             closedByPullRequestsReferences(first: 100) {
               nodes {
                 databaseId
@@ -1697,94 +1658,31 @@ export class GitHubAPI {
           url: typeof prNode.url === "string" ? prNode.url : undefined,
           repository: prNode.headRepository
             ? {
-                owner: prNode.headRepository.owner?.login ?? owner,
-                name: prNode.headRepository.name ?? repo,
-              }
+              owner: prNode.headRepository.owner?.login ?? owner,
+              name: prNode.headRepository.name ?? repo,
+            }
             : undefined,
         };
 
         return pullRequest;
       };
 
-      const branchNodes = issueNode?.linkedBranches?.nodes ?? [];
-      const branches: IssueLinkedBranch[] = [];
-      const prMap = new Map<number, IssueLinkedPullRequest>();
-
-      for (const branchNode of branchNodes) {
-        const ref = branchNode?.ref;
-        if (!ref || typeof ref.name !== "string") {
-          continue;
-        }
-
-        const repoInfo = ref.repository ?? {};
-        const associatedNodes = ref.associatedPullRequests?.nodes ?? [];
-        const associatedPullRequests: IssueLinkedPullRequest[] = [];
-
-        for (const prNode of associatedNodes) {
-          const mapped = mapPullRequest(prNode);
-          if (mapped && !prMap.has(mapped.number)) {
-            prMap.set(mapped.number, { ...mapped });
-          }
-          if (mapped) {
-            associatedPullRequests.push(mapped);
-          }
-        }
-
-        const target = ref.target ?? {};
-        let latestCommit: IssueLinkedBranch["latestCommit"];
-        if (
-          typeof target === "object" &&
-          target !== null &&
-          typeof target.abbreviatedOid === "string" &&
-          typeof target.committedDate === "string"
-        ) {
-          latestCommit = {
-            abbreviatedOid: target.abbreviatedOid,
-            committedDate: target.committedDate,
-            messageHeadline:
-              typeof target.messageHeadline === "string" ? target.messageHeadline : null,
-            url: typeof target.url === "string" ? target.url : null,
-          };
-        }
-
-        const repositoryOwner =
-          repoInfo?.owner?.login ?? owner;
-        const repositoryName =
-          repoInfo?.name ?? repo;
-
-        branches.push({
-          id:
-            typeof branchNode?.id === "string"
-              ? branchNode.id
-              : `${repositoryOwner}/${repositoryName}#${ref.name}`,
-          refName: ref.name,
-          repository: {
-            owner: repositoryOwner,
-            name: repositoryName,
-            url: typeof repoInfo?.url === "string" ? repoInfo.url : null,
-          },
-          latestCommit,
-          associatedPullRequests,
-        });
-      }
-
       const closingPRNodes =
         issueNode?.closedByPullRequestsReferences?.nodes ?? [];
+      const pullRequests: IssueLinkedPullRequest[] = [];
+
       for (const prNode of closingPRNodes) {
         const mapped = mapPullRequest(prNode);
         if (mapped) {
-          prMap.set(mapped.number, mapped);
+          pullRequests.push(mapped);
         }
       }
 
-      const pullRequests = Array.from(prMap.values());
-
       console.log(
-        `[API] ✅ getIssueDevelopment: ${branches.length} branches, ${pullRequests.length} PRs for issue #${issueNumber}`,
+        `[API] ✅ getIssueDevelopment: ${pullRequests.length} PRs for issue #${issueNumber}`,
       );
 
       return {
-        branches,
         pullRequests,
       };
     } catch (error) {
@@ -1793,14 +1691,13 @@ export class GitHubAPI {
         error,
       );
       return {
-        branches: [],
         pullRequests: [],
       };
     }
   }
 
   /**
-   * Get linked PRs for an issue using the Development section links.
+   * Get linked PRs for an issue via closing keywords.
    * Provided for compatibility with existing callers.
    */
   async getLinkedPRsForIssue(
@@ -1850,8 +1747,8 @@ export class GitHubAPI {
   }
 
   /**
-   * Link a PR's branch to an issue using GitHub's createLinkedBranch GraphQL mutation
-   * This creates the proper "Development" section link in GitHub's UI
+   * Link a PR to an issue by adding a closing keyword to the PR body
+   * This creates the proper "Linked issues" sidebar link in GitHub's UI and enables auto-close on merge
    */
   async linkPRToIssue(
     owner: string,
@@ -1860,80 +1757,49 @@ export class GitHubAPI {
     prNumber: number
   ): Promise<void> {
     try {
-      // Get the repository and issue node IDs
-      const repoQuery = `
-        query($owner: String!, $repo: String!, $issueNumber: Int!, $prNumber: Int!) {
-          repository(owner: $owner, name: $repo) {
-            id
-            issue(number: $issueNumber) {
-              id
-            }
-            pullRequest(number: $prNumber) {
-              id
-              headRef {
-                id
-                target {
-                  oid
-                }
-              }
-            }
-          }
-        }
-      `;
-
-      const response: any = await this.octokit.graphql(repoQuery, {
+      // Get the current PR data to read its body
+      const { data: pr } = await this.octokit.pulls.get({
         owner,
         repo,
-        issueNumber,
-        prNumber,
+        pull_number: prNumber,
       });
 
-      const repositoryId = response.repository.id;
-      const issueId = response.repository.issue.id;
-      const headRefId = response.repository.pullRequest.headRef?.id;
-      const oid = response.repository.pullRequest.headRef?.target?.oid;
+      const currentBody = pr.body || "";
 
-      if (!headRefId || !oid) {
-        console.error(`PR #${prNumber} has no branch information`);
+      // Check if the issue is already referenced in the body
+      const issueRefPattern = new RegExp(
+        `\\b(Fixes|Closes|Resolves)\\s+#${issueNumber}\\b`,
+        'i'
+      );
+
+      if (issueRefPattern.test(currentBody)) {
+        console.log(`PR #${prNumber} already references issue #${issueNumber}`);
         return;
       }
 
-      // Create the linked branch using GraphQL mutation
-      const mutation = `
-        mutation($input: CreateLinkedBranchInput!) {
-          createLinkedBranch(input: $input) {
-            linkedBranch {
-              id
-              ref {
-                name
-              }
-            }
-          }
-        }
-      `;
+      // Add the closing keyword to the body
+      const closingKeyword = `Fixes #${issueNumber}`;
+      const updatedBody = currentBody
+        ? `${currentBody}\n\n${closingKeyword}`
+        : closingKeyword;
 
-      await this.octokit.graphql(mutation, {
-        input: {
-          repositoryId,
-          issueId,
-          oid,
-        },
+      // Update the PR body using the issues endpoint (PRs are issues)
+      await this.octokit.issues.update({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: updatedBody,
       });
 
-      console.log(`✅ Linked PR #${prNumber}'s branch to issue #${issueNumber} using GitHub's Development section`);
+      console.log(`✅ Linked PR #${prNumber} to issue #${issueNumber} using closing keyword`);
     } catch (error: any) {
-      // If branch is already linked, that's okay
-      if (error.message?.includes('already linked') || error.message?.includes('already exists')) {
-        console.log(`PR #${prNumber} branch already linked to issue #${issueNumber}`);
-        return;
-      }
       console.error(`Error linking PR #${prNumber} to issue #${issueNumber}:`, error);
       throw error;
     }
   }
 
   /**
-   * Unlink a PR's branch from an issue using GitHub's deleteLinkedBranch GraphQL mutation
+   * Unlink a PR from an issue by removing closing keywords from the PR body
    */
   async unlinkPRFromIssue(
     owner: string,
@@ -1942,68 +1808,40 @@ export class GitHubAPI {
     prNumber: number
   ): Promise<void> {
     try {
-      // First, find the linked branch ID
-      const query = `
-        query($owner: String!, $repo: String!, $issueNumber: Int!) {
-          repository(owner: $owner, name: $repo) {
-            issue(number: $issueNumber) {
-              linkedBranches(first: 100) {
-                nodes {
-                  id
-                  ref {
-                    name
-                    associatedPullRequests(first: 1) {
-                      nodes {
-                        number
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      `;
-
-      const response: any = await this.octokit.graphql(query, {
+      // Get the current PR data to read its body
+      const { data: pr } = await this.octokit.pulls.get({
         owner,
         repo,
-        issueNumber,
+        pull_number: prNumber,
       });
 
-      const linkedBranches = response.repository?.issue?.linkedBranches?.nodes || [];
+      const currentBody = pr.body || "";
 
-      // Find the linked branch that corresponds to this PR
-      let linkedBranchId: string | null = null;
-      for (const branch of linkedBranches) {
-        const prs = branch.ref?.associatedPullRequests?.nodes || [];
-        if (prs.some((pr: any) => pr.number === prNumber)) {
-          linkedBranchId = branch.id;
-          break;
-        }
-      }
+      // Remove all closing keyword references to this specific issue
+      // Match patterns like "Fixes #123", "Closes #123", "Resolves #123"
+      // Also handle cross-repo references like "Fixes owner/repo#123"
+      const issueRefPattern = new RegExp(
+        `\\s*\\n*\\s*\\b(Fixes|Closes|Resolves)\\s+(?:[\\w-]+\\/[\\w-]+)?#${issueNumber}\\b\\s*`,
+        'gi'
+      );
 
-      if (!linkedBranchId) {
-        console.log(`No linked branch found for PR #${prNumber} on issue #${issueNumber}`);
+      const updatedBody = currentBody.replace(issueRefPattern, '').trim();
+
+      // Only update if something changed
+      if (updatedBody === currentBody.trim()) {
+        console.log(`No reference to issue #${issueNumber} found in PR #${prNumber} body`);
         return;
       }
 
-      // Delete the linked branch using GraphQL mutation
-      const mutation = `
-        mutation($input: DeleteLinkedBranchInput!) {
-          deleteLinkedBranch(input: $input) {
-            clientMutationId
-          }
-        }
-      `;
-
-      await this.octokit.graphql(mutation, {
-        input: {
-          linkedBranchId,
-        },
+      // Update the PR body using the issues endpoint (PRs are issues)
+      await this.octokit.issues.update({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: updatedBody,
       });
 
-      console.log(`✅ Unlinked PR #${prNumber}'s branch from issue #${issueNumber}`);
+      console.log(`✅ Unlinked PR #${prNumber} from issue #${issueNumber} by removing closing keyword`);
     } catch (error: any) {
       console.error(`Error unlinking PR #${prNumber} from issue #${issueNumber}:`, error);
       throw error;

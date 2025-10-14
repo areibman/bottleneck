@@ -9,6 +9,7 @@ export function useIssueDevelopmentLoader(
 ) {
   const fetchedRef = useRef<Set<string>>(new Set());
   const lastIssuesMapRef = useRef<Map<string, Issue> | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
 
   // Clear cache when repo changes
   useEffect(() => {
@@ -17,26 +18,20 @@ export function useIssueDevelopmentLoader(
   }, [owner, repo]);
 
   // Detect if issues Map was replaced (e.g., on fetchIssues) and clean up stale cache entries
+  // Note: Only clear cache on repo change, not on every Map update (which happens constantly)
   useEffect(() => {
     if (lastIssuesMapRef.current !== issues && issues.size > 0) {
-      // Remove cache entries for issues that no longer have development data
-      const keysToRemove: string[] = [];
-      for (const cacheKey of fetchedRef.current) {
-        const issue = issues.get(cacheKey);
-        if (issue) {
-          const hasData = (typeof issue.linkedBranches !== "undefined" && issue.linkedBranches !== null) ||
-            (typeof issue.linkedPRs !== "undefined" && issue.linkedPRs !== null);
-          if (!hasData) {
-            keysToRemove.push(cacheKey);
-          }
-        } else {
-          // Issue no longer exists in the map
-          keysToRemove.push(cacheKey);
-        }
-      }
+      // Only clean up if this is actually a different set of issues (different repo)
+      // Check by comparing a few issue keys - if they're different, clear cache
+      const currentKeys = Array.from(issues.keys()).slice(0, 3).join(',');
+      const lastKeys = lastIssuesMapRef.current
+        ? Array.from(lastIssuesMapRef.current.keys()).slice(0, 3).join(',')
+        : '';
 
-      if (keysToRemove.length > 0) {
-        keysToRemove.forEach(key => fetchedRef.current.delete(key));
+      if (currentKeys !== lastKeys) {
+        // Different set of issues (repo changed), clear cache
+        console.log('[DEV LOADER] 🔄 Detected repo change, clearing cache');
+        fetchedRef.current.clear();
       }
 
       lastIssuesMapRef.current = issues;
@@ -48,15 +43,19 @@ export function useIssueDevelopmentLoader(
       return;
     }
 
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      return;
+    }
+
     const toFetch: Issue[] = [];
-    const maxPerBatch = 10;
+    const maxPerBatch = 10; // Conservative limit to avoid rate limiting
 
     for (const issue of issues.values()) {
       const cacheKey = `${owner}/${repo}#${issue.number}`;
 
-      // Check if development data has been fetched (not just defined as empty arrays)
+      // Check if development data has been fetched
       const hasLoadedDevelopmentData =
-        (typeof issue.linkedBranches !== "undefined" && issue.linkedBranches !== null) ||
         (typeof issue.linkedPRs !== "undefined" && issue.linkedPRs !== null);
 
       if (hasLoadedDevelopmentData) {
@@ -64,6 +63,7 @@ export function useIssueDevelopmentLoader(
         continue;
       }
 
+      // Skip if already attempted to fetch
       if (fetchedRef.current.has(cacheKey)) {
         continue;
       }
@@ -81,25 +81,50 @@ export function useIssueDevelopmentLoader(
     }
 
     let cancelled = false;
+    isFetchingRef.current = true;
 
+    // RATE LIMIT PROTECTION: Fetch conservatively with delays
+    // - Smaller batches (2 at a time)
+    // - 300ms delay between batches
+    // This prevents rate limiting while still loading reasonably fast
     const load = async () => {
-      for (const issue of toFetch) {
+      const batchSize = 2; // Very conservative to avoid rate limits
+      const delayBetweenBatches = 300; // ms delay between batches
+
+      console.log(`[DEV LOADER] 📦 Fetching development info for ${toFetch.length} issues in batches of ${batchSize}`);
+
+      for (let i = 0; i < toFetch.length; i += batchSize) {
         if (cancelled) break;
-        try {
-          await refreshIssueLinks(owner, repo, issue.number);
-        } catch (error) {
-          console.error(
-            `[DEV LOADER] ❌ Failed to fetch development info for issue #${issue.number}`,
-            error,
-          );
+
+        const batch = toFetch.slice(i, i + batchSize);
+
+        // Fetch batch in parallel
+        await Promise.all(
+          batch.map(issue =>
+            refreshIssueLinks(owner, repo, issue.number).catch(error => {
+              console.error(
+                `[DEV LOADER] ❌ Failed to fetch development info for issue #${issue.number}`,
+                error,
+              );
+            })
+          )
+        );
+
+        // Add delay between batches to respect rate limits
+        if (i + batchSize < toFetch.length && !cancelled) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
         }
       }
+
+      console.log(`[DEV LOADER] ✅ Completed fetching development info`);
+      isFetchingRef.current = false;
     };
 
     load();
 
     return () => {
       cancelled = true;
+      isFetchingRef.current = false;
     };
   }, [owner, repo, issues, refreshIssueLinks]);
 }

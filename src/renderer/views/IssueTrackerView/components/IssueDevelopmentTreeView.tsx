@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    GitBranch,
     GitPullRequest,
+    GitPullRequestDraft,
     GitMerge,
-    ExternalLink,
     ChevronDown,
     ChevronRight,
 } from "lucide-react";
@@ -15,37 +14,16 @@ import { getPRMetadata } from "../../../utils/prGrouping";
 
 interface AgentGroup {
     agent: string;
-    branches: NonNullable<Issue["linkedBranches"]>;
     prs: NonNullable<Issue["linkedPRs"]>;
 }
 
-// Detect agent from branch name
-function detectAgentFromBranch(branchName: string): string {
-    const lowerName = branchName.toLowerCase();
-    if (lowerName.startsWith("cursor/")) return "cursor";
-    if (lowerName.startsWith("devin/")) return "devin";
-    if (lowerName.startsWith("copilot/")) return "copilot";
-    if (lowerName.startsWith("chatgpt/")) return "chatgpt";
-    if (lowerName.startsWith("human/")) return "human";
-    return "unknown";
-}
-
-// Group branches and PRs by agent
+// Group PRs by agent
 function groupByAgent(
-    branches: NonNullable<Issue["linkedBranches"]>,
     prs: NonNullable<Issue["linkedPRs"]>,
     repoOwner: string,
     repoName: string,
 ): AgentGroup[] {
     const agentMap = new Map<string, AgentGroup>();
-
-    // Process branches
-    branches.forEach((branch) => {
-        const agent = detectAgentFromBranch(branch.refName);
-        const existing = agentMap.get(agent) || { agent, branches: [], prs: [] };
-        existing.branches.push(branch);
-        agentMap.set(agent, existing);
-    });
 
     // Process PRs using existing metadata detection
     prs.forEach((pr) => {
@@ -85,7 +63,7 @@ function groupByAgent(
         };
         const metadata = getPRMetadata(fakePR);
         const agent = metadata.agent;
-        const existing = agentMap.get(agent) || { agent, branches: [], prs: [] };
+        const existing = agentMap.get(agent) || { agent, prs: [] };
         existing.prs.push(pr);
         agentMap.set(agent, existing);
     });
@@ -109,12 +87,11 @@ export function IssueDevelopmentTreeView({
     const navigate = useNavigate();
     const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
 
-    const branches = issue.linkedBranches ?? [];
     const prs = issue.linkedPRs ?? [];
 
     const agentGroups = useMemo(
-        () => groupByAgent(branches, prs, repoOwner, repoName),
-        [branches, prs, repoOwner, repoName]
+        () => groupByAgent(prs, repoOwner, repoName),
+        [prs, repoOwner, repoName]
     );
 
     const toggleAgent = (agent: string) => {
@@ -135,22 +112,11 @@ export function IssueDevelopmentTreeView({
         navigate(`/pulls/${prOwner}/${prRepo}/${pr.number}`);
     };
 
-    const handleBranchClick = (branch: NonNullable<Issue["linkedBranches"]>[number]) => {
-        const branchOwner = branch.repository.owner || repoOwner;
-        const branchRepo = branch.repository.name || repoName;
-        const repoSlug = `${branchOwner}/${branchRepo}`;
-        const baseUrl = branch.repository.url
-            ? branch.repository.url.replace(/\/$/, "")
-            : `https://github.com/${repoSlug}`;
-        const branchUrl = `${baseUrl}/tree/${encodeURIComponent(branch.refName)}`;
-        window.open(branchUrl, "_blank");
-    };
-
     return (
         <div className="space-y-1">
             {agentGroups.map((group) => {
                 const isExpanded = expandedAgents.has(group.agent);
-                const totalCount = group.branches.length + group.prs.length;
+                const totalCount = group.prs.length;
 
                 return (
                     <div key={group.agent}>
@@ -207,7 +173,7 @@ export function IssueDevelopmentTreeView({
                                         {pr.merged ? (
                                             <GitMerge className="w-2.5 h-2.5 flex-shrink-0 text-purple-400" />
                                         ) : pr.draft ? (
-                                            <GitPullRequest className="w-2.5 h-2.5 flex-shrink-0 text-gray-400" />
+                                            <GitPullRequestDraft className="w-2.5 h-2.5 flex-shrink-0 text-gray-400" />
                                         ) : (
                                             <GitPullRequest className="w-2.5 h-2.5 flex-shrink-0 text-green-400" />
                                         )}
@@ -215,35 +181,6 @@ export function IssueDevelopmentTreeView({
                                         <span className="truncate text-[0.625rem]">{pr.title}</span>
                                     </div>
                                 ))}
-
-                                {/* Branches */}
-                                {group.branches.map((branch) => {
-                                    const branchOwner = branch.repository.owner || repoOwner;
-                                    const branchRepo = branch.repository.name || repoName;
-                                    const repoSlug = `${branchOwner}/${branchRepo}`;
-
-                                    return (
-                                        <div
-                                            key={branch.id}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleBranchClick(branch);
-                                            }}
-                                            className={cn(
-                                                "flex items-center space-x-1.5 py-0.5 px-1.5 rounded cursor-pointer transition-colors",
-                                                theme === "dark"
-                                                    ? "bg-gray-800 hover:bg-gray-750"
-                                                    : "bg-white hover:bg-gray-50 border border-gray-200",
-                                            )}
-                                        >
-                                            <GitBranch className="w-2.5 h-2.5 flex-shrink-0 text-gray-400" />
-                                            <span className="truncate text-[0.625rem]" title={`${repoSlug}:${branch.refName}`}>
-                                                {branch.refName}
-                                            </span>
-                                            <ExternalLink className="w-2 h-2 flex-shrink-0 text-gray-400 ml-auto" />
-                                        </div>
-                                    );
-                                })}
                             </div>
                         )}
                     </div>

@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { GitHubAPI, Issue } from "../services/github";
 import { mockIssues } from "../mockData";
+import { getLinkedPRsFromCache } from "../utils/issueLinks";
+import { usePRStore } from "./prStore";
+import { useAuthStore } from "./authStore";
 
 export interface IssueFilters {
   status: "all" | "open" | "closed";
@@ -32,7 +35,7 @@ interface IssueState {
   setIssueLabels: (owner: string, repo: string, issueNumber: number, labels: string[]) => Promise<void>;
   linkPRsToIssue: (owner: string, repo: string, issueNumber: number, prNumbers: number[]) => Promise<void>;
   unlinkPRFromIssue: (owner: string, repo: string, issueNumber: number, prNumber: number) => Promise<void>;
-  refreshIssueLinks: (owner: string, repo: string, issueNumber: number) => Promise<void>;
+  refreshIssueLinks: (owner: string, repo: string, issueNumber: number, options?: { forceAPI?: boolean }) => Promise<void>;
   setFilter: (key: keyof IssueFilters, value: any) => void;
   setFilters: (filters: IssueFilters) => void;
   resetFilters: () => void;
@@ -78,7 +81,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -183,7 +186,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -230,7 +233,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -277,7 +280,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -315,7 +318,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -343,7 +346,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -401,7 +404,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -449,7 +452,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -508,7 +511,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -520,7 +523,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         // For dev mode, we need to fetch the actual PR data from the PR store
-        const prStore = require("./prStore").usePRStore.getState();
+        const prStore = usePRStore.getState();
         const newLinkedPRs = prNumbers.map(prNum => {
           // Try to find the PR in the store
           const prKeys = Array.from(prStore.pullRequests.keys()) as string[];
@@ -576,8 +579,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
         console.log(`[STORE] ✅ linkPRsToIssue: Successfully linked PRs to issue #${issueNumber}`);
 
-        // Refresh the issue to get updated linked PRs from GitHub
-        await get().refreshIssueLinks(owner, repo, issueNumber);
+        // Refresh the issue to get updated linked PRs from GitHub (force API to verify)
+        await get().refreshIssueLinks(owner, repo, issueNumber, { forceAPI: true });
       }
     } catch (error) {
       console.error(`[STORE] ❌ linkPRsToIssue: Error for #${issueNumber}:`, error);
@@ -594,7 +597,7 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -623,8 +626,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
         console.log(`[STORE] ✅ unlinkPRFromIssue: Successfully unlinked PR #${prNumber} from issue #${issueNumber}`);
 
-        // Refresh the issue to get updated linked PRs from GitHub
-        await get().refreshIssueLinks(owner, repo, issueNumber);
+        // Refresh the issue to get updated linked PRs from GitHub (force API to verify)
+        await get().refreshIssueLinks(owner, repo, issueNumber, { forceAPI: true });
       }
     } catch (error) {
       console.error(`[STORE] ❌ unlinkPRFromIssue: Error:`, error);
@@ -633,15 +636,18 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     }
   },
 
-  refreshIssueLinks: async (owner: string, repo: string, issueNumber: number) => {
-    console.log(`[STORE] 🔄 refreshIssueLinks: Refreshing links for issue #${issueNumber}`);
+  refreshIssueLinks: async (owner: string, repo: string, issueNumber: number, options?: { forceAPI?: boolean }) => {
+    const { forceAPI = false } = options || {};
+
+    console.log(`[STORE] 🔄 refreshIssueLinks: Refreshing links for issue #${issueNumber} (forceAPI=${forceAPI})`);
+
     try {
       let token: string | null = null;
 
       if (window.electron) {
         token = await window.electron.auth.getToken();
       } else {
-        const authStore = require("./authStore").useAuthStore.getState();
+        const authStore = useAuthStore.getState();
         token = authStore.token;
       }
 
@@ -670,60 +676,52 @@ export const useIssueStore = create<IssueState>((set, get) => ({
             head: { ref: "devin/resolve-issue-" + issueNumber }
           }
         ];
-        const mockLinkedBranches = [
-          {
-            id: `mock-branch-${issueNumber}-1`,
-            refName: `hotfix/${issueNumber}-alpha`,
-            repository: {
-              owner,
-              name: repo,
-              url: `https://github.com/${owner}/${repo}`,
-            },
-            latestCommit: {
-              abbreviatedOid: "abc1234",
-              committedDate: new Date().toISOString(),
-              messageHeadline: "chore: update dependencies",
-              url: `https://github.com/${owner}/${repo}/commit/abc1234`,
-            },
-            associatedPullRequests: [mockLinkedPRs[0]],
-          },
-          {
-            id: `mock-branch-${issueNumber}-2`,
-            refName: `feature/${issueNumber}-beta`,
-            repository: {
-              owner,
-              name: repo,
-              url: `https://github.com/${owner}/${repo}`,
-            },
-            associatedPullRequests: [],
-          },
-        ];
 
         set((state) => {
           const newIssues = new Map(state.issues);
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
-            newIssues.set(key, { ...issue, linkedPRs: mockLinkedPRs, linkedBranches: mockLinkedBranches });
+            newIssues.set(key, { ...issue, linkedPRs: mockLinkedPRs });
           }
           return { issues: newIssues };
         });
       } else {
-        const api = new GitHubAPI(token);
-        const { branches, pullRequests } = await api.getIssueDevelopment(owner, repo, issueNumber);
+        // OPTIMIZATION: Try to use cached PR data first
+        if (!forceAPI) {
+          const prStore = usePRStore.getState();
+          const linkedPRs = getLinkedPRsFromCache(prStore.pullRequests, owner, repo, issueNumber);
 
-        console.log(`[STORE] 📥 refreshIssueLinks: Fetched ${branches.length} branches and ${pullRequests.length} PRs for issue #${issueNumber}`);
+          console.log(`[STORE] 💾 refreshIssueLinks: Using cached PR data, found ${linkedPRs.length} linked PRs for issue #${issueNumber}`);
+
+          set((state) => {
+            const newIssues = new Map(state.issues);
+            const key = `${owner}/${repo}#${issueNumber}`;
+            const issue = newIssues.get(key);
+            if (issue) {
+              const updatedIssue = { ...issue, linkedPRs };
+              newIssues.set(key, updatedIssue);
+            }
+            return { issues: newIssues };
+          });
+          return;
+        }
+
+        // Only call API if explicitly requested (e.g., after linking/unlinking)
+        console.log(`[STORE] 🌐 refreshIssueLinks: Fetching from API for issue #${issueNumber}`);
+        const api = new GitHubAPI(token);
+        const { pullRequests } = await api.getIssueDevelopment(owner, repo, issueNumber);
+
+        console.log(`[STORE] 📥 refreshIssueLinks: Fetched ${pullRequests.length} PRs from API for issue #${issueNumber}`);
 
         set((state) => {
           const newIssues = new Map(state.issues);
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
-            const updatedIssue = { ...issue, linkedPRs: pullRequests, linkedBranches: branches };
+            const updatedIssue = { ...issue, linkedPRs: pullRequests };
             newIssues.set(key, updatedIssue);
             console.log(`[STORE] ✅ refreshIssueLinks: Updated issue #${issueNumber} in store`, {
-              oldBranches: issue.linkedBranches?.length ?? 'undefined',
-              newBranches: branches.length,
               oldPRs: issue.linkedPRs?.length ?? 'undefined',
               newPRs: pullRequests.length
             });
