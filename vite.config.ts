@@ -9,7 +9,9 @@ export default defineConfig({
     monacoEditorPlugin({
       languageWorkers: ["editorWorkerService", "typescript", "json"],
       customWorkers: [],
-      publicPath: "./",
+      publicPath: "monacoeditorwork",
+      // Fix for Windows path issues - use relative path
+      filename: (name) => `monacoeditorwork/${name}.js`,
     }),
   ],
   base: "./",
