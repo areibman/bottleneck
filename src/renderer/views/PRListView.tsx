@@ -379,22 +379,16 @@ export default function PRListView() {
 
   const closePRIds = useCallback(
     async (prIds: string[]) => {
-      if (isClosing || prIds.length === 0) {
-        return;
-      }
+      if (isClosing || prIds.length === 0) return;
 
       const uniqueIds = Array.from(new Set(prIds));
       const closableIds = uniqueIds.filter((id) => {
         const pr = pullRequests.get(id);
         return pr && pr.state === "open" && !pr.merged;
       });
-
-      if (closableIds.length === 0) {
-        return;
-      }
+      if (closableIds.length === 0) return;
 
       let authToken = token;
-
       if (!authToken && typeof window !== "undefined" && window.electron) {
         try {
           authToken = await window.electron.auth.getToken();
@@ -402,7 +396,6 @@ export default function PRListView() {
           console.error("Failed to resolve auth token:", error);
         }
       }
-
       if (!authToken) {
         alert("You need to sign in before closing pull requests.");
         return;
@@ -410,67 +403,89 @@ export default function PRListView() {
 
       setIsClosing(true);
 
-      const updatedPRs: PullRequest[] = [];
-      const closedIds: string[] = [];
+      // Snapshot originals and apply optimistic UI update immediately
+      const originalById = new Map<string, PullRequest>();
+      const nowIso = new Date().toISOString();
+      const optimistic: PullRequest[] = [];
+      for (const id of closableIds) {
+        const pr = pullRequests.get(id);
+        if (!pr) continue;
+        originalById.set(id, pr);
+        optimistic.push({
+          ...pr,
+          state: "closed",
+          draft: false,
+          merged: false,
+          closed_at: nowIso,
+        });
+      }
+      if (optimistic.length > 0) {
+        bulkUpdatePRs(optimistic);
+        // Clear selection right away to reflect action
+        closableIds.forEach((id) => deselectPR(id));
+      }
+
       const errors: string[] = [];
 
       try {
         if (authToken === "dev-token") {
-          const closedAt = new Date().toISOString();
-          for (const id of closableIds) {
-            const pr = pullRequests.get(id);
-            if (!pr) continue;
-            updatedPRs.push({
-              ...pr,
-              state: "closed",
-              draft: false,
-              merged: false,
-              closed_at: closedAt,
-            });
-            closedIds.push(id);
-          }
-        } else {
-          const api = new GitHubAPI(authToken);
-          for (const id of closableIds) {
-            const pr = pullRequests.get(id);
-            if (!pr) continue;
-            try {
-              const closedData = await api.closePullRequest(
-                pr.base.repo.owner.login,
-                pr.base.repo.name,
-                pr.number,
-              );
-
-              const mergedClosedData: PullRequest = {
-                ...pr,
-                ...closedData,
-                state: "closed" as const,
-                draft: false,
-                merged: closedData?.merged ?? pr.merged,
-                closed_at: closedData?.closed_at ?? new Date().toISOString(),
-                // Ensure array fields are always arrays, not null
-                assignees: closedData?.assignees ?? pr.assignees ?? [],
-                requested_reviewers: closedData?.requested_reviewers ?? pr.requested_reviewers ?? [],
-              };
-
-              updatedPRs.push(mergedClosedData);
-              closedIds.push(id);
-            } catch (error: any) {
-              console.error(`Failed to close PR #${pr?.number}:`, error);
-              const message =
-                error?.response?.data?.message || error?.message || "Unknown error";
-              if (pr) {
-                errors.push(`PR #${pr.number}: ${message}`);
-              } else {
-                errors.push(message);
-              }
-            }
-          }
+          // Optimistic update already applied; nothing else to do
+          return;
         }
 
-        if (updatedPRs.length > 0) {
-          bulkUpdatePRs(updatedPRs);
-          closedIds.forEach((id) => deselectPR(id));
+        const api = new GitHubAPI(authToken);
+        // Close all PRs in parallel
+        const results = await Promise.allSettled(
+          closableIds.map(async (id) => {
+            const original = originalById.get(id);
+            if (!original) return null;
+            const closedData = await api.closePullRequest(
+              original.base.repo.owner.login,
+              original.base.repo.name,
+              original.number,
+            );
+            const mergedClosedData: PullRequest = {
+              ...original,
+              ...closedData,
+              state: "closed" as const,
+              draft: false,
+              merged: (closedData as any)?.merged ?? original.merged,
+              closed_at: (closedData as any)?.closed_at ?? nowIso,
+              assignees:
+                (closedData as any)?.assignees ?? original.assignees ?? [],
+              requested_reviewers:
+                (closedData as any)?.requested_reviewers ??
+                original.requested_reviewers ??
+                [],
+            };
+            return { id, pr: mergedClosedData };
+          }),
+        );
+
+        const finalUpdates: PullRequest[] = [];
+        const toRevert: PullRequest[] = [];
+        results.forEach((res, idx) => {
+          const id = closableIds[idx];
+          if (res.status === "fulfilled" && res.value && res.value.pr) {
+            finalUpdates.push(res.value.pr);
+          } else {
+            const original = originalById.get(id);
+            if (original) {
+              toRevert.push(original);
+              const reason =
+                (res as PromiseRejectedResult).reason?.response?.data?.message ||
+                (res as PromiseRejectedResult).reason?.message ||
+                "Unknown error";
+              errors.push(`PR #${original.number}: ${reason}`);
+            }
+          }
+        });
+
+        if (finalUpdates.length > 0) {
+          bulkUpdatePRs(finalUpdates);
+        }
+        if (toRevert.length > 0) {
+          bulkUpdatePRs(toRevert);
         }
 
         if (errors.length > 0) {
