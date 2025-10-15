@@ -260,15 +260,17 @@ export default function TeamManagementDialog({ isOpen, onClose, availableAuthors
                           key={color.value}
                           onClick={() => setFormData(prev => ({ ...prev, color: color.value }))}
                           className={cn(
-                            "w-8 h-8 rounded-full border-2 flex items-center justify-center",
+                            "w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all",
                             formData.color === color.value
-                              ? "border-gray-800"
-                              : "border-gray-300 hover:border-gray-400"
+                              ? "border-gray-900 ring-2 ring-offset-2 ring-blue-500 scale-110"
+                              : "border-gray-300 hover:border-gray-400 hover:scale-105",
+                            theme === "dark" && formData.color === color.value && "border-white ring-offset-gray-800",
+                            theme === "dark" && formData.color !== color.value && "border-gray-600 hover:border-gray-500"
                           )}
                           style={{ backgroundColor: color.value }}
                         >
                           {formData.color === color.value && (
-                            <div className="w-3 h-3 bg-white rounded-full" />
+                            <div className="w-3 h-3 bg-white rounded-full shadow-lg" />
                           )}
                         </button>
                       ))}
@@ -284,10 +286,12 @@ export default function TeamManagementDialog({ isOpen, onClose, availableAuthors
                           key={icon.value}
                           onClick={() => setFormData(prev => ({ ...prev, icon: icon.value }))}
                           className={cn(
-                            "w-8 h-8 rounded-lg border-2 flex items-center justify-center text-lg",
+                            "w-10 h-10 rounded-lg border-2 flex items-center justify-center text-lg transition-all",
                             formData.icon === icon.value
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-gray-300 hover:border-gray-400"
+                              ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 ring-offset-2 scale-110"
+                              : "border-gray-300 hover:border-gray-400 hover:bg-gray-50 hover:scale-105",
+                            theme === "dark" && formData.icon === icon.value && "bg-blue-900/30 ring-offset-gray-800",
+                            theme === "dark" && formData.icon !== icon.value && "border-gray-600 hover:border-gray-500 hover:bg-gray-700"
                           )}
                         >
                           {icon.value}
