@@ -15,7 +15,10 @@ export default defineConfig({
   base: "./",
   root: path.resolve(__dirname, "src/renderer"),
   build: {
-    outDir: path.resolve(__dirname, "dist/renderer"),
+    // Use a path relative to the Vite root so plugins that
+    // naively concatenate root and outDir don't produce invalid
+    // paths on Windows CI (e.g. "root\\D:\\...").
+    outDir: "../../dist/renderer",
     emptyOutDir: true,
     sourcemap: false,
     minify: "esbuild",
