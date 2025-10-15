@@ -1,6 +1,6 @@
 {
   "name": "bottleneck",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Code review for AI native teams",
   "main": "dist/main/index.js",
   "scripts": {
