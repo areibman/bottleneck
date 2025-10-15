@@ -10,6 +10,7 @@ export default defineConfig({
       languageWorkers: ["editorWorkerService", "typescript", "json"],
       customWorkers: [],
       publicPath: "./",
+      globalAPI: true,
     }),
   ],
   base: "./",
