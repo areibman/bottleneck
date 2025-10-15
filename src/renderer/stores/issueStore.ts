@@ -664,7 +664,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
             merged: false,
             draft: false,
             title: "cursor/fix-issue-" + issueNumber,
-            head: { ref: "cursor/fix-issue-" + issueNumber }
+            head: { ref: "cursor/fix-issue-" + issueNumber },
+            author: {
+              login: "cursor-bot",
+              avatarUrl: "https://github.com/identicons/cursor.png"
+            }
           },
           {
             id: 2,
@@ -673,7 +677,11 @@ export const useIssueStore = create<IssueState>((set, get) => ({
             merged: false,
             draft: true,
             title: "devin/resolve-issue-" + issueNumber,
-            head: { ref: "devin/resolve-issue-" + issueNumber }
+            head: { ref: "devin/resolve-issue-" + issueNumber },
+            author: {
+              login: "devin-bot",
+              avatarUrl: "https://github.com/identicons/devin.png"
+            }
           }
         ];
 

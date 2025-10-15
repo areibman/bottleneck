@@ -195,6 +195,7 @@ export default function IssueTrackerView() {
     closeIssues,
     reopenIssues,
     linkPRsToIssue,
+    unlinkPRFromIssue,
     refreshIssueLinks,
   } = useIssueStore();
   const { selectedRepo, pullRequests, fetchPullRequests } = usePRStore();
@@ -394,24 +395,50 @@ export default function IssueTrackerView() {
   }, []);
 
   const handleAssignPRs = useCallback(
-    async (prNumbers: number[]) => {
+    async (newPRNumbers: number[], previouslyLinkedPRs: number[]) => {
       if (!selectedIssueForPRAssignment || !selectedRepo) return;
+
       try {
-        await linkPRsToIssue(
-          selectedRepo.owner,
-          selectedRepo.name,
-          selectedIssueForPRAssignment.number,
-          prNumbers,
-        );
+        const owner = selectedRepo.owner;
+        const repo = selectedRepo.name;
+        const issueNumber = selectedIssueForPRAssignment.number;
+
+        // Determine which PRs to link and unlink
+        const previousSet = new Set(previouslyLinkedPRs);
+        const newSet = new Set(newPRNumbers);
+
+        const toLink = newPRNumbers.filter(prNum => !previousSet.has(prNum));
+        const toUnlink = previouslyLinkedPRs.filter(prNum => !newSet.has(prNum));
+
+        console.log(`[Issue Tracker] 🔗 Updating PR links for issue #${issueNumber}:`, {
+          toLink,
+          toUnlink,
+          previous: previouslyLinkedPRs,
+          new: newPRNumbers,
+        });
+
+        // Unlink removed PRs
+        if (toUnlink.length > 0) {
+          for (const prNum of toUnlink) {
+            await unlinkPRFromIssue(owner, repo, issueNumber, prNum);
+          }
+        }
+
+        // Link new PRs
+        if (toLink.length > 0) {
+          await linkPRsToIssue(owner, repo, issueNumber, toLink);
+        }
+
         handleClosePRAssignmentModal();
       } catch (error) {
-        console.error("Failed to assign PRs:", error);
+        console.error("Failed to update PR links:", error);
       }
     },
     [
       selectedIssueForPRAssignment,
       selectedRepo,
       linkPRsToIssue,
+      unlinkPRFromIssue,
       handleClosePRAssignmentModal,
     ],
   );
@@ -619,6 +646,9 @@ export default function IssueTrackerView() {
           return prRepoOwner === selectedRepo.owner && prRepoName === selectedRepo.name;
         });
 
+        // Get currently linked PR numbers for this issue
+        const currentlyLinkedPRs = selectedIssueForPRAssignment?.linkedPRs?.map(pr => pr.number) || [];
+
         return (
           <PRAssignmentModal
             isOpen={showPRAssignmentModal}
@@ -628,6 +658,7 @@ export default function IssueTrackerView() {
             issueNumber={selectedIssueForPRAssignment?.number || 0}
             issueTitle={selectedIssueForPRAssignment?.title || ""}
             theme={theme}
+            initialLinkedPRs={currentlyLinkedPRs}
           />
         );
       })()}

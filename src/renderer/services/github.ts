@@ -100,6 +100,10 @@ export interface IssueLinkedPullRequest {
     owner: string;
     name: string;
   };
+  author?: {
+    login: string;
+    avatarUrl: string;
+  };
 }
 
 export interface IssueLinkedBranch {
@@ -1612,6 +1616,10 @@ export class GitHubAPI {
                 isDraft
                 headRefName
                 url
+                author {
+                  login
+                  avatarUrl
+                }
                 headRepository {
                   name
                   owner {
@@ -1660,6 +1668,12 @@ export class GitHubAPI {
             ? {
               owner: prNode.headRepository.owner?.login ?? owner,
               name: prNode.headRepository.name ?? repo,
+            }
+            : undefined,
+          author: prNode.author
+            ? {
+              login: prNode.author.login,
+              avatarUrl: prNode.author.avatarUrl,
             }
             : undefined,
         };

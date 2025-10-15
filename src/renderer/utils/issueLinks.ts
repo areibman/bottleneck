@@ -67,6 +67,10 @@ export function buildIssueToPRMap(
                     owner,
                     name: repo,
                 },
+                author: pr.user ? {
+                    login: pr.user.login,
+                    avatarUrl: pr.user.avatar_url,
+                } : undefined,
             };
 
             const existing = issueMap.get(issueNumber) || [];

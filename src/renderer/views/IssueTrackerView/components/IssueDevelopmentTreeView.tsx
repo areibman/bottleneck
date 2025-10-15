@@ -29,7 +29,10 @@ function groupByAgent(
     prs.forEach((pr) => {
         const fakePR: PullRequest = {
             ...pr,
-            user: { login: "", avatar_url: "" },
+            // Use author from linked PR data if available
+            user: pr.author
+                ? { login: pr.author.login, avatar_url: pr.author.avatarUrl }
+                : { login: "unknown", avatar_url: "" },
             body: null,
             labels: [],
             head: pr.head
@@ -62,7 +65,13 @@ function groupByAgent(
             merge_commit_sha: null,
         };
         const metadata = getPRMetadata(fakePR);
-        const agent = metadata.agent;
+        let agent = metadata.agent;
+
+        // Fallback to author if agent is unknown
+        if (agent === "unknown" && pr.author) {
+            agent = pr.author.login;
+        }
+
         const existing = agentMap.get(agent) || { agent, prs: [] };
         existing.prs.push(pr);
         agentMap.set(agent, existing);
@@ -138,10 +147,19 @@ export function IssueDevelopmentTreeView({
                             ) : (
                                 <ChevronRight className="w-2.5 h-2.5 flex-shrink-0" />
                             )}
-                            {group.agent !== "unknown" && (
+                            {/* Only show agent icon for recognized agents */}
+                            {["cursor", "devin", "copilot", "chatgpt", "human"].includes(group.agent) && (
                                 <AgentIcon agentName={group.agent} className="h-3 w-3 flex-shrink-0" />
                             )}
-                            <span className="font-medium capitalize text-[0.625rem]">{group.agent}</span>
+                            {/* Show user avatar for author-based groups */}
+                            {!["cursor", "devin", "copilot", "chatgpt", "human", "unknown"].includes(group.agent) && group.prs[0]?.author && (
+                                <img
+                                    src={group.prs[0].author.avatarUrl}
+                                    alt={group.agent}
+                                    className="w-3 h-3 rounded-full flex-shrink-0"
+                                />
+                            )}
+                            <span className="font-medium text-[0.625rem]">{group.agent}</span>
                             <span
                                 className={cn(
                                     "px-1 py-0.5 rounded text-[0.5rem]",
@@ -176,6 +194,22 @@ export function IssueDevelopmentTreeView({
                                             <GitPullRequestDraft className="w-2.5 h-2.5 flex-shrink-0 text-gray-400" />
                                         ) : (
                                             <GitPullRequest className="w-2.5 h-2.5 flex-shrink-0 text-green-400" />
+                                        )}
+                                        {pr.author && (
+                                            <>
+                                                <img
+                                                    src={pr.author.avatarUrl}
+                                                    alt={pr.author.login}
+                                                    className="w-3 h-3 rounded-full flex-shrink-0"
+                                                    title={pr.author.login}
+                                                />
+                                                <span className={cn(
+                                                    "text-[0.625rem] flex-shrink-0",
+                                                    theme === "dark" ? "text-gray-400" : "text-gray-600"
+                                                )}>
+                                                    {pr.author.login}
+                                                </span>
+                                            </>
                                         )}
                                         <span className="font-mono text-[0.625rem]">#{pr.number}</span>
                                         <span className="truncate text-[0.625rem]">{pr.title}</span>

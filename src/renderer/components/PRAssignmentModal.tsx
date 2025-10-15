@@ -10,11 +10,12 @@ import "./PRTreeView.css";
 interface PRAssignmentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onAssign: (prNumbers: number[]) => void;
+    onAssign: (prNumbers: number[], previouslyLinkedPRs: number[]) => void;
     availablePRs: PullRequest[];
     issueNumber: number;
     issueTitle: string;
     theme: "light" | "dark";
+    initialLinkedPRs?: number[]; // PRs already linked to this issue
 }
 
 export function PRAssignmentModal({
@@ -25,12 +26,14 @@ export function PRAssignmentModal({
     issueNumber,
     issueTitle,
     theme,
+    initialLinkedPRs = [],
 }: PRAssignmentModalProps) {
     const [selectedPRs, setSelectedPRs] = useState<Set<string>>(new Set());
     const [showAssigned, setShowAssigned] = useState(false);
     const [showClosed, setShowClosed] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+    const [isUpdating, setIsUpdating] = useState(false);
 
     // Debounce search query to prevent flickering
     React.useEffect(() => {
@@ -132,33 +135,62 @@ export function PRAssignmentModal({
         handleToggleGroupSelection(prIds, !allSelected);
     };
 
-    const handleAssign = () => {
-        // Convert PR IDs to PR numbers
-        const prNumbers = Array.from(selectedPRs).map(prId => {
-            return parseInt(prId.split('#').pop() || '0');
-        });
-        onAssign(prNumbers);
-        setSelectedPRs(new Set());
-        setSearchQuery("");
-        setDebouncedSearchQuery("");
-    };
-
-    // Reset search when modal opens
-    React.useEffect(() => {
-        if (isOpen) {
+    const handleAssign = async () => {
+        setIsUpdating(true);
+        try {
+            // Convert PR IDs to PR numbers
+            const prNumbers = Array.from(selectedPRs).map(prId => {
+                return parseInt(prId.split('#').pop() || '0');
+            });
+            await onAssign(prNumbers, initialLinkedPRs);
+            setSelectedPRs(new Set());
             setSearchQuery("");
             setDebouncedSearchQuery("");
+        } finally {
+            setIsUpdating(false);
         }
-    }, [isOpen]);
+    };
+
+    // Initialize selected PRs with already-linked PRs when modal opens
+    React.useEffect(() => {
+        if (isOpen) {
+            // Pre-select already-linked PRs
+            const initialSelected = new Set<string>();
+            availablePRs.forEach(pr => {
+                if (initialLinkedPRs.includes(pr.number)) {
+                    const prId = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
+                    initialSelected.add(prId);
+                }
+            });
+            setSelectedPRs(initialSelected);
+            setSearchQuery("");
+            setDebouncedSearchQuery("");
+            setIsUpdating(false);
+        }
+    }, [isOpen, initialLinkedPRs, availablePRs]);
 
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            {isUpdating && (
+                <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center z-10">
+                    <div className={cn(
+                        "px-6 py-4 rounded-lg shadow-xl",
+                        theme === "dark" ? "bg-gray-800 text-white" : "bg-white text-gray-900"
+                    )}>
+                        <div className="flex items-center space-x-3">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                            <span>Updating PR links...</span>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div
                 className={cn(
                     "rounded-lg shadow-xl max-w-4xl w-full mx-4 flex flex-col",
-                    theme === "dark" ? "bg-gray-800" : "bg-white"
+                    theme === "dark" ? "bg-gray-800" : "bg-white",
+                    isUpdating && "pointer-events-none opacity-75"
                 )}
                 style={{ height: "80vh" }}
             >
@@ -281,6 +313,14 @@ export function PRAssignmentModal({
                     <div className="flex items-center space-x-3">
                         <span className="text-sm">
                             {selectedPRs.size} PR{selectedPRs.size !== 1 ? 's' : ''} selected
+                            {initialLinkedPRs.length > 0 && (
+                                <span className={cn(
+                                    "ml-2 text-xs",
+                                    theme === "dark" ? "text-gray-500" : "text-gray-400"
+                                )}>
+                                    ({initialLinkedPRs.length} currently linked)
+                                </span>
+                            )}
                         </span>
                         {selectedPRs.size > 0 && (
                             <button
@@ -292,33 +332,42 @@ export function PRAssignmentModal({
                                         : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
                                 )}
                             >
-                                Clear
+                                Clear All
                             </button>
                         )}
                     </div>
                     <div className="flex space-x-2">
                         <button
                             onClick={onClose}
+                            disabled={isUpdating}
                             className={cn(
                                 "px-4 py-2 rounded text-sm",
                                 theme === "dark"
                                     ? "bg-gray-700 hover:bg-gray-600"
-                                    : "bg-gray-200 hover:bg-gray-300"
+                                    : "bg-gray-200 hover:bg-gray-300",
+                                isUpdating && "opacity-50 cursor-not-allowed"
                             )}
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleAssign}
-                            disabled={selectedPRs.size === 0}
+                            disabled={isUpdating}
                             className={cn(
                                 "px-4 py-2 rounded text-sm text-white",
-                                selectedPRs.size === 0
-                                    ? "bg-gray-400 cursor-not-allowed"
+                                isUpdating
+                                    ? "bg-blue-400 cursor-wait"
                                     : "bg-blue-600 hover:bg-blue-700"
                             )}
                         >
-                            Assign Selected
+                            {isUpdating ? (
+                                <span className="flex items-center space-x-2">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    <span>Updating...</span>
+                                </span>
+                            ) : (
+                                "Update Links"
+                            )}
                         </button>
                     </div>
                 </div>
