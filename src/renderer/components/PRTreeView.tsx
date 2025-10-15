@@ -43,7 +43,8 @@ const getPRId = (pr: PullRequest) =>
 
 // Build tree data with only task grouping (no agent level)
 function buildTreeItems(
-  prsWithMetadata: PRWithMetadata[]
+  prsWithMetadata: PRWithMetadata[],
+  groupsWithMergedPRs?: Set<string>
 ): Record<TreeItemIndex, TreeItem<TreeData>> {
   const items: Record<TreeItemIndex, TreeItem<TreeData>> = {
     root: {
@@ -96,7 +97,9 @@ function buildTreeItems(
       const closablePRIds = taskPRs
         .filter((item) => item.pr.state === "open" && !item.pr.merged)
         .map((item) => getPRId(item.pr));
-      const hasMergedPR = taskPRs.some((item) => item.pr.merged);
+      // Check if this group has any merged PRs from the unfiltered list
+      // This allows showing the merged icon even when merged PRs are filtered out
+      const hasMergedPR = groupsWithMergedPRs?.has(prefix) ?? taskPRs.some((item) => item.pr.merged);
 
       const taskKey = `task-${prefix}`;
       items[taskKey] = {
@@ -157,6 +160,7 @@ interface PRTreeViewProps {
   prsWithMetadata: PRWithMetadata[];
   selectedPRs: Set<string>;
   sortBy: SortByType;
+  groupsWithMergedPRs?: Set<string>; // Set of titlePrefixes that have merged PRs in the unfiltered list
   onTogglePRSelection: (prId: string, checked: boolean) => void;
   onToggleGroupSelection: (prIds: string[], checked: boolean) => void;
   onPRClick: (pr: PullRequest) => void;
@@ -211,6 +215,7 @@ export function PRTreeView({
   prsWithMetadata,
   selectedPRs,
   sortBy,
+  groupsWithMergedPRs,
   onTogglePRSelection,
   onToggleGroupSelection,
   onPRClick,
@@ -218,8 +223,8 @@ export function PRTreeView({
   groupActionLabel = "Close unmerged PRs?",
 }: PRTreeViewProps) {
   const treeItems = useMemo(
-    () => buildTreeItems(prsWithMetadata),
-    [prsWithMetadata]
+    () => buildTreeItems(prsWithMetadata, groupsWithMergedPRs),
+    [prsWithMetadata, groupsWithMergedPRs]
   );
 
   const treeDataProvider = useMemo(

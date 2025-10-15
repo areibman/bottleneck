@@ -292,6 +292,39 @@ export default function PRListView() {
     return getFilteredPRs.map((pr) => getPRMetadata(pr));
   }, [getFilteredPRs]);
 
+  // Compute which groups have merged PRs from the UNFILTERED list
+  // This allows us to show the merged icon even when merged PRs are filtered out
+  const groupsWithMergedPRs = useMemo(() => {
+    if (!selectedRepo) return new Set<string>();
+
+    // Get ALL PRs for the current repo (unfiltered)
+    const allRepoPRs = Array.from(pullRequests.values()).filter((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      return baseOwner === selectedRepo.owner && baseName === selectedRepo.name;
+    });
+
+    // Group by titlePrefix and check for merged PRs
+    const groupsWithMerged = new Set<string>();
+    const metadataMap = new Map<string, PRWithMetadata[]>();
+
+    allRepoPRs.forEach((pr) => {
+      const metadata = getPRMetadata(pr);
+      const group = metadataMap.get(metadata.titlePrefix) || [];
+      group.push(metadata);
+      metadataMap.set(metadata.titlePrefix, group);
+    });
+
+    // For each group, check if any PR is merged
+    metadataMap.forEach((group, titlePrefix) => {
+      if (group.some(item => item.pr.merged)) {
+        groupsWithMerged.add(titlePrefix);
+      }
+    });
+
+    return groupsWithMerged;
+  }, [pullRequests, selectedRepo]);
+
   const handlePRClick = useCallback(
     (pr: PullRequest) => {
       // Find if this PR belongs to a task subgroup and fetch all siblings
@@ -379,7 +412,10 @@ export default function PRListView() {
 
   const closePRIds = useCallback(
     async (prIds: string[]) => {
+      console.log(`[PRListView] 🔄 Attempting to close ${prIds.length} PR(s):`, prIds);
+
       if (isClosing || prIds.length === 0) {
+        console.log(`[PRListView] ⚠️ Skipping close: isClosing=${isClosing}, prIds.length=${prIds.length}`);
         return;
       }
 
@@ -390,8 +426,11 @@ export default function PRListView() {
       });
 
       if (closableIds.length === 0) {
+        console.log(`[PRListView] ⚠️ No closable PRs found (all already closed or merged)`);
         return;
       }
+
+      console.log(`[PRListView] 📝 Closing ${closableIds.length} closable PR(s) out of ${uniqueIds.length} unique IDs`);
 
       let authToken = token;
 
@@ -469,11 +508,13 @@ export default function PRListView() {
         }
 
         if (updatedPRs.length > 0) {
+          console.log(`[PRListView] ✅ Successfully closed ${updatedPRs.length} PR(s):`, closedIds);
           bulkUpdatePRs(updatedPRs);
           closedIds.forEach((id) => deselectPR(id));
         }
 
         if (errors.length > 0) {
+          console.error(`[PRListView] ❌ Failed to close some PRs:`, errors);
           alert(`Some pull requests could not be closed:\n${errors.join("\n")}`);
         }
       } finally {
@@ -875,11 +916,12 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
-            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}`}
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${getFilteredPRs.length}-${currentRepoKey}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
             sortBy={sortBy}
+            groupsWithMergedPRs={groupsWithMergedPRs}
             onTogglePRSelection={handleCheckboxChange}
             onToggleGroupSelection={handleGroupSelection}
             onPRClick={handlePRClick}
