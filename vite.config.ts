@@ -9,13 +9,13 @@ export default defineConfig({
     monacoEditorPlugin({
       languageWorkers: ["editorWorkerService", "typescript", "json"],
       customWorkers: [],
-      publicPath: "./",
+      publicPath: "./monacoeditorwork/",
     }),
   ],
   base: "./",
   root: path.resolve(__dirname, "src/renderer"),
   build: {
-    outDir: path.resolve(__dirname, "dist/renderer"),
+    outDir: "../../dist/renderer",
     emptyOutDir: true,
     sourcemap: false,
     minify: "esbuild",
