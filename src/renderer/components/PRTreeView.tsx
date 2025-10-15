@@ -43,7 +43,8 @@ const getPRId = (pr: PullRequest) =>
 
 // Build tree data with only task grouping (no agent level)
 function buildTreeItems(
-  prsWithMetadata: PRWithMetadata[]
+  prsWithMetadata: PRWithMetadata[],
+  groupsWithMergedPRs?: Set<string>
 ): Record<TreeItemIndex, TreeItem<TreeData>> {
   const items: Record<TreeItemIndex, TreeItem<TreeData>> = {
     root: {
@@ -96,7 +97,9 @@ function buildTreeItems(
       const closablePRIds = taskPRs
         .filter((item) => item.pr.state === "open" && !item.pr.merged)
         .map((item) => getPRId(item.pr));
-      const hasMergedPR = taskPRs.some((item) => item.pr.merged);
+      // Check if this group has any merged PRs from the unfiltered list
+      // This allows showing the merged icon even when merged PRs are filtered out
+      const hasMergedPR = groupsWithMergedPRs?.has(prefix) ?? taskPRs.some((item) => item.pr.merged);
 
       const taskKey = `task-${prefix}`;
       items[taskKey] = {
@@ -157,10 +160,12 @@ interface PRTreeViewProps {
   prsWithMetadata: PRWithMetadata[];
   selectedPRs: Set<string>;
   sortBy: SortByType;
+  groupsWithMergedPRs?: Set<string>; // Set of titlePrefixes that have merged PRs in the unfiltered list
   onTogglePRSelection: (prId: string, checked: boolean) => void;
   onToggleGroupSelection: (prIds: string[], checked: boolean) => void;
   onPRClick: (pr: PullRequest) => void;
   onCloseGroup: (prIds: string[]) => void;
+  groupActionLabel?: string; // Optional custom label for group action button
 }
 
 // Helper function to format date and time
@@ -210,14 +215,16 @@ export function PRTreeView({
   prsWithMetadata,
   selectedPRs,
   sortBy,
+  groupsWithMergedPRs,
   onTogglePRSelection,
   onToggleGroupSelection,
   onPRClick,
   onCloseGroup,
+  groupActionLabel = "Close unmerged PRs?",
 }: PRTreeViewProps) {
   const treeItems = useMemo(
-    () => buildTreeItems(prsWithMetadata),
-    [prsWithMetadata]
+    () => buildTreeItems(prsWithMetadata, groupsWithMergedPRs),
+    [prsWithMetadata, groupsWithMergedPRs]
   );
 
   const treeDataProvider = useMemo(
@@ -433,12 +440,16 @@ export function PRTreeView({
                         }}
                         className={cn(
                           "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors cursor-pointer",
-                          theme === "dark"
-                            ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
-                            : "border-red-400 text-red-600 hover:bg-red-50"
+                          groupActionLabel.toLowerCase().includes("select")
+                            ? theme === "dark"
+                              ? "border-blue-500/60 text-blue-300 hover:bg-blue-900/40"
+                              : "border-blue-400 text-blue-600 hover:bg-blue-50"
+                            : theme === "dark"
+                              ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
+                              : "border-red-400 text-red-600 hover:bg-red-50"
                         )}
                       >
-                        Close unmerged PRs?
+                        {groupActionLabel}
                       </div>
                     )}
                   </>

@@ -24,7 +24,7 @@ interface SidebarProps {
 
 const NAV_ITEMS: SidebarNavItem[] = [
   { path: "/pulls", icon: GitPullRequest, label: "Pull Requests" },
-  { path: "/issues", icon: AlertCircle, label: "Issues" },
+  { path: "/issues", icon: AlertCircle, label: "Issue Tracker" },
   { path: "/branches", icon: GitBranch, label: "Branches" },
   {
     icon: SatelliteDish,
@@ -32,7 +32,7 @@ const NAV_ITEMS: SidebarNavItem[] = [
     children: [
       { path: "/agents/cursor", icon: CursorIcon, label: "Cursor" },
       { path: "/agents/devin", icon: DevinIcon, label: "Devin" },
-      { path: "/agents/chatgpt", icon: ChatGPTIcon, label: "ChatGPT" },
+      { path: "/agents/chatgpt", icon: ChatGPTIcon, label: "Codex" },
     ],
   },
   { path: "/settings", icon: Settings, label: "Settings" },

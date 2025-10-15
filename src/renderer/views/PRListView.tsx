@@ -6,16 +6,13 @@ import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
-import TeamManagementDialog from "../components/TeamManagementDialog";
-import { detectAgentName } from "../utils/agentIcons";
-import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
 import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
-import type { TeamMember } from "../types/teams";
+import { getPRMetadata } from "../utils/prGrouping";
 
 type StatusType = PRStatusType; // Use the centralized type
 
@@ -161,35 +158,6 @@ export default function PRListView() {
     [selectedRepo, fetchPRDetails, bulkUpdatePRs],
   );
 
-  // Extract agent from PR (e.g., "cursor" from branch name or title)
-  const getAgentFromPR = useCallback((pr: PullRequest): string => {
-    const branchName = pr.head?.ref || "";
-    const labelNames = (pr.labels ?? [])
-      .map((label: any) => label?.name)
-      .filter(Boolean) as string[];
-
-    const detected = detectAgentName(
-      branchName,
-      pr.title,
-      pr.body,
-      pr.user?.login,
-      pr.head?.ref,
-      ...labelNames,
-    );
-
-    if (detected) {
-      return detected;
-    }
-
-    const hasAILabel = labelNames.some((labelName) =>
-      labelName.toLowerCase().includes("ai"),
-    );
-    if (hasAILabel) {
-      return "ai";
-    }
-
-    return "unknown";
-  }, []);
 
   const authors = useMemo(() => {
     const authorMap = new Map<string, { login: string; avatar_url: string }>();
@@ -327,7 +295,7 @@ export default function PRListView() {
         selectedAuthors.has(pr.user.login);
 
       // Team filter - check if PR author is in any selected team
-      const teamMatches = selectedTeams.size === 0 || 
+      const teamMatches = selectedTeams.size === 0 ||
         Array.from(selectedTeams).some((teamId: string) => {
           const team = teams.find(t => t.id === teamId);
           return team && team.authorLogins.includes(pr.user.login);
@@ -368,14 +336,41 @@ export default function PRListView() {
 
   // Pre-compute PR metadata for grouping
   const prsWithMetadata = useMemo<PRWithMetadata[]>(() => {
-    return getFilteredPRs.map((pr) => ({
-      pr,
-      agent: getAgentFromPR(pr),
-      titlePrefix: getTitlePrefix(pr.title, pr.head?.ref),
-      author: pr.user?.login || "unknown",
-      labelNames: pr.labels?.map((label: any) => label.name) || [],
-    }));
-  }, [getFilteredPRs, getAgentFromPR]);
+    return getFilteredPRs.map((pr) => getPRMetadata(pr));
+  }, [getFilteredPRs]);
+
+  // Compute which groups have merged PRs from the UNFILTERED list
+  // This allows us to show the merged icon even when merged PRs are filtered out
+  const groupsWithMergedPRs = useMemo(() => {
+    if (!selectedRepo) return new Set<string>();
+
+    // Get ALL PRs for the current repo (unfiltered)
+    const allRepoPRs = Array.from(pullRequests.values()).filter((pr) => {
+      const baseOwner = pr.base?.repo?.owner?.login;
+      const baseName = pr.base?.repo?.name;
+      return baseOwner === selectedRepo.owner && baseName === selectedRepo.name;
+    });
+
+    // Group by titlePrefix and check for merged PRs
+    const groupsWithMerged = new Set<string>();
+    const metadataMap = new Map<string, PRWithMetadata[]>();
+
+    allRepoPRs.forEach((pr) => {
+      const metadata = getPRMetadata(pr);
+      const group = metadataMap.get(metadata.titlePrefix) || [];
+      group.push(metadata);
+      metadataMap.set(metadata.titlePrefix, group);
+    });
+
+    // For each group, check if any PR is merged
+    metadataMap.forEach((group, titlePrefix) => {
+      if (group.some(item => item.pr.merged)) {
+        groupsWithMerged.add(titlePrefix);
+      }
+    });
+
+    return groupsWithMerged;
+  }, [pullRequests, selectedRepo]);
 
   const handlePRClick = useCallback(
     (pr: PullRequest) => {
@@ -464,7 +459,10 @@ export default function PRListView() {
 
   const closePRIds = useCallback(
     async (prIds: string[]) => {
+      console.log(`[PRListView] 🔄 Attempting to close ${prIds.length} PR(s):`, prIds);
+
       if (isClosing || prIds.length === 0) {
+        console.log(`[PRListView] ⚠️ Skipping close: isClosing=${isClosing}, prIds.length=${prIds.length}`);
         return;
       }
 
@@ -475,8 +473,11 @@ export default function PRListView() {
       });
 
       if (closableIds.length === 0) {
+        console.log(`[PRListView] ⚠️ No closable PRs found (all already closed or merged)`);
         return;
       }
+
+      console.log(`[PRListView] 📝 Closing ${closableIds.length} closable PR(s) out of ${uniqueIds.length} unique IDs`);
 
       let authToken = token;
 
@@ -554,11 +555,13 @@ export default function PRListView() {
         }
 
         if (updatedPRs.length > 0) {
+          console.log(`[PRListView] ✅ Successfully closed ${updatedPRs.length} PR(s):`, closedIds);
           bulkUpdatePRs(updatedPRs);
           closedIds.forEach((id) => deselectPR(id));
         }
 
         if (errors.length > 0) {
+          console.error(`[PRListView] ❌ Failed to close some PRs:`, errors);
           alert(`Some pull requests could not be closed:\n${errors.join("\n")}`);
         }
       } finally {
@@ -913,7 +916,7 @@ export default function PRListView() {
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
-                          
+
                           {teams.map(team => (
                             <label
                               key={team.id}
@@ -944,7 +947,7 @@ export default function PRListView() {
                               </div>
                             </label>
                           ))}
-                          
+
                           <div className={cn(
                             "my-1 border-t",
                             theme === "dark" ? "border-gray-700" : "border-gray-200"
@@ -1035,11 +1038,12 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
-            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}`}
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${getFilteredPRs.length}-${currentRepoKey}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
             sortBy={sortBy}
+            groupsWithMergedPRs={groupsWithMergedPRs}
             onTogglePRSelection={handleCheckboxChange}
             onToggleGroupSelection={handleGroupSelection}
             onPRClick={handlePRClick}
