@@ -264,7 +264,7 @@ export function IssueCreatorModal({
                 </div>
 
                 {/* Form Content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-scroll p-4 space-y-4">
                     {/* Title Input */}
                     <div>
                         <label
@@ -331,15 +331,15 @@ export function IssueCreatorModal({
                     {/* PR Linking Section */}
                     <div
                         className={cn(
-                            "border rounded-lg",
+                            "border rounded-lg overflow-hidden",
                             theme === "dark" ? "border-gray-700" : "border-gray-200"
                         )}
                     >
-                        <button
-                            onClick={() => setShowPRSection(!showPRSection)}
-                            disabled={isCreating}
+                        <div
+                            onClick={() => !isCreating && setShowPRSection(!showPRSection)}
                             className={cn(
                                 "w-full px-4 py-3 flex items-center justify-between transition-colors",
+                                !isCreating && "cursor-pointer",
                                 theme === "dark" ? "hover:bg-gray-750" : "hover:bg-gray-50",
                                 isCreating && "opacity-50 cursor-not-allowed"
                             )}
@@ -371,7 +371,7 @@ export function IssueCreatorModal({
                             ) : (
                                 <ChevronDown className="w-4 h-4" />
                             )}
-                        </button>
+                        </div>
 
                         {showPRSection && (
                             <div
