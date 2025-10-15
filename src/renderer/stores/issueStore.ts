@@ -22,6 +22,7 @@ interface IssueState {
   repoLabels: Array<{ name: string; color: string; description: string | null }>;
 
   fetchIssues: (owner: string, repo: string, force?: boolean) => Promise<void>;
+  createIssue: (owner: string, repo: string, title: string, body?: string, labels?: string[], assignees?: string[]) => Promise<Issue>;
   updateIssue: (issue: Issue) => void;
   closeIssues: (owner: string, repo: string, issueNumbers: number[]) => Promise<void>;
   reopenIssues: (owner: string, repo: string, issueNumbers: number[]) => Promise<void>;
@@ -115,6 +116,85 @@ export const useIssueStore = create<IssueState>((set, get) => ({
         error: (error as Error).message,
         loading: false,
       });
+    }
+  },
+
+  createIssue: async (owner: string, repo: string, title: string, body?: string, labels?: string[], assignees?: string[]) => {
+    console.log(`[STORE] ➕ createIssue: Creating issue in ${owner}/${repo}`, { title, labels, assignees });
+
+    try {
+      let token: string | null = null;
+
+      if (window.electron) {
+        token = await window.electron.auth.getToken();
+      } else {
+        const authStore = useAuthStore.getState();
+        token = authStore.token;
+      }
+
+      if (!token) throw new Error("Not authenticated");
+
+      let newIssue: Issue;
+
+      // Use mock data for dev token
+      if (token === "dev-token") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Create a mock issue with a random number
+        const mockNumber = Math.floor(Math.random() * 1000) + 100;
+        newIssue = {
+          id: mockNumber,
+          number: mockNumber,
+          title,
+          body: body || null,
+          state: "open",
+          user: {
+            login: "dev-user",
+            avatar_url: "https://github.com/identicons/dev.png",
+          },
+          labels: (labels || []).map((name) => ({
+            name,
+            color: Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+          })),
+          assignees: (assignees || []).map((login) => ({
+            login,
+            avatar_url: `https://github.com/${login}.png`,
+          })),
+          comments: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          closed_at: null,
+          repository: {
+            owner: { login: owner },
+            name: repo,
+          },
+        };
+      } else {
+        const api = new GitHubAPI(token);
+        newIssue = await api.createIssue(owner, repo, title, body, labels, assignees);
+
+        // Ensure repository info is set
+        if (!newIssue.repository) {
+          newIssue.repository = {
+            owner: { login: owner },
+            name: repo,
+          };
+        }
+      }
+
+      // Add the new issue to the store
+      const key = `${owner}/${repo}#${newIssue.number}`;
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        newIssues.set(key, newIssue);
+        return { issues: newIssues };
+      });
+
+      console.log(`[STORE] ✅ createIssue: Created issue #${newIssue.number}`);
+      return newIssue;
+    } catch (error) {
+      console.error(`[STORE] ❌ createIssue: Error creating issue:`, error);
+      set({ error: (error as Error).message });
+      throw error;
     }
   },
 

@@ -1326,6 +1326,26 @@ export class GitHubAPI {
     return data as Comment;
   }
 
+  async createIssue(
+    owner: string,
+    repo: string,
+    title: string,
+    body?: string,
+    labels?: string[],
+    assignees?: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.create({
+      owner,
+      repo,
+      title,
+      body: body || "",
+      labels: labels || [],
+      assignees: assignees || [],
+    });
+
+    return data as Issue;
+  }
+
   async updateIssue(
     owner: string,
     repo: string,

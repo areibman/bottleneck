@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, GitPullRequest, User } from "lucide-react";
+import { AlertCircle, CheckCircle, GitPullRequest, User, Plus } from "lucide-react";
 import { useIssueStore } from "../stores/issueStore";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import WelcomeView from "./WelcomeView";
 import { Issue } from "../services/github";
 import { PRAssignmentModal } from "../components/PRAssignmentModal";
+import { IssueCreatorModal } from "../components/IssueCreatorModal";
 import { IssueCard } from "./IssueTrackerView/components/IssueCard";
 import { QuickEditModal } from "./IssueTrackerView/components/QuickEditModal";
 import { useIssueDevelopmentLoader } from "./IssueTrackerView/hooks/useIssueDevelopmentLoader";
@@ -190,6 +191,7 @@ export default function IssueTrackerView() {
     issues,
     loading,
     fetchIssues,
+    createIssue,
     updateIssue,
     setIssueLabels,
     closeIssues,
@@ -197,6 +199,8 @@ export default function IssueTrackerView() {
     linkPRsToIssue,
     unlinkPRFromIssue,
     refreshIssueLinks,
+    repoLabels,
+    fetchRepoLabels,
   } = useIssueStore();
   const { selectedRepo, pullRequests, fetchPullRequests } = usePRStore();
   const { theme } = useUIStore();
@@ -206,13 +210,15 @@ export default function IssueTrackerView() {
   const [isUpdatingIssue, setIsUpdatingIssue] = useState(false);
   const [selectedIssueForPRAssignment, setSelectedIssueForPRAssignment] = useState<Issue | null>(null);
   const [showPRAssignmentModal, setShowPRAssignmentModal] = useState(false);
+  const [showIssueCreatorModal, setShowIssueCreatorModal] = useState(false);
 
   useEffect(() => {
     if (selectedRepo) {
       fetchIssues(selectedRepo.owner, selectedRepo.name);
       fetchPullRequests(selectedRepo.owner, selectedRepo.name);
+      fetchRepoLabels(selectedRepo.owner, selectedRepo.name);
     }
-  }, [selectedRepo, fetchIssues, fetchPullRequests]);
+  }, [selectedRepo, fetchIssues, fetchPullRequests, fetchRepoLabels]);
 
   useIssueDevelopmentLoader(
     selectedRepo?.owner,
@@ -443,6 +449,44 @@ export default function IssueTrackerView() {
     ],
   );
 
+  const handleCreateIssue = useCallback(
+    async (title: string, body: string, labels: string[], prNumbers: number[]) => {
+      if (!selectedRepo) return;
+
+      try {
+        const owner = selectedRepo.owner;
+        const repo = selectedRepo.name;
+
+        console.log(`[Issue Tracker] ➕ Creating issue in ${owner}/${repo}:`, {
+          title,
+          labels,
+          prNumbers,
+        });
+
+        // Create the issue
+        const newIssue = await createIssue(owner, repo, title, body, labels);
+
+        console.log(`[Issue Tracker] ✅ Created issue #${newIssue.number}`);
+
+        // Link PRs to the newly created issue
+        if (prNumbers.length > 0) {
+          await linkPRsToIssue(owner, repo, newIssue.number, prNumbers);
+          console.log(`[Issue Tracker] ✅ Linked ${prNumbers.length} PRs to issue #${newIssue.number}`);
+        }
+
+        // Close the modal
+        setShowIssueCreatorModal(false);
+
+        // Navigate to the new issue
+        navigate(`/issues/${owner}/${repo}/${newIssue.number}`);
+      } catch (error) {
+        console.error("Failed to create issue:", error);
+        throw error; // Re-throw to let the modal handle the error
+      }
+    },
+    [selectedRepo, createIssue, linkPRsToIssue, navigate],
+  );
+
 
   const handleDrop = useCallback(
     async (issueData: any, targetColumn: KanbanColumn) => {
@@ -573,18 +617,30 @@ export default function IssueTrackerView() {
         )}
       >
         <div className="flex items-center justify-between">
-          <h1 className="text-base font-semibold flex items-center">
-            <GitPullRequest className="w-4 h-4 mr-1.5" />
-            Issue Tracker
-            <span
+          <div className="flex items-center space-x-3">
+            <h1 className="text-base font-semibold flex items-center">
+              <GitPullRequest className="w-4 h-4 mr-1.5" />
+              Issue Tracker
+              <span
+                className={cn(
+                  "ml-2 text-xs",
+                  theme === "dark" ? "text-gray-500" : "text-gray-600",
+                )}
+              >
+                ({totalIssues})
+              </span>
+            </h1>
+            <button
+              onClick={() => setShowIssueCreatorModal(true)}
               className={cn(
-                "ml-2 text-xs",
-                theme === "dark" ? "text-gray-500" : "text-gray-600",
+                "flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                "bg-blue-600 text-white hover:bg-blue-700",
               )}
             >
-              ({totalIssues})
-            </span>
-          </h1>
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Issue</span>
+            </button>
+          </div>
           <div className="flex items-center space-x-2 text-xs text-gray-500">
             <span>Drag and drop to update status</span>
             {isUpdatingIssue && (
@@ -659,6 +715,28 @@ export default function IssueTrackerView() {
             issueTitle={selectedIssueForPRAssignment?.title || ""}
             theme={theme}
             initialLinkedPRs={currentlyLinkedPRs}
+          />
+        );
+      })()}
+
+      {showIssueCreatorModal && selectedRepo && (() => {
+        const allPRs = Array.from(pullRequests.values());
+        const repoPRs = allPRs.filter((pr) => {
+          const prRepoOwner = pr.base?.repo?.owner?.login;
+          const prRepoName = pr.base?.repo?.name;
+          return prRepoOwner === selectedRepo.owner && prRepoName === selectedRepo.name;
+        });
+
+        return (
+          <IssueCreatorModal
+            isOpen={showIssueCreatorModal}
+            onClose={() => setShowIssueCreatorModal(false)}
+            onCreate={handleCreateIssue}
+            availablePRs={repoPRs}
+            availableLabels={repoLabels}
+            theme={theme}
+            repoOwner={selectedRepo.owner}
+            repoName={selectedRepo.name}
           />
         );
       })()}
