@@ -112,7 +112,7 @@ echo ""
 echo "3. After adding secrets, DELETE these files for security:"
 echo "   rm -rf $TEMP_DIR"
 echo ""
-echo "📖 For full instructions, see: RELEASE.md"
+echo "📖 For full instructions, see your internal release process docs"
 echo ""
 
 # Open the temp directory in Finder
