@@ -9,6 +9,7 @@ export default defineConfig({
     monacoEditorPlugin({
       languageWorkers: ["editorWorkerService", "typescript", "json"],
       customWorkers: [],
+      publicPath: "./",
     }),
   ],
   base: "./",
