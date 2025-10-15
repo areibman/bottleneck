@@ -14,7 +14,10 @@ export default defineConfig({
   base: "./",
   root: path.resolve(__dirname, "src/renderer"),
   build: {
-    outDir: path.resolve(__dirname, "dist/renderer"),
+    // Use a path relative to the Vite root to avoid Windows path
+    // concatenation issues in vite-plugin-monaco-editor
+    // (absolute outDir may be joined with root incorrectly on Windows)
+    outDir: "../../dist/renderer",
     emptyOutDir: true,
     sourcemap: false,
     minify: "esbuild",
