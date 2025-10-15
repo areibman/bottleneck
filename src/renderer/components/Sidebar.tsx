@@ -24,7 +24,7 @@ interface SidebarProps {
 
 const NAV_ITEMS: SidebarNavItem[] = [
   { path: "/pulls", icon: GitPullRequest, label: "Pull Requests" },
-  { path: "/issues", icon: AlertCircle, label: "Issues" },
+  { path: "/issues", icon: AlertCircle, label: "Issue Tracker" },
   { path: "/branches", icon: GitBranch, label: "Branches" },
   {
     icon: SatelliteDish,

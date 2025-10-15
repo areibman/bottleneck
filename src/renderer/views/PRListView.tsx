@@ -5,14 +5,13 @@ import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
-import { detectAgentName } from "../utils/agentIcons";
-import { getTitlePrefix } from "../utils/prUtils";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
 import { cn } from "../utils/cn";
 import WelcomeView from "./WelcomeView";
 import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
+import { getPRMetadata } from "../utils/prGrouping";
 
 type StatusType = PRStatusType; // Use the centralized type
 
@@ -147,35 +146,6 @@ export default function PRListView() {
     [selectedRepo, fetchPRDetails, bulkUpdatePRs],
   );
 
-  // Extract agent from PR (e.g., "cursor" from branch name or title)
-  const getAgentFromPR = useCallback((pr: PullRequest): string => {
-    const branchName = pr.head?.ref || "";
-    const labelNames = (pr.labels ?? [])
-      .map((label: any) => label?.name)
-      .filter(Boolean) as string[];
-
-    const detected = detectAgentName(
-      branchName,
-      pr.title,
-      pr.body,
-      pr.user?.login,
-      pr.head?.ref,
-      ...labelNames,
-    );
-
-    if (detected) {
-      return detected;
-    }
-
-    const hasAILabel = labelNames.some((labelName) =>
-      labelName.toLowerCase().includes("ai"),
-    );
-    if (hasAILabel) {
-      return "ai";
-    }
-
-    return "unknown";
-  }, []);
 
   const authors = useMemo(() => {
     const authorMap = new Map<string, { login: string; avatar_url: string }>();
@@ -319,14 +289,8 @@ export default function PRListView() {
 
   // Pre-compute PR metadata for grouping
   const prsWithMetadata = useMemo<PRWithMetadata[]>(() => {
-    return getFilteredPRs.map((pr) => ({
-      pr,
-      agent: getAgentFromPR(pr),
-      titlePrefix: getTitlePrefix(pr.title, pr.head?.ref),
-      author: pr.user?.login || "unknown",
-      labelNames: pr.labels?.map((label: any) => label.name) || [],
-    }));
-  }, [getFilteredPRs, getAgentFromPR]);
+    return getFilteredPRs.map((pr) => getPRMetadata(pr));
+  }, [getFilteredPRs]);
 
   const handlePRClick = useCallback(
     (pr: PullRequest) => {

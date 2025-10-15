@@ -66,6 +66,8 @@ export interface PullRequest {
     login: string;
     avatar_url: string;
   }>;
+  // Linked issue
+  linkedIssueNumber?: number;
 }
 
 export interface Repository {
@@ -81,6 +83,44 @@ export interface Repository {
   pushed_at: string | null;
   stargazers_count: number;
   open_issues_count: number;
+}
+
+export interface IssueLinkedPullRequest {
+  id: number;
+  number: number;
+  state: "open" | "closed";
+  merged: boolean;
+  draft: boolean;
+  title: string;
+  head?: {
+    ref: string;
+  };
+  url?: string;
+  repository?: {
+    owner: string;
+    name: string;
+  };
+  author?: {
+    login: string;
+    avatarUrl: string;
+  };
+}
+
+export interface IssueLinkedBranch {
+  id: string;
+  refName: string;
+  repository: {
+    owner: string;
+    name: string;
+    url?: string | null;
+  };
+  latestCommit?: {
+    abbreviatedOid: string;
+    committedDate: string;
+    messageHeadline: string | null;
+    url?: string | null;
+  };
+  associatedPullRequests: IssueLinkedPullRequest[];
 }
 
 export interface Issue {
@@ -111,6 +151,9 @@ export interface Issue {
     };
     name: string;
   };
+  linkedPRs?: IssueLinkedPullRequest[];
+  /** @deprecated Branch linking is no longer used. Use linkedPRs only. */
+  linkedBranches?: IssueLinkedBranch[];
 }
 
 export interface Comment {
@@ -702,16 +745,44 @@ export class GitHubAPI {
     repo: string,
     state: "open" | "closed" | "all" = "open",
   ) {
-    const { data } = await this.octokit.issues.listForRepo({
-      owner,
-      repo,
-      state,
-      per_page: 500,
-    });
+    console.log(`[API] 📡 Fetching issues for ${owner}/${repo} with state=${state}`);
+
+    // Use pagination to get all issues
+    const allIssues: any[] = [];
+    let page = 1;
+    const per_page = 100;
+
+    while (true) {
+      const { data } = await this.octokit.issues.listForRepo({
+        owner,
+        repo,
+        state,
+        per_page,
+        page,
+      });
+
+      if (data.length === 0) break;
+
+      allIssues.push(...data);
+      console.log(`[API] 📄 Fetched page ${page}: ${data.length} items (total so far: ${allIssues.length})`);
+
+      // If we got less than per_page, we're on the last page
+      if (data.length < per_page) break;
+
+      page++;
+
+      // Safety limit to avoid infinite loops
+      if (page > 10) {
+        console.warn(`[API] ⚠️ Reached page limit of 10, stopping pagination`);
+        break;
+      }
+    }
 
     // Filter out pull requests - GitHub API returns both issues and PRs from this endpoint
     // Pull requests have a pull_request property
-    const issues = data.filter((item) => !("pull_request" in item));
+    const issues = allIssues.filter((item) => !("pull_request" in item));
+
+    console.log(`[API] ✅ Total issues fetched: ${issues.length} (filtered from ${allIssues.length} items)`);
 
     return issues as Issue[];
   }
@@ -1255,6 +1326,26 @@ export class GitHubAPI {
     return data as Comment;
   }
 
+  async createIssue(
+    owner: string,
+    repo: string,
+    title: string,
+    body?: string,
+    labels?: string[],
+    assignees?: string[],
+  ): Promise<Issue> {
+    const { data } = await this.octokit.issues.create({
+      owner,
+      repo,
+      title,
+      body: body || "",
+      labels: labels || [],
+      assignees: assignees || [],
+    });
+
+    return data as Issue;
+  }
+
   async updateIssue(
     owner: string,
     repo: string,
@@ -1393,12 +1484,19 @@ export class GitHubAPI {
     issueNumber: number,
     label: string,
   ): Promise<void> {
-    await this.octokit.issues.removeLabel({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      name: label,
-    });
+    try {
+      await this.octokit.issues.removeLabel({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        name: label,
+      });
+    } catch (error: any) {
+      // If label doesn't exist (404), that's fine - it's already not there
+      if (error.status !== 404) {
+        throw error;
+      }
+    }
   }
 
   async setIssueLabels(
@@ -1510,5 +1608,277 @@ export class GitHubAPI {
       ...currentPR,
       draft: isDraft !== undefined ? isDraft : draft,
     };
+  }
+
+  /**
+   * Fetch the issue's development information (linked pull requests via closing keywords).
+   * Note: This only returns PRs that reference the issue via closing keywords (Fixes/Closes/Resolves).
+   * Branches are no longer tracked to avoid unnecessary branch creation.
+   */
+  async getIssueDevelopment(
+    owner: string,
+    repo: string,
+    issueNumber: number
+  ): Promise<{
+    pullRequests: IssueLinkedPullRequest[];
+  }> {
+    const query = `
+      query($owner: String!, $repo: String!, $issueNumber: Int!) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $issueNumber) {
+            closedByPullRequestsReferences(first: 100) {
+              nodes {
+                databaseId
+                number
+                title
+                state
+                merged
+                isDraft
+                headRefName
+                url
+                author {
+                  login
+                  avatarUrl
+                }
+                headRepository {
+                  name
+                  owner {
+                    login
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        repo,
+        issueNumber,
+      });
+
+      const issueNode = response.repository?.issue;
+
+      const mapPullRequest = (prNode: any): IssueLinkedPullRequest | null => {
+        if (!prNode || typeof prNode.number !== "number") {
+          return null;
+        }
+
+        const rawState = typeof prNode.state === "string" ? prNode.state.toUpperCase() : "";
+        const merged = Boolean(prNode.merged) || rawState === "MERGED";
+        const state: "open" | "closed" =
+          rawState === "OPEN" ? "open" : "closed";
+
+        const idCandidate =
+          typeof prNode.databaseId === "number" ? prNode.databaseId : prNode.number;
+
+        const pullRequest: IssueLinkedPullRequest = {
+          id: idCandidate,
+          number: prNode.number,
+          title: typeof prNode.title === "string" ? prNode.title : `PR #${prNode.number}`,
+          state,
+          merged,
+          draft: Boolean(prNode.isDraft),
+          head: prNode.headRefName ? { ref: prNode.headRefName } : undefined,
+          url: typeof prNode.url === "string" ? prNode.url : undefined,
+          repository: prNode.headRepository
+            ? {
+              owner: prNode.headRepository.owner?.login ?? owner,
+              name: prNode.headRepository.name ?? repo,
+            }
+            : undefined,
+          author: prNode.author
+            ? {
+              login: prNode.author.login,
+              avatarUrl: prNode.author.avatarUrl,
+            }
+            : undefined,
+        };
+
+        return pullRequest;
+      };
+
+      const closingPRNodes =
+        issueNode?.closedByPullRequestsReferences?.nodes ?? [];
+      const pullRequests: IssueLinkedPullRequest[] = [];
+
+      for (const prNode of closingPRNodes) {
+        const mapped = mapPullRequest(prNode);
+        if (mapped) {
+          pullRequests.push(mapped);
+        }
+      }
+
+      console.log(
+        `[API] ✅ getIssueDevelopment: ${pullRequests.length} PRs for issue #${issueNumber}`,
+      );
+
+      return {
+        pullRequests,
+      };
+    } catch (error) {
+      console.error(
+        `[API] ❌ getIssueDevelopment: Failed for issue #${issueNumber}`,
+        error,
+      );
+      return {
+        pullRequests: [],
+      };
+    }
+  }
+
+  /**
+   * Get linked PRs for an issue via closing keywords.
+   * Provided for compatibility with existing callers.
+   */
+  async getLinkedPRsForIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number
+  ): Promise<IssueLinkedPullRequest[]> {
+    const { pullRequests } = await this.getIssueDevelopment(owner, repo, issueNumber);
+    return pullRequests;
+  }
+
+  /**
+   * Get the issue linked to a PR using GitHub GraphQL API
+   */
+  async getIssueForPR(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<number | null> {
+    const query = `
+      query($owner: String!, $repo: String!, $prNumber: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $prNumber) {
+            closingIssuesReferences(first: 1) {
+              nodes {
+                number
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const response: any = await this.octokit.graphql(query, {
+        owner,
+        repo,
+        prNumber,
+      });
+
+      const issues = response.repository?.pullRequest?.closingIssuesReferences?.nodes || [];
+      return issues.length > 0 ? issues[0].number : null;
+    } catch (error) {
+      console.error('Error fetching linked issue for PR:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Link a PR to an issue by adding a closing keyword to the PR body
+   * This creates the proper "Linked issues" sidebar link in GitHub's UI and enables auto-close on merge
+   */
+  async linkPRToIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    prNumber: number
+  ): Promise<void> {
+    try {
+      // Get the current PR data to read its body
+      const { data: pr } = await this.octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+
+      const currentBody = pr.body || "";
+
+      // Check if the issue is already referenced in the body
+      const issueRefPattern = new RegExp(
+        `\\b(Fixes|Closes|Resolves)\\s+#${issueNumber}\\b`,
+        'i'
+      );
+
+      if (issueRefPattern.test(currentBody)) {
+        console.log(`PR #${prNumber} already references issue #${issueNumber}`);
+        return;
+      }
+
+      // Add the closing keyword to the body
+      const closingKeyword = `Fixes #${issueNumber}`;
+      const updatedBody = currentBody
+        ? `${currentBody}\n\n${closingKeyword}`
+        : closingKeyword;
+
+      // Update the PR body using the issues endpoint (PRs are issues)
+      await this.octokit.issues.update({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: updatedBody,
+      });
+
+      console.log(`✅ Linked PR #${prNumber} to issue #${issueNumber} using closing keyword`);
+    } catch (error: any) {
+      console.error(`Error linking PR #${prNumber} to issue #${issueNumber}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unlink a PR from an issue by removing closing keywords from the PR body
+   */
+  async unlinkPRFromIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    prNumber: number
+  ): Promise<void> {
+    try {
+      // Get the current PR data to read its body
+      const { data: pr } = await this.octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+
+      const currentBody = pr.body || "";
+
+      // Remove all closing keyword references to this specific issue
+      // Match patterns like "Fixes #123", "Closes #123", "Resolves #123"
+      // Also handle cross-repo references like "Fixes owner/repo#123"
+      const issueRefPattern = new RegExp(
+        `\\s*\\n*\\s*\\b(Fixes|Closes|Resolves)\\s+(?:[\\w-]+\\/[\\w-]+)?#${issueNumber}\\b\\s*`,
+        'gi'
+      );
+
+      const updatedBody = currentBody.replace(issueRefPattern, '').trim();
+
+      // Only update if something changed
+      if (updatedBody === currentBody.trim()) {
+        console.log(`No reference to issue #${issueNumber} found in PR #${prNumber} body`);
+        return;
+      }
+
+      // Update the PR body using the issues endpoint (PRs are issues)
+      await this.octokit.issues.update({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: updatedBody,
+      });
+
+      console.log(`✅ Unlinked PR #${prNumber} from issue #${issueNumber} by removing closing keyword`);
+    } catch (error: any) {
+      console.error(`Error unlinking PR #${prNumber} from issue #${issueNumber}:`, error);
+      throw error;
+    }
   }
 }
