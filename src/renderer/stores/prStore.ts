@@ -433,7 +433,22 @@ export const usePRStore = create<PRState>((set, get) => {
           ];
         } else {
           const api = new GitHubAPI(token);
-          repos = await api.getRepositories();
+          const perPage = 100;
+          const allRepos: Repository[] = [];
+          let page = 1;
+
+          while (true) {
+            const pageRepos = await api.getRepositories(page, perPage);
+            allRepos.push(...pageRepos);
+
+            if (pageRepos.length < perPage) {
+              break;
+            }
+
+            page += 1;
+          }
+
+          repos = allRepos;
         }
 
         set({

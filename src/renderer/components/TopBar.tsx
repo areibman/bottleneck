@@ -48,6 +48,29 @@ export default function TopBar() {
   const [activeSection, setActiveSection] = React.useState<"recent" | "all">(
     "recent",
   );
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const matchesRepoSearch = React.useCallback((repo: any, query: string) => {
+    if (!query) {
+      return true;
+    }
+
+    const lowerName = repo.name?.toLowerCase() ?? "";
+    const lowerFullName = repo.full_name?.toLowerCase() ?? "";
+    const ownerValue =
+      typeof repo.owner === "string" ? repo.owner : repo.owner?.login ?? "";
+    const lowerOwner = ownerValue.toLowerCase();
+    const lowerDescription = repo.description?.toLowerCase() ?? "";
+
+    return (
+      lowerName.includes(query) ||
+      lowerFullName.includes(query) ||
+      lowerOwner.includes(query) ||
+      lowerDescription.includes(query)
+    );
+  }, []);
+  const trimmedQuery = searchQuery.trim();
+  const normalizedQuery = trimmedQuery.toLowerCase();
+  const hasSearchQuery = trimmedQuery.length > 0;
 
   const handleZoomIn = async () => {
     console.log("Zoom In clicked");
@@ -91,12 +114,48 @@ export default function TopBar() {
     return groups;
   }, [repositories]);
 
+  const filteredGroupedRepos = React.useMemo(() => {
+    if (!hasSearchQuery) {
+      return groupedRepos;
+    }
+
+    const filtered: GroupedRepositories = {};
+    Object.keys(groupedRepos).forEach((org) => {
+      if (org.toLowerCase().includes(normalizedQuery)) {
+        filtered[org] = groupedRepos[org];
+        return;
+      }
+
+      const matchingRepos = groupedRepos[org].filter((repo) =>
+        matchesRepoSearch(repo, normalizedQuery),
+      );
+
+      if (matchingRepos.length > 0) {
+        filtered[org] = matchingRepos;
+      }
+    });
+
+    return filtered;
+  }, [groupedRepos, hasSearchQuery, matchesRepoSearch, normalizedQuery]);
+
+  const displayGroupedRepos = hasSearchQuery ? filteredGroupedRepos : groupedRepos;
+
+  const filteredRecentRepos = React.useMemo(() => {
+    if (!hasSearchQuery) {
+      return recentlyViewedRepos;
+    }
+
+    return recentlyViewedRepos.filter((repo) =>
+      matchesRepoSearch(repo, normalizedQuery),
+    );
+  }, [recentlyViewedRepos, hasSearchQuery, matchesRepoSearch, normalizedQuery]);
+
   // Get sorted organization names
   const sortedOrgs = React.useMemo(() => {
-    return Object.keys(groupedRepos).sort((a, b) =>
+    return Object.keys(displayGroupedRepos).sort((a, b) =>
       a.toLowerCase().localeCompare(b.toLowerCase()),
     );
-  }, [groupedRepos]);
+  }, [displayGroupedRepos]);
 
   const handleRepoSelect = async (repo: any) => {
     setSelectedRepo(repo);
@@ -143,6 +202,31 @@ export default function TopBar() {
     return `${Math.floor(days / 365)}y ago`;
   };
 
+  React.useEffect(() => {
+    if (hasSearchQuery && activeSection !== "all") {
+      setActiveSection("all");
+    }
+  }, [hasSearchQuery, activeSection]);
+
+  React.useEffect(() => {
+    if (!hasSearchQuery) {
+      return;
+    }
+
+    const groups = Object.keys(displayGroupedRepos);
+
+    setExpandedOrgs((prev) => {
+      const shouldUpdate =
+        groups.length !== prev.size || groups.some((org) => !prev.has(org));
+
+      if (!shouldUpdate) {
+        return prev;
+      }
+
+      return new Set(groups);
+    });
+  }, [displayGroupedRepos, hasSearchQuery]);
+
   return (
     <header
       className={cn(
@@ -180,12 +264,48 @@ export default function TopBar() {
               />
               <div
                 className={cn(
-                  "absolute left-0 mt-2 min-w-[320px] max-w-[480px] rounded-md shadow-lg z-20 max-h-[500px] overflow-hidden border flex flex-col",
+                  "absolute left-0 mt-2 w-[420px] rounded-md shadow-lg z-20 max-h-[500px] overflow-hidden border flex flex-col",
                   theme === "dark"
                     ? "bg-gray-800 border-gray-700"
                     : "bg-white border-gray-200",
                 )}
               >
+                <div
+                  className={cn(
+                    "p-3 border-b",
+                    theme === "dark" ? "border-gray-700" : "border-gray-200",
+                  )}
+                >
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search repositories..."
+                      className={cn(
+                        "w-full pl-3 pr-8 py-2 rounded-md border text-sm transition-colors no-drag focus:outline-none focus:ring-1",
+                        theme === "dark"
+                          ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
+                          : "bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500",
+                      )}
+                    />
+                    {hasSearchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className={cn(
+                          "absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded transition-colors",
+                          theme === "dark"
+                            ? "text-gray-400 hover:text-gray-200 hover:bg-gray-600"
+                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200",
+                        )}
+                        title="Clear search"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Section Tabs */}
                 <div
                   className={cn(
@@ -194,7 +314,7 @@ export default function TopBar() {
                   )}
                 >
                   <div
-                    onClick={() => setActiveSection("recent")}
+                    onClick={() => !hasSearchQuery && setActiveSection("recent")}
                     className={cn(
                       "flex-1 px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center cursor-pointer",
                       activeSection === "recent"
@@ -204,6 +324,7 @@ export default function TopBar() {
                         : theme === "dark"
                           ? "text-gray-400 hover:text-gray-200"
                           : "text-gray-600 hover:text-gray-900",
+                      hasSearchQuery && "opacity-50 cursor-not-allowed",
                     )}
                   >
                     <Clock className="w-3 h-3 inline mr-1.5" />
@@ -231,7 +352,7 @@ export default function TopBar() {
                 <div className="overflow-y-auto overflow-x-hidden flex-1">
                   {activeSection === "recent" ? (
                     <div className="p-1">
-                      {recentlyViewedRepos.length === 0 ? (
+                      {filteredRecentRepos.length === 0 ? (
                         <div
                           className={cn(
                             "p-4 text-sm text-center",
@@ -240,10 +361,12 @@ export default function TopBar() {
                               : "text-gray-600",
                           )}
                         >
-                          No recently viewed repositories
+                          {hasSearchQuery
+                            ? `No repositories match "${trimmedQuery}"`
+                            : "No recently viewed repositories"}
                         </div>
                       ) : (
-                        recentlyViewedRepos.map((repo) => (
+                        filteredRecentRepos.map((repo) => (
                           <button
                             key={repo.id}
                             onClick={() => handleRepoSelect(repo)}
@@ -253,9 +376,9 @@ export default function TopBar() {
                                 ? "hover:bg-gray-700"
                                 : "hover:bg-gray-100",
                               selectedRepo?.id === repo.id &&
-                              (theme === "dark"
-                                ? "bg-gray-700"
-                                : "bg-gray-100"),
+                                (theme === "dark"
+                                  ? "bg-gray-700"
+                                  : "bg-gray-100"),
                             )}
                           >
                             <div className="flex-1 min-w-0 pr-6">
@@ -344,7 +467,9 @@ export default function TopBar() {
                               : "text-gray-600",
                           )}
                         >
-                          No repositories found
+                          {hasSearchQuery
+                            ? `No repositories match "${trimmedQuery}"`
+                            : "No repositories found"}
                         </div>
                       ) : (
                         sortedOrgs.map((org) => (
@@ -374,14 +499,14 @@ export default function TopBar() {
                                       : "bg-gray-200 text-gray-600",
                                   )}
                                 >
-                                  {groupedRepos[org].length}
+                                  {displayGroupedRepos[org].length}
                                 </span>
                               </div>
                             </button>
 
                             {expandedOrgs.has(org) && (
                               <div className="ml-3">
-                                {groupedRepos[org].map((repo) => (
+                                {displayGroupedRepos[org].map((repo) => (
                                   <button
                                     key={repo.id}
                                     onClick={() => handleRepoSelect(repo)}
@@ -391,9 +516,9 @@ export default function TopBar() {
                                         ? "hover:bg-gray-700"
                                         : "hover:bg-gray-100",
                                       selectedRepo?.id === repo.id &&
-                                      (theme === "dark"
-                                        ? "bg-gray-700"
-                                        : "bg-gray-100"),
+                                        (theme === "dark"
+                                          ? "bg-gray-700"
+                                          : "bg-gray-100"),
                                     )}
                                   >
                                     <div className="flex-1 min-w-0">
@@ -444,13 +569,12 @@ export default function TopBar() {
                                             repo.pushed_at || repo.updated_at,
                                           )}
                                         </span>
-                                        {repo.stargazers_count !==
-                                          undefined && (
-                                            <span className="flex items-center gap-1">
-                                              <Star className="w-3 h-3" />
-                                              {repo.stargazers_count}
-                                            </span>
-                                          )}
+                                        {repo.stargazers_count !== undefined && (
+                                          <span className="flex items-center gap-1">
+                                            <Star className="w-3 h-3" />
+                                            {repo.stargazers_count}
+                                          </span>
+                                        )}
                                         {repo.open_issues_count !== undefined &&
                                           repo.open_issues_count > 0 && (
                                             <span className="flex items-center gap-1">
