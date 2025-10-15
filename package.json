@@ -65,7 +65,6 @@
     "vite": "^5.0.11",
     "vite-plugin-electron": "^0.15.5",
     "vite-plugin-electron-renderer": "^0.14.5",
-    "vite-plugin-monaco-editor": "^1.1.0",
     "vitest": "^3.2.4",
     "zustand": "^4.4.7"
   },
