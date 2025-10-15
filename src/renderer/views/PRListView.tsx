@@ -490,8 +490,11 @@ export default function PRListView() {
   const handleCloseGroup = useCallback(
     async (prIds: string[]) => {
       await closePRIds(prIds);
+      // Force a re-render by updating the filter state
+      // This ensures the UI updates immediately after closing PRs
+      setPRListFilters(prev => ({ ...prev }));
     },
-    [closePRIds],
+    [closePRIds, setPRListFilters],
   );
 
   const hasSelection = selectedPRs.size > 0;
@@ -875,7 +878,7 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
-            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}`}
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${prsWithMetadata.filter(p => p.pr.state === 'open').length}-${prsWithMetadata.filter(p => p.pr.state === 'closed').length}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
