@@ -9,12 +9,12 @@ import { getTitlePrefix } from "./prUtils";
 import type { PRWithMetadata } from "../types/prList";
 
 // Re-export for convenience
-export type PRMetadata = PRWithMetadata;
+type PRMetadata = PRWithMetadata;
 
 /**
  * Extract agent from PR (e.g., "cursor" from branch name or title)
  */
-export function getAgentFromPR(pr: PullRequest): string {
+function getAgentFromPR(pr: PullRequest): string {
     const branchName = pr.head?.ref || "";
     const labelNames = (pr.labels ?? [])
         .map((label: any) => label?.name)
@@ -78,7 +78,7 @@ export function groupPRsByPrefix(
  * Group PRs by agent
  * Returns a Map where key is the agent name and value is an array of PRMetadata
  */
-export function groupPRsByAgent(
+function groupPRsByAgent(
     prsWithMetadata: PRMetadata[]
 ): Map<string, PRMetadata[]> {
     const grouped = new Map<string, PRMetadata[]>();
@@ -95,7 +95,7 @@ export function groupPRsByAgent(
 /**
  * Check if any PR in a group is closed/merged
  */
-export function isGroupClosed(prs: PRMetadata[]): boolean {
+function isGroupClosed(prs: PRMetadata[]): boolean {
     return prs.some(prMeta => prMeta.pr.state === "closed" || prMeta.pr.merged);
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 
-export type ResizeMode = "none" | "width" | "height" | "both";
+type ResizeMode = "none" | "width" | "height" | "both";
 
 interface OverlayResizeOptions {
   minWidth?: number;

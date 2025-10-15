@@ -397,28 +397,6 @@ export const mockPullRequests = [
   },
 ];
 
-export const mockRepositories = [
-  {
-    id: 1,
-    owner: "dev-user",
-    name: "bottleneck",
-    full_name: "dev-user/bottleneck",
-    description: "Fast GitHub PR review and branch management",
-    default_branch: "main",
-    private: false,
-    clone_url: "https://github.com/dev-user/bottleneck.git",
-  },
-  {
-    id: 2,
-    owner: "dev-user",
-    name: "example-repo",
-    full_name: "dev-user/example-repo",
-    description: "Example repository for testing",
-    default_branch: "main",
-    private: false,
-    clone_url: "https://github.com/dev-user/example-repo.git",
-  },
-];
 
 export const mockFiles = [
   {

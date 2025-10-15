@@ -12,7 +12,7 @@ import { formatDistanceToNow } from "date-fns";
 import { getLabelColors } from "../../../utils/labelColors";
 import { IssueDevelopmentTreeView } from "./IssueDevelopmentTreeView";
 
-export interface IssueCardProps {
+interface IssueCardProps {
   issue: Issue;
   onIssueClick: (issue: Issue) => void;
   onQuickEdit: (issue: Issue) => void;

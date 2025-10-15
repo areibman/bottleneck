@@ -3,7 +3,7 @@ import claudeIconUrl from "../assets/agents/claude.svg";
 import openaiIconUrl from "../assets/agents/openai.svg";
 import devinIconUrl from "../assets/agents/devin.svg";
 
-export interface AgentIconInfo {
+interface AgentIconInfo {
   src: string;
   alt: string;
   themeFilter?: Partial<Record<"light" | "dark", string>>;
@@ -76,7 +76,7 @@ export function resolveAgentKey(agentName?: string | null): string | undefined {
   return ALIASES[normalized] ?? normalized;
 }
 
-export function getAgentIcon(agentName?: string | null): AgentIconInfo | undefined {
+function getAgentIcon(agentName?: string | null): AgentIconInfo | undefined {
   const key = resolveAgentKey(agentName);
   if (!key) {
     return undefined;

@@ -20,11 +20,3 @@ export interface ParticipantStat {
   isBot?: boolean;
 }
 
-export interface TimelineItem {
-  id: string | number;
-  type: "comment" | "review";
-  timestamp: string;
-  user: { login: string; avatar_url: string };
-  body?: string;
-  state?: string;
-}

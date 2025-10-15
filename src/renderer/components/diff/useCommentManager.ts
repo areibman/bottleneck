@@ -42,7 +42,7 @@ interface CommentManagerParams {
   onCommentAdded?: (comment: Comment) => void;
 }
 
-export interface CommentManagerState {
+interface CommentManagerState {
   commentThreads: InlineCommentThread[];
   activeOverlay: ActiveOverlay | null;
   overlayPosition: { top: number; left: number } | null;

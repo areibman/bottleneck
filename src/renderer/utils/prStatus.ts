@@ -32,7 +32,7 @@ export function getPRStatus(pr: PullRequest): PRStatusType {
  * @param pr - The pull request to analyze
  * @returns Object with boolean flags for display logic
  */
-export function getPRDisplayState(pr: PullRequest) {
+function getPRDisplayState(pr: PullRequest) {
     const status = getPRStatus(pr);
     return {
         isOpen: status === "open",
@@ -77,7 +77,7 @@ export function getPRColorClass(pr: PullRequest): string {
  * @param size - Size class for the icon (default: "w-5 h-5")
  * @returns Object with Icon component and className
  */
-export function getPRIconProps(pr: PullRequest, size: string = "w-5 h-5") {
+function getPRIconProps(pr: PullRequest, size: string = "w-5 h-5") {
     return {
         Icon: getPRIcon(pr),
         className: `${size} ${getPRColorClass(pr)}`,

@@ -13,12 +13,12 @@ interface PRGroup {
   closedCount: number;
 }
 
-export interface PRFilters {
+interface PRFilters {
   author: string;
   agent: string;
 }
 
-export type PRFilterType = 'open' | 'draft' | 'review-requested' | 'merged' | 'closed';
+type PRFilterType = 'open' | 'draft' | 'review-requested' | 'merged' | 'closed';
 
 interface PRState {
   pullRequests: Map<string, PullRequest>;

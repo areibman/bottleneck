@@ -47,13 +47,13 @@ export function getTitlePrefix(title: string, branchName?: string): string {
 /**
  * Clears the branch prefix cache (useful for testing or when switching repos)
  */
-export function clearPrefixCache(): void {
+function clearPrefixCache(): void {
     branchPrefixTrie.clear();
 }
 
 /**
  * Gets all cached prefixes (useful for debugging)
  */
-export function getCachedPrefixes(): string[] {
+function getCachedPrefixes(): string[] {
     return branchPrefixTrie.getAllPrefixes();
 }

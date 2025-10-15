@@ -22,14 +22,14 @@ export type ActiveOverlay =
   | { type: "new"; target: CommentTarget }
   | { type: "thread"; target: CommentTarget; threadId: number };
 
-export interface PatchLineMapping {
+interface PatchLineMapping {
   originalLineNumber: number | null;
   modifiedLineNumber: number | null;
   originalDiffPosition: number | null;
   modifiedDiffPosition: number | null;
 }
 
-export interface PatchMappings {
+interface PatchMappings {
   rows: PatchLineMapping[];
   originalLineToEditorLine: Map<number, number>;
   modifiedLineToEditorLine: Map<number, number>;
@@ -39,13 +39,13 @@ export interface PatchMappings {
   };
 }
 
-export interface ParsedPatch {
+interface ParsedPatch {
   original: string;
   modified: string;
   mappings: PatchMappings | null;
 }
 
-export const determineCommentSide = (comment: Comment): CommentSide => {
+const determineCommentSide = (comment: Comment): CommentSide => {
   if (comment.side === "LEFT" || comment.side === "RIGHT") {
     return comment.side;
   }
@@ -55,7 +55,7 @@ export const determineCommentSide = (comment: Comment): CommentSide => {
   return "RIGHT";
 };
 
-export const getLineNumberForSide = (
+const getLineNumberForSide = (
   comment: Comment,
   side: CommentSide,
 ): number | null => {
@@ -174,7 +174,7 @@ export const getLanguageFromFilename = (filename: string) => {
   return LANGUAGE_MAP[ext || ""] || "plaintext";
 };
 
-export function parsePatch(patch: string): ParsedPatch {
+function parsePatch(patch: string): ParsedPatch {
   if (!patch || patch.trim() === "") {
     return { original: "", modified: "", mappings: null };
   }

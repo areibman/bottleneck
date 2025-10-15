@@ -10,7 +10,7 @@ import type { PullRequest, IssueLinkedPullRequest } from "../services/github";
  * Supports: Fixes #123, Closes #123, Resolves #123
  * Also handles cross-repo: Fixes owner/repo#123
  */
-export function extractLinkedIssues(prBody: string | null): number[] {
+function extractLinkedIssues(prBody: string | null): number[] {
     if (!prBody) return [];
 
     const issueNumbers: number[] = [];
@@ -35,7 +35,7 @@ export function extractLinkedIssues(prBody: string | null): number[] {
  * Build a map of issue numbers to their linked PRs from cached PR data
  * This avoids making API calls to getIssueDevelopment for every issue
  */
-export function buildIssueToPRMap(
+function buildIssueToPRMap(
     prs: Map<string, PullRequest>,
     owner: string,
     repo: string
