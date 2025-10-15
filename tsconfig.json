@@ -20,10 +20,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/*"],
-      "@main/*": ["src/main/*"],
-      "@shared/*": ["src/shared/*"]
+      "@main/*": ["src/main/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "include": ["src/renderer/**/*"],
   "exclude": ["node_modules", "dist"]
 }
