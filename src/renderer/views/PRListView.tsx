@@ -13,6 +13,8 @@ import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
 import { getPRMetadata } from "../utils/prGrouping";
+import TeamManagementDialog from "../components/TeamManagementDialog";
+import type { TeamMember } from "../types/teams";
 
 type StatusType = PRStatusType; // Use the centralized type
 
