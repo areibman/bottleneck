@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { GitPullRequest } from "lucide-react";
+import { GitPullRequest, Users, Plus } from "lucide-react";
 import { usePRStore } from "../stores/prStore";
 import { useUIStore } from "../stores/uiStore";
 import { useAuthStore } from "../stores/authStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import Dropdown, { DropdownOption } from "../components/Dropdown";
 import { getPRStatus, PRStatusType } from "../utils/prStatus";
 import { cn } from "../utils/cn";
@@ -12,6 +13,8 @@ import { GitHubAPI, PullRequest } from "../services/github";
 import { PRTreeView } from "../components/PRTreeView";
 import type { SortByType, PRWithMetadata } from "../types/prList";
 import { getPRMetadata } from "../utils/prGrouping";
+import TeamManagementDialog from "../components/TeamManagementDialog";
+import type { TeamMember } from "../types/teams";
 
 type StatusType = PRStatusType; // Use the centralized type
 
@@ -49,11 +52,13 @@ export default function PRListView() {
     setPRListFilters,
   } = useUIStore();
   const { token } = useAuthStore();
+  const { teams, loadTeams } = useSettingsStore();
   const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [showTeamDialog, setShowTeamDialog] = useState(false);
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -63,6 +68,10 @@ export default function PRListView() {
   const selectedStatuses = useMemo(
     () => new Set<StatusType>(prListFilters.selectedStatuses),
     [prListFilters.selectedStatuses],
+  );
+  const selectedTeams = useMemo(
+    () => new Set(prListFilters.selectedTeams),
+    [prListFilters.selectedTeams],
   );
 
   // Close dropdown when clicking outside
@@ -100,6 +109,11 @@ export default function PRListView() {
       fetchPullRequests(selectedRepo.owner, selectedRepo.name);
     }
   }, [selectedRepoKey, currentRepoKey, loading, selectedRepo, fetchPullRequests]);
+
+  // Load teams on component mount
+  useEffect(() => {
+    loadTeams();
+  }, [loadTeams]);
 
   const dataMatchesSelectedRepo = useMemo(() => {
     if (!selectedRepoKey) return false;
@@ -155,6 +169,14 @@ export default function PRListView() {
     return Array.from(authorMap.values());
   }, [pullRequests]);
 
+  // Convert authors to TeamMember format for team dialog
+  const availableAuthors = useMemo((): TeamMember[] => {
+    return authors.map(author => ({
+      login: author.login,
+      avatar_url: author.avatar_url,
+    }));
+  }, [authors]);
+
   const handleAuthorToggle = useCallback(
     (authorLogin: string) => {
       setPRListFilters(prev => {
@@ -194,6 +216,24 @@ export default function PRListView() {
       });
     },
     [authors, setPRListFilters],
+  );
+
+  const handleTeamToggle = useCallback(
+    (teamId: string) => {
+      setPRListFilters(prev => {
+        const newSet = new Set(prev.selectedTeams);
+        if (newSet.has(teamId)) {
+          newSet.delete(teamId);
+        } else {
+          newSet.add(teamId);
+        }
+        return {
+          ...prev,
+          selectedTeams: Array.from(newSet),
+        };
+      });
+    },
+    [setPRListFilters],
   );
 
   // Use the centralized getPRStatus utility
@@ -256,13 +296,20 @@ export default function PRListView() {
         selectedAuthors.has("all") ||
         selectedAuthors.has(pr.user.login);
 
+      // Team filter - check if PR author is in any selected team
+      const teamMatches = selectedTeams.size === 0 ||
+        Array.from(selectedTeams).some((teamId: string) => {
+          const team = teams.find(t => t.id === teamId);
+          return team && team.authorLogins.includes(pr.user.login);
+        });
+
       // Status filter
       const prStatus = getPRStatus(pr);
       const statusMatches = selectedStatuses.size === 0 ||
         selectedStatuses.has(prStatus);
 
-      // Both filters must pass
-      return authorMatches && statusMatches;
+      // All filters must pass
+      return authorMatches && teamMatches && statusMatches;
     });
 
     // Step 3: Sort PRs
@@ -282,6 +329,8 @@ export default function PRListView() {
     pullRequests,
     selectedAuthors,
     selectedStatuses,
+    selectedTeams,
+    teams,
     sortBy,
     selectedRepo,
     getPRStatus,
@@ -821,13 +870,13 @@ export default function PRListView() {
                 {showAuthorDropdown && (
                   <div
                     className={cn(
-                      "absolute top-full mt-1 right-0 z-50 min-w-[200px] rounded-md shadow-lg border",
+                      "absolute top-full mt-1 right-0 z-50 min-w-[250px] rounded-md shadow-lg border",
                       theme === "dark"
                         ? "bg-gray-800 border-gray-700"
                         : "bg-white border-gray-200"
                     )}
                   >
-                    <div className="p-2 max-h-64 overflow-y-auto">
+                    <div className="p-2 max-h-80 overflow-y-auto">
                       {/* All Authors option */}
                       <label
                         className={cn(
@@ -851,7 +900,82 @@ export default function PRListView() {
                         theme === "dark" ? "border-gray-700" : "border-gray-200"
                       )} />
 
-                      {/* Individual authors */}
+                      {/* Teams Section */}
+                      {teams.length > 0 && (
+                        <>
+                          <div className="flex items-center justify-between px-2 py-1">
+                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              Teams
+                            </span>
+                            <button
+                              onClick={() => setShowTeamDialog(true)}
+                              className={cn(
+                                "p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600",
+                                theme === "dark" && "hover:bg-gray-700 hover:text-gray-300"
+                              )}
+                              title="Manage Teams"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {teams.map(team => (
+                            <label
+                              key={team.id}
+                              className={cn(
+                                "flex items-center space-x-2 p-2 rounded cursor-pointer",
+                                theme === "dark"
+                                  ? "hover:bg-gray-700"
+                                  : "hover:bg-gray-50"
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedTeams.has(team.id)}
+                                onChange={() => handleTeamToggle(team.id)}
+                                className="rounded"
+                              />
+                              <div
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs"
+                                style={{ backgroundColor: team.color }}
+                              >
+                                {team.icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{team.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {team.authorLogins.length} member{team.authorLogins.length !== 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            </label>
+                          ))}
+
+                          <div className={cn(
+                            "my-1 border-t",
+                            theme === "dark" ? "border-gray-700" : "border-gray-200"
+                          )} />
+                        </>
+                      )}
+
+                      {/* Individual Authors Section */}
+                      <div className="flex items-center justify-between px-2 py-1">
+                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Individual Authors
+                        </span>
+                        {teams.length === 0 && (
+                          <button
+                            onClick={() => setShowTeamDialog(true)}
+                            className={cn(
+                              "p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600",
+                              theme === "dark" && "hover:bg-gray-700 hover:text-gray-300"
+                            )}
+                            title="Create Teams"
+                          >
+                            <Users className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
                       {authors.map(author => (
                         <label
                           key={author.login}
@@ -929,6 +1053,13 @@ export default function PRListView() {
           />
         )}
       </div>
+
+      {/* Team Management Dialog */}
+      <TeamManagementDialog
+        isOpen={showTeamDialog}
+        onClose={() => setShowTeamDialog(false)}
+        availableAuthors={availableAuthors}
+      />
     </div>
   );
 }
