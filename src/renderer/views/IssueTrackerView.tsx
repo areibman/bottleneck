@@ -10,8 +10,8 @@ import { PRAssignmentModal } from "../components/PRAssignmentModal";
 import { IssueCreatorModal } from "../components/IssueCreatorModal";
 import { IssueCard } from "./IssueTrackerView/components/IssueCard";
 import { QuickEditModal } from "./IssueTrackerView/components/QuickEditModal";
-import { useIssueDevelopmentLoader } from "./IssueTrackerView/hooks/useIssueDevelopmentLoader";
 import { cn } from "../utils/cn";
+import { buildIssueToPRMap } from "../utils/issueLinks";
 
 type KanbanColumn = "unassigned" | "todo" | "in_progress" | "in_review" | "done" | "closed";
 
@@ -198,7 +198,6 @@ export default function IssueTrackerView() {
     reopenIssues,
     linkPRsToIssue,
     unlinkPRFromIssue,
-    refreshIssueLinks,
     repoLabels,
     fetchRepoLabels,
   } = useIssueStore();
@@ -220,15 +219,24 @@ export default function IssueTrackerView() {
     }
   }, [selectedRepo, fetchIssues, fetchPullRequests, fetchRepoLabels]);
 
-  useIssueDevelopmentLoader(
-    selectedRepo?.owner,
-    selectedRepo?.name,
-    issues,
-    refreshIssueLinks,
-  );
+  // Enrich issues with linkedPRs from PR store
+  const enrichedIssues = useMemo(() => {
+    if (!selectedRepo) return issues;
+
+    const { owner, name: repo } = selectedRepo;
+    const issueToPRMap = buildIssueToPRMap(pullRequests, owner, repo);
+
+    const enriched = new Map(issues);
+    for (const [key, issue] of enriched.entries()) {
+      const linkedPRs = issueToPRMap.get(issue.number) || [];
+      enriched.set(key, { ...issue, linkedPRs });
+    }
+
+    return enriched;
+  }, [issues, pullRequests, selectedRepo]);
 
   const categorizedIssues = useMemo(() => {
-    const issuesArray = Array.from(issues.values());
+    const issuesArray = Array.from(enrichedIssues.values());
     const prArray = Array.from(pullRequests.values());
 
     const categories: Record<KanbanColumn, Issue[]> = {
@@ -347,7 +355,7 @@ export default function IssueTrackerView() {
     });
 
     return categories;
-  }, [issues, pullRequests]);
+  }, [enrichedIssues, pullRequests]);
 
   const handleIssueClick = useCallback(
     (issue: Issue) => {
@@ -383,16 +391,8 @@ export default function IssueTrackerView() {
     async (issue: Issue) => {
       setSelectedIssueForPRAssignment(issue);
       setShowPRAssignmentModal(true);
-
-      if (selectedRepo && !issue.linkedPRs) {
-        await refreshIssueLinks(
-          selectedRepo.owner,
-          selectedRepo.name,
-          issue.number,
-        );
-      }
     },
-    [selectedRepo, refreshIssueLinks],
+    [],
   );
 
   const handleClosePRAssignmentModal = useCallback(() => {
@@ -492,7 +492,7 @@ export default function IssueTrackerView() {
     async (issueData: any, targetColumn: KanbanColumn) => {
       const operationId = `${issueData.issueNumber}-${Date.now()}`;
       const issueKey = `${issueData.owner}/${issueData.repo}#${issueData.issueNumber}`;
-      const issue = issues.get(issueKey);
+      const issue = enrichedIssues.get(issueKey);
 
       if (!issue || !selectedRepo) {
         console.error(

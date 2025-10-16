@@ -789,6 +789,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
             if (issue) {
               const updatedIssue = { ...issue, linkedPRs };
               newIssues.set(key, updatedIssue);
+            } else {
+              console.warn(`[STORE] ⚠️  refreshIssueLinks: Issue #${issueNumber} not found in store with key: ${key}`);
             }
             return { issues: newIssues };
           });
@@ -809,10 +811,6 @@ export const useIssueStore = create<IssueState>((set, get) => ({
           if (issue) {
             const updatedIssue = { ...issue, linkedPRs: pullRequests };
             newIssues.set(key, updatedIssue);
-            console.log(`[STORE] ✅ refreshIssueLinks: Updated issue #${issueNumber} in store`, {
-              oldPRs: issue.linkedPRs?.length ?? 'undefined',
-              newPRs: pullRequests.length
-            });
           } else {
             console.warn(`[STORE] ⚠️  refreshIssueLinks: Issue #${issueNumber} not found in store with key: ${key}`);
           }
