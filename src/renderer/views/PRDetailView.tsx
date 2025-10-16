@@ -213,59 +213,20 @@ export default function PRDetailView() {
       return;
     }
 
+    // Set loading immediately and clear old data to prevent stale state
+    setLoading(true);
+    setFiles([]);
+    setComments([]);
+    setReviews([]);
+    setReviewComments([]);
+    setReviewThreads([]);
+
     const prNumber = parseInt(number);
     const prKey = `${owner}/${repo}#${prNumber}`;
 
-    // First, try to load from store
+    // Always fetch fresh PR data, but preserve protected fields from store
     const { pullRequests } = usePRStore.getState();
     const storedPR = pullRequests.get(prKey);
-
-    if (storedPR) {
-      console.log(`Loaded PR #${prNumber} from store`);
-      setPR(storedPR);
-
-      // Don't fetch from API if we have data in store
-      // User can force refresh with a manual refresh button if needed
-      setLoading(false);
-
-      // Still need to load files, comments, reviews if not loaded yet
-      // But skip reloading the PR itself to avoid overwriting with stale data
-      if (token && files.length === 0) {
-        try {
-          const api = new GitHubAPI(token);
-          const [
-            filesData,
-            commentsData,
-            reviewsData,
-            reviewCommentsData,
-            reviewThreadsData,
-          ] = await Promise.all([
-            api.getPullRequestFiles(owner, repo, prNumber),
-            api.getPullRequestConversationComments(owner, repo, prNumber),
-            api.getPullRequestReviews(owner, repo, prNumber),
-            api.getPullRequestReviewComments(owner, repo, prNumber),
-            api.getPullRequestReviewThreads(owner, repo, prNumber),
-          ]);
-
-          setFiles(filesData);
-          setComments(commentsData);
-          setReviews(reviewsData);
-          setReviewComments(reviewCommentsData);
-          setReviewThreads(reviewThreadsData);
-
-          // If we don't have navigation state yet, try to fetch sibling PRs
-          if (!navigationState?.siblingPRs) {
-            fetchSiblingPRs(storedPR);
-          }
-        } catch (error) {
-          console.error("Failed to load PR supplementary data:", error);
-        }
-      }
-      return;
-    }
-
-    // Only fetch from API if not in store
-    setLoading(true);
 
     try {
       // Use mock data if Electron API is not available
@@ -308,8 +269,19 @@ export default function PRDetailView() {
             api.getPullRequestReviewThreads(owner, repo, prNumber),
           ]);
 
-        setPR(prData);
-        updatePR(prData);
+        // Merge fresh API data with protected fields from store
+        let mergedPR = prData;
+        if (storedPR?.isTogglingDraft) {
+          // If actively toggling draft, preserve the draft state and loading flag
+          mergedPR = {
+            ...prData,
+            draft: storedPR.draft,
+            isTogglingDraft: storedPR.isTogglingDraft,
+          };
+        }
+
+        setPR(mergedPR);
+        updatePR(mergedPR);
         setFiles(filesData);
         setComments(commentsData);
         setReviews(reviewsData);
