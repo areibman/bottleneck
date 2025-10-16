@@ -34,7 +34,6 @@ function App() {
   const { sidebarOpen, sidebarWidth, setSidebarWidth, rightPanelOpen, theme } =
     useUIStore();
   const { loadSettings } = useSettingsStore();
-  const { fetchRepositories } = usePRStore();
   const [loading, setLoading] = useState(true);
 
   PerfLogger.mark("App hooks initialized");
@@ -101,7 +100,8 @@ function App() {
       PerfLogger.mark("Starting repository fetch");
       const fetchStart = performance.now();
 
-      fetchRepositories().then(() => {
+      // Call fetchRepositories directly from store to avoid dependency issues
+      usePRStore.getState().fetchRepositories().then(() => {
         PerfLogger.mark(`Repository fetch completed in ${(performance.now() - fetchStart).toFixed(2)}ms`);
 
         // Check if we should do an initial sync
@@ -123,7 +123,7 @@ function App() {
         }
       });
     }
-  }, [isAuthenticated, token, fetchRepositories]);
+  }, [isAuthenticated, token]);
 
   // Loading component for lazy-loaded views
   const LoadingFallback = () => (

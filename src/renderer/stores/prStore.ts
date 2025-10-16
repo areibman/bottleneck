@@ -33,6 +33,7 @@ interface PRState {
   groups: PRGroup[];
   loading: boolean;
   error: string | null;
+  isFetchingRepositories: boolean;
 
   fetchPullRequests: (
     owner: string,
@@ -160,6 +161,7 @@ export const usePRStore = create<PRState>((set, get) => {
     groups: [],
     loading: false,
     error: null,
+    isFetchingRepositories: false,
 
     fetchPullRequests: async (
       owner: string,
@@ -334,7 +336,14 @@ export const usePRStore = create<PRState>((set, get) => {
       const start = performance.now();
       console.log("⏱️ [PR_STORE] fetchRepositories started");
 
-      set({ loading: true, error: null });
+      // Prevent concurrent calls
+      const state = get();
+      if (state.isFetchingRepositories) {
+        console.log("⏱️ [PR_STORE] Already fetching repositories, skipping...");
+        return;
+      }
+
+      set({ loading: true, error: null, isFetchingRepositories: true });
 
       try {
         let token: string | null = null;
@@ -349,7 +358,7 @@ export const usePRStore = create<PRState>((set, get) => {
         }
 
         if (!token) {
-          set({ loading: false });
+          set({ loading: false, isFetchingRepositories: false });
           return;
         }
 
@@ -433,27 +442,14 @@ export const usePRStore = create<PRState>((set, get) => {
           ];
         } else {
           const api = new GitHubAPI(token);
-          const perPage = 100;
-          const allRepos: Repository[] = [];
-          let page = 1;
-
-          while (true) {
-            const pageRepos = await api.getRepositories(page, perPage);
-            allRepos.push(...pageRepos);
-
-            if (pageRepos.length < perPage) {
-              break;
-            }
-
-            page += 1;
-          }
-
-          repos = allRepos;
+          // getRepositories() handles pagination internally and returns all repos
+          repos = await api.getRepositories();
         }
 
         set({
           repositories: repos,
           loading: false,
+          isFetchingRepositories: false,
         });
 
         console.log(`⏱️ [PR_STORE] Fetched ${repos.length} repositories in ${(performance.now() - start).toFixed(2)}ms`);
@@ -462,6 +458,7 @@ export const usePRStore = create<PRState>((set, get) => {
         set({
           error: (error as Error).message,
           loading: false,
+          isFetchingRepositories: false,
         });
       }
     },
