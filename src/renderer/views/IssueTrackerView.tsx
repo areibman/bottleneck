@@ -210,6 +210,7 @@ export default function IssueTrackerView() {
   const [selectedIssueForPRAssignment, setSelectedIssueForPRAssignment] = useState<Issue | null>(null);
   const [showPRAssignmentModal, setShowPRAssignmentModal] = useState(false);
   const [showIssueCreatorModal, setShowIssueCreatorModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (selectedRepo) {
@@ -235,8 +236,29 @@ export default function IssueTrackerView() {
     return enriched;
   }, [issues, pullRequests, selectedRepo]);
 
+  const filteredIssues = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return enrichedIssues;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = new Map<string, Issue>();
+
+    for (const [key, issue] of enrichedIssues.entries()) {
+      const matchesTitle = issue.title.toLowerCase().includes(query);
+      const matchesBody = issue.body?.toLowerCase().includes(query);
+      const matchesNumber = issue.number.toString().includes(query);
+
+      if (matchesTitle || matchesBody || matchesNumber) {
+        filtered.set(key, issue);
+      }
+    }
+
+    return filtered;
+  }, [enrichedIssues, searchQuery]);
+
   const categorizedIssues = useMemo(() => {
-    const issuesArray = Array.from(enrichedIssues.values());
+    const issuesArray = Array.from(filteredIssues.values());
     const prArray = Array.from(pullRequests.values());
 
     const categories: Record<KanbanColumn, Issue[]> = {
@@ -355,7 +377,7 @@ export default function IssueTrackerView() {
     });
 
     return categories;
-  }, [enrichedIssues, pullRequests]);
+  }, [filteredIssues, pullRequests]);
 
   const handleIssueClick = useCallback(
     (issue: Issue) => {
@@ -492,7 +514,7 @@ export default function IssueTrackerView() {
     async (issueData: any, targetColumn: KanbanColumn) => {
       const operationId = `${issueData.issueNumber}-${Date.now()}`;
       const issueKey = `${issueData.owner}/${issueData.repo}#${issueData.issueNumber}`;
-      const issue = enrichedIssues.get(issueKey);
+      const issue = issues.get(issueKey);
 
       if (!issue || !selectedRepo) {
         console.error(
@@ -604,7 +626,7 @@ export default function IssueTrackerView() {
     return <WelcomeView />;
   }
 
-  const totalIssues = issues.size;
+  const totalIssues = filteredIssues.size;
 
   return (
     <div className="flex flex-col h-full">
@@ -630,6 +652,19 @@ export default function IssueTrackerView() {
                 ({totalIssues})
               </span>
             </h1>
+            <input
+              type="text"
+              placeholder="Search issues..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={cn(
+                "px-3 py-1 text-sm rounded border transition-colors w-64",
+                theme === "dark"
+                  ? "bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  : "bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+                "focus:outline-none",
+              )}
+            />
             <button
               onClick={() => setShowIssueCreatorModal(true)}
               className={cn(

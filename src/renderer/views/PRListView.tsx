@@ -59,6 +59,7 @@ export default function PRListView() {
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [isClosing, setIsClosing] = useState(false);
   const [showTeamDialog, setShowTeamDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const sortBy = prListFilters.sortBy;
   const selectedAuthors = useMemo(
@@ -336,10 +337,26 @@ export default function PRListView() {
     getPRStatus,
   ]);
 
+  // Apply search filter on top of other filters
+  const searchFilteredPRs = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return getFilteredPRs;
+    }
+
+    const query = searchQuery.toLowerCase();
+    return getFilteredPRs.filter((pr) => {
+      const matchesTitle = pr.title.toLowerCase().includes(query);
+      const matchesBody = pr.body?.toLowerCase().includes(query);
+      const matchesNumber = pr.number.toString().includes(query);
+
+      return matchesTitle || matchesBody || matchesNumber;
+    });
+  }, [getFilteredPRs, searchQuery]);
+
   // Pre-compute PR metadata for grouping
   const prsWithMetadata = useMemo<PRWithMetadata[]>(() => {
-    return getFilteredPRs.map((pr) => getPRMetadata(pr));
-  }, [getFilteredPRs]);
+    return searchFilteredPRs.map((pr) => getPRMetadata(pr));
+  }, [searchFilteredPRs]);
 
   // Compute which groups have merged PRs from the UNFILTERED list
   // This allows us to show the merged icon even when merged PRs are filtered out
@@ -604,7 +621,7 @@ export default function PRListView() {
         )}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-3">
             <h1 className="text-xl font-semibold flex items-center">
               <GitPullRequest className="w-5 h-5 mr-2" />
               Pull Requests
@@ -614,7 +631,7 @@ export default function PRListView() {
                   theme === "dark" ? "text-gray-500" : "text-gray-600",
                 )}
               >
-                ({getFilteredPRs.length})
+                ({searchFilteredPRs.length})
               </span>
               {showRefreshingIndicator && (
                 <span
@@ -627,6 +644,19 @@ export default function PRListView() {
                 </span>
               )}
             </h1>
+            <input
+              type="text"
+              placeholder="Search pull requests..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={cn(
+                "px-3 py-1.5 text-sm rounded border transition-colors w-64",
+                theme === "dark"
+                  ? "bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  : "bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+                "focus:outline-none",
+              )}
+            />
             {/* Selection help text or bulk actions */}
             {hasSelection ? (
               <div className="ml-4 flex items-center space-x-3">
@@ -1021,7 +1051,7 @@ export default function PRListView() {
               Loading pull requests...
             </div>
           </div>
-        ) : getFilteredPRs.length === 0 ? (
+        ) : searchFilteredPRs.length === 0 ? (
           <div
             className={cn(
               "flex flex-col items-center justify-center h-64",
@@ -1040,7 +1070,7 @@ export default function PRListView() {
           </div>
         ) : (
           <PRTreeView
-            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${getFilteredPRs.length}-${currentRepoKey}`}
+            key={`${Array.from(selectedStatuses).join('-')}-${Array.from(selectedAuthors).join('-')}-${searchFilteredPRs.length}-${currentRepoKey}`}
             theme={theme}
             prsWithMetadata={prsWithMetadata}
             selectedPRs={selectedPRs}
