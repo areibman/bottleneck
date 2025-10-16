@@ -9,6 +9,17 @@ import { GitOperations } from "./git";
 import { createMenu } from "./menu";
 import Store from "electron-store";
 
+// Global error handlers to prevent crashes
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+  // Don't call app.quit() here as it may cause issues during startup
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  // Don't call app.quit() here as it may cause issues during startup
+});
+
 // Performance logging
 const APP_START = Date.now();
 function perfLog(label: string, startTime?: number) {
@@ -304,6 +315,13 @@ app.whenReady().then(async () => {
     );
     app.quit();
   }
+}).catch((error) => {
+  console.error("App.whenReady() failed:", error);
+  dialog.showErrorBox(
+    "Startup Error",
+    `Failed to start application: ${(error as Error).message}\n\nStack: ${(error as Error).stack}`,
+  );
+  app.quit();
 });
 
 app.on("window-all-closed", () => {
@@ -321,7 +339,12 @@ app.on("before-quit", () => {
 
 // IPC Handlers
 ipcMain.handle("utils:fromBase64", (_event, data: string) => {
-  return Buffer.from(data, "base64").toString("utf8");
+  try {
+    return Buffer.from(data, "base64").toString("utf8");
+  } catch (error) {
+    console.error("Error in utils:fromBase64:", error);
+    throw error;
+  }
 });
 
 ipcMain.handle("auth:login", async () => {
@@ -353,6 +376,7 @@ ipcMain.handle(
       await gitOps.clone(repoUrl, localPath);
       return { success: true };
     } catch (error) {
+      console.error("Error in git:clone:", error);
       return { success: false, error: (error as Error).message };
     }
   },
