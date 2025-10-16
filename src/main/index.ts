@@ -201,7 +201,12 @@ app.whenReady().then(async () => {
             ? autoUpdater.checkForUpdatesAndNotify()
             : autoUpdater.checkForUpdates();
 
-        checkPromise
+        // Add timeout to prevent hanging update checks
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Update check timed out after 5 minutes')), 5 * 60 * 1000);
+        });
+
+        Promise.race([checkPromise, timeoutPromise])
           .catch((error) => {
             console.error(`Failed ${reason} update check:`, error);
           })
@@ -316,6 +321,10 @@ app.on("before-quit", () => {
   if (periodicUpdateInterval) {
     clearInterval(periodicUpdateInterval);
     periodicUpdateInterval = null;
+  }
+  // Clean up git operations to prevent resource leaks
+  if (gitOps) {
+    gitOps.cleanup();
   }
 });
 
