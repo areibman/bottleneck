@@ -229,7 +229,12 @@ export default function IssueTrackerView() {
 
     const enriched = new Map(issues);
     for (const [key, issue] of enriched.entries()) {
-      const linkedPRs = issueToPRMap.get(issue.number) || [];
+      // Use linkedPRs from the issue store if it has been set (from linking operations or API)
+      // Check if linkedPRs property exists, not just if it has length (empty array is valid!)
+      const linkedPRs = issue.linkedPRs !== undefined
+        ? issue.linkedPRs
+        : (issueToPRMap.get(issue.number) || []);
+
       enriched.set(key, { ...issue, linkedPRs });
     }
 
@@ -426,25 +431,29 @@ export default function IssueTrackerView() {
     async (newPRNumbers: number[], previouslyLinkedPRs: number[]) => {
       if (!selectedIssueForPRAssignment || !selectedRepo) return;
 
+      const owner = selectedRepo.owner;
+      const repo = selectedRepo.name;
+      const issueNumber = selectedIssueForPRAssignment.number;
+
+      // Determine which PRs to link and unlink
+      const previousSet = new Set(previouslyLinkedPRs);
+      const newSet = new Set(newPRNumbers);
+
+      const toLink = newPRNumbers.filter(prNum => !previousSet.has(prNum));
+      const toUnlink = previouslyLinkedPRs.filter(prNum => !newSet.has(prNum));
+
+      console.log(`[Issue Tracker] 🔗 Updating PR links for issue #${issueNumber}:`, {
+        toLink,
+        toUnlink,
+        previous: previouslyLinkedPRs,
+        new: newPRNumbers,
+      });
+
+      // Close modal immediately for better UX (optimistic update)
+      handleClosePRAssignmentModal();
+
+      // Perform linking operations in the background
       try {
-        const owner = selectedRepo.owner;
-        const repo = selectedRepo.name;
-        const issueNumber = selectedIssueForPRAssignment.number;
-
-        // Determine which PRs to link and unlink
-        const previousSet = new Set(previouslyLinkedPRs);
-        const newSet = new Set(newPRNumbers);
-
-        const toLink = newPRNumbers.filter(prNum => !previousSet.has(prNum));
-        const toUnlink = previouslyLinkedPRs.filter(prNum => !newSet.has(prNum));
-
-        console.log(`[Issue Tracker] 🔗 Updating PR links for issue #${issueNumber}:`, {
-          toLink,
-          toUnlink,
-          previous: previouslyLinkedPRs,
-          new: newPRNumbers,
-        });
-
         // Unlink removed PRs
         if (toUnlink.length > 0) {
           for (const prNum of toUnlink) {
@@ -456,10 +465,9 @@ export default function IssueTrackerView() {
         if (toLink.length > 0) {
           await linkPRsToIssue(owner, repo, issueNumber, toLink);
         }
-
-        handleClosePRAssignmentModal();
       } catch (error) {
         console.error("Failed to update PR links:", error);
+        // Could show a toast notification here if desired
       }
     },
     [

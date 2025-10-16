@@ -421,37 +421,45 @@ export function PRTreeView({
                       )}
                     </div>
 
-                    {item.data.closablePRIds && item.data.closablePRIds.length > 0 && hoveredGroup === item.index && (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onCloseGroup(item.data.closablePRIds ?? []);
-                          setHoveredGroup(null);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
+                    {(() => {
+                      // For selection mode (modal), show button for all groups
+                      // For close mode (PR list), only show button for groups with open PRs
+                      const isSelectionMode = groupActionLabel.toLowerCase().includes("select");
+                      const prIds = isSelectionMode ? item.data.taskPRIds : item.data.closablePRIds;
+                      const shouldShowButton = prIds && prIds.length > 0 && hoveredGroup === item.index;
+
+                      return shouldShowButton ? (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(event) => {
                             event.stopPropagation();
-                            onCloseGroup(item.data.closablePRIds ?? []);
+                            onCloseGroup(prIds ?? []);
                             setHoveredGroup(null);
-                          }
-                        }}
-                        className={cn(
-                          "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors cursor-pointer",
-                          groupActionLabel.toLowerCase().includes("select")
-                            ? theme === "dark"
-                              ? "border-blue-500/60 text-blue-300 hover:bg-blue-900/40"
-                              : "border-blue-400 text-blue-600 hover:bg-blue-50"
-                            : theme === "dark"
-                              ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
-                              : "border-red-400 text-red-600 hover:bg-red-50"
-                        )}
-                      >
-                        {groupActionLabel}
-                      </div>
-                    )}
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onCloseGroup(prIds ?? []);
+                              setHoveredGroup(null);
+                            }
+                          }}
+                          className={cn(
+                            "ml-3 px-2 py-1 text-xs font-medium rounded border transition-colors cursor-pointer",
+                            isSelectionMode
+                              ? theme === "dark"
+                                ? "border-blue-500/60 text-blue-300 hover:bg-blue-900/40"
+                                : "border-blue-400 text-blue-600 hover:bg-blue-50"
+                              : theme === "dark"
+                                ? "border-red-500/60 text-red-300 hover:bg-red-900/40"
+                                : "border-red-400 text-red-600 hover:bg-red-50"
+                          )}
+                        >
+                          {groupActionLabel}
+                        </div>
+                      ) : null;
+                    })()}
                   </>
                 ) : (
                   <>

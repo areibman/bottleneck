@@ -55,6 +55,7 @@ export const IssueCard = React.memo(function IssueCard({
 
   const handleOpenPRAssignmentClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (issue.isUpdatingLinks) return; // Don't open modal while updating
     onOpenPRAssignment(issue);
   };
 
@@ -236,7 +237,10 @@ export const IssueCard = React.memo(function IssueCard({
         <div
           onClick={handleOpenPRAssignmentClick}
           className={cn(
-            "w-full flex items-center justify-center space-x-1 py-1.5 px-2 rounded transition-colors cursor-pointer",
+            "w-full flex items-center justify-center space-x-1 py-1.5 px-2 rounded transition-colors",
+            issue.isUpdatingLinks
+              ? "cursor-wait opacity-50"
+              : "cursor-pointer",
             theme === "dark"
               ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
               : "bg-gray-100 hover:bg-gray-200 text-gray-600",
@@ -244,8 +248,17 @@ export const IssueCard = React.memo(function IssueCard({
           )}
           style={{ fontSize: "0.625rem" }}
         >
-          <Plus className="w-2.5 h-2.5" />
-          <span>Link PRs</span>
+          {issue.isUpdatingLinks ? (
+            <>
+              <div className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />
+              <span>Updating...</span>
+            </>
+          ) : (
+            <>
+              <Plus className="w-2.5 h-2.5" />
+              <span>Link PRs</span>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -157,6 +157,8 @@ export interface Issue {
   linkedPRs?: IssueLinkedPullRequest[];
   /** @deprecated Branch linking is no longer used. Use linkedPRs only. */
   linkedBranches?: IssueLinkedBranch[];
+  // Loading state flags for mutations
+  isUpdatingLinks?: boolean;
 }
 
 export interface Comment {

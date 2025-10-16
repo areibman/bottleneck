@@ -210,7 +210,16 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     });
     set((state) => {
       const newIssues = new Map(state.issues);
-      newIssues.set(key, issue);
+      const existingIssue = newIssues.get(key);
+
+      // Preserve linkedPRs and loading state from existing issue if not provided
+      const updatedIssue = {
+        ...issue,
+        linkedPRs: issue.linkedPRs ?? existingIssue?.linkedPRs ?? [],
+        isUpdatingLinks: issue.isUpdatingLinks ?? existingIssue?.isUpdatingLinks ?? false,
+      };
+
+      newIssues.set(key, updatedIssue);
       return { issues: newIssues };
     });
   },
@@ -585,6 +594,21 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   linkPRsToIssue: async (owner: string, repo: string, issueNumber: number, prNumbers: number[]) => {
     console.log(`[STORE] 🔗 linkPRsToIssue: Linking PRs [${prNumbers.join(', ')}] to issue #${issueNumber}`);
+
+    const key = `${owner}/${repo}#${issueNumber}`;
+    const issue = get().issues.get(key);
+    if (!issue) {
+      console.error(`[STORE] ❌ Issue #${issueNumber} not found`);
+      return;
+    }
+
+    // Step 1: Set loading state immediately
+    set((state) => {
+      const newIssues = new Map(state.issues);
+      newIssues.set(key, { ...issue, isUpdatingLinks: true });
+      return { issues: newIssues };
+    });
+
     try {
       let token: string | null = null;
 
@@ -597,73 +621,88 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
       if (!token) throw new Error("Not authenticated");
 
-      if (token === "dev-token") {
-        // Mock linking for dev mode
-        console.log(`[STORE] 💤 linkPRsToIssue: Using dev-token, simulating...`);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // For dev mode, we need to fetch the actual PR data from the PR store
-        const prStore = usePRStore.getState();
-        const newLinkedPRs = prNumbers.map(prNum => {
-          // Try to find the PR in the store
-          const prKeys = Array.from(prStore.pullRequests.keys()) as string[];
-          const prId = prKeys.find(key => key.endsWith(`#${prNum}`));
-          const pr = prId ? prStore.pullRequests.get(prId) : null;
-
-          if (pr) {
-            return {
-              id: pr.id,
-              number: pr.number,
-              state: pr.state,
-              merged: pr.merged,
-              draft: pr.draft,
-              title: pr.title,
-              head: pr.head ? { ref: pr.head.ref } : undefined,
-            };
-          }
-
-          // Fallback if PR not found
-          return {
-            id: prNum,
-            number: prNum,
-            state: "open" as const,
-            merged: false,
-            draft: false,
-            title: `PR #${prNum}`,
-            head: { ref: `branch-${prNum}` },
-          };
-        });
-
-        // Add to existing linked PRs
-        set((state) => {
-          const newIssues = new Map(state.issues);
-          const key = `${owner}/${repo}#${issueNumber}`;
-          const issue = newIssues.get(key);
-          if (issue) {
-            const existingPRs = issue.linkedPRs || [];
-            const existingNumbers = new Set(existingPRs.map(pr => pr.number));
-            const toAdd = newLinkedPRs.filter(pr => !existingNumbers.has(pr.number));
-            const updatedLinkedPRs = [...existingPRs, ...toAdd];
-            newIssues.set(key, { ...issue, linkedPRs: updatedLinkedPRs });
-            console.log(`[STORE] ✅ linkPRsToIssue: Added ${toAdd.length} PRs, now ${updatedLinkedPRs.length} total linked PRs`);
-          }
-          return { issues: newIssues };
-        });
-      } else {
+      // Step 2: Make API calls to link PRs
+      if (token !== "dev-token") {
         const api = new GitHubAPI(token);
-
-        // Link each PR to the issue
         for (const prNumber of prNumbers) {
           await api.linkPRToIssue(owner, repo, issueNumber, prNumber);
         }
-
         console.log(`[STORE] ✅ linkPRsToIssue: Successfully linked PRs to issue #${issueNumber}`);
-
-        // Refresh the issue to get updated linked PRs from GitHub (force API to verify)
-        await get().refreshIssueLinks(owner, repo, issueNumber, { forceAPI: true });
+      } else {
+        // Mock delay for dev mode
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
+
+      // Step 3: Build linkedPRs from PR store (this is our source of truth)
+      // GitHub's GraphQL API lags behind, so we parse from PR bodies
+      const prStore = usePRStore.getState();
+      const newLinkedPRs = prNumbers.map(prNum => {
+        const prKeys = Array.from(prStore.pullRequests.keys()) as string[];
+        const prId = prKeys.find(key => key.endsWith(`#${prNum}`));
+        const pr = prId ? prStore.pullRequests.get(prId) : null;
+
+        if (pr) {
+          return {
+            id: pr.id,
+            number: pr.number,
+            state: pr.state,
+            merged: pr.merged,
+            draft: pr.draft,
+            title: pr.title,
+            head: pr.head ? { ref: pr.head.ref } : undefined,
+            author: pr.user ? {
+              login: pr.user.login,
+              avatarUrl: pr.user.avatar_url,
+            } : undefined,
+          };
+        }
+
+        // Fallback if PR not found in store
+        return {
+          id: prNum,
+          number: prNum,
+          state: "open" as const,
+          merged: false,
+          draft: false,
+          title: `PR #${prNum}`,
+          head: { ref: `branch-${prNum}` },
+        };
+      });
+
+      // Step 4: Update store with new linkedPRs and clear loading state
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        const currentIssue = newIssues.get(key);
+        if (currentIssue) {
+          const existingPRs = currentIssue.linkedPRs || [];
+          const existingNumbers = new Set(existingPRs.map(pr => pr.number));
+          const toAdd = newLinkedPRs.filter(pr => !existingNumbers.has(pr.number));
+          const updatedLinkedPRs = [...existingPRs, ...toAdd];
+
+          newIssues.set(key, {
+            ...currentIssue,
+            linkedPRs: updatedLinkedPRs,
+            isUpdatingLinks: false,
+          });
+
+          console.log(`[STORE] ✅ linkPRsToIssue: Added ${toAdd.length} PRs, now ${updatedLinkedPRs.length} total linked PRs`);
+        }
+        return { issues: newIssues };
+      });
+
     } catch (error) {
       console.error(`[STORE] ❌ linkPRsToIssue: Error for #${issueNumber}:`, error);
+
+      // Revert loading state on error
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        const currentIssue = newIssues.get(key);
+        if (currentIssue) {
+          newIssues.set(key, { ...currentIssue, isUpdatingLinks: false });
+        }
+        return { issues: newIssues };
+      });
+
       set({ error: (error as Error).message });
       throw error;
     }
@@ -671,6 +710,21 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   unlinkPRFromIssue: async (owner: string, repo: string, issueNumber: number, prNumber: number) => {
     console.log(`[STORE] 🔓 unlinkPRFromIssue: Unlinking PR #${prNumber} from issue #${issueNumber}`);
+
+    const key = `${owner}/${repo}#${issueNumber}`;
+    const issue = get().issues.get(key);
+    if (!issue) {
+      console.error(`[STORE] ❌ Issue #${issueNumber} not found`);
+      return;
+    }
+
+    // Step 1: Set loading state immediately
+    set((state) => {
+      const newIssues = new Map(state.issues);
+      newIssues.set(key, { ...issue, isUpdatingLinks: true });
+      return { issues: newIssues };
+    });
+
     try {
       let token: string | null = null;
 
@@ -683,34 +737,47 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
       if (!token) throw new Error("Not authenticated");
 
-      if (token === "dev-token") {
-        // Mock unlinking for dev mode
-        console.log(`[STORE] 💤 unlinkPRFromIssue: Using dev-token, simulating...`);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // For dev mode, manually remove the PR from linkedPRs
-        set((state) => {
-          const newIssues = new Map(state.issues);
-          const key = `${owner}/${repo}#${issueNumber}`;
-          const issue = newIssues.get(key);
-          if (issue && issue.linkedPRs) {
-            const updatedLinkedPRs = issue.linkedPRs.filter(pr => pr.number !== prNumber);
-            newIssues.set(key, { ...issue, linkedPRs: updatedLinkedPRs });
-            console.log(`[STORE] ✅ unlinkPRFromIssue: Removed PR #${prNumber}, now ${updatedLinkedPRs.length} linked PRs`);
-          }
-          return { issues: newIssues };
-        });
-      } else {
+      // Step 2: Make API call to unlink PR
+      if (token !== "dev-token") {
         const api = new GitHubAPI(token);
         await api.unlinkPRFromIssue(owner, repo, issueNumber, prNumber);
-
         console.log(`[STORE] ✅ unlinkPRFromIssue: Successfully unlinked PR #${prNumber} from issue #${issueNumber}`);
-
-        // Refresh the issue to get updated linked PRs from GitHub (force API to verify)
-        await get().refreshIssueLinks(owner, repo, issueNumber, { forceAPI: true });
+      } else {
+        // Mock delay for dev mode
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
+
+      // Step 3: Update store by removing the unlinked PR and clear loading state
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        const currentIssue = newIssues.get(key);
+        if (currentIssue) {
+          const updatedLinkedPRs = (currentIssue.linkedPRs || []).filter(pr => pr.number !== prNumber);
+
+          newIssues.set(key, {
+            ...currentIssue,
+            linkedPRs: updatedLinkedPRs,
+            isUpdatingLinks: false,
+          });
+
+          console.log(`[STORE] ✅ unlinkPRFromIssue: Removed PR #${prNumber}, now ${updatedLinkedPRs.length} linked PRs`);
+        }
+        return { issues: newIssues };
+      });
+
     } catch (error) {
       console.error(`[STORE] ❌ unlinkPRFromIssue: Error:`, error);
+
+      // Revert loading state on error
+      set((state) => {
+        const newIssues = new Map(state.issues);
+        const currentIssue = newIssues.get(key);
+        if (currentIssue) {
+          newIssues.set(key, { ...currentIssue, isUpdatingLinks: false });
+        }
+        return { issues: newIssues };
+      });
+
       set({ error: (error as Error).message });
       throw error;
     }
@@ -809,8 +876,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
           const key = `${owner}/${repo}#${issueNumber}`;
           const issue = newIssues.get(key);
           if (issue) {
-            const updatedIssue = { ...issue, linkedPRs: pullRequests };
-            newIssues.set(key, updatedIssue);
+            // Update with API response
+            newIssues.set(key, { ...issue, linkedPRs: pullRequests });
           } else {
             console.warn(`[STORE] ⚠️  refreshIssueLinks: Issue #${issueNumber} not found in store with key: ${key}`);
           }

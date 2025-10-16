@@ -33,7 +33,6 @@ export function PRAssignmentModal({
     const [showClosed, setShowClosed] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-    const [isUpdating, setIsUpdating] = useState(false);
 
     // Debounce search query to prevent flickering
     React.useEffect(() => {
@@ -136,19 +135,13 @@ export function PRAssignmentModal({
     };
 
     const handleAssign = async () => {
-        setIsUpdating(true);
-        try {
-            // Convert PR IDs to PR numbers
-            const prNumbers = Array.from(selectedPRs).map(prId => {
-                return parseInt(prId.split('#').pop() || '0');
-            });
-            await onAssign(prNumbers, initialLinkedPRs);
-            setSelectedPRs(new Set());
-            setSearchQuery("");
-            setDebouncedSearchQuery("");
-        } finally {
-            setIsUpdating(false);
-        }
+        // Convert PR IDs to PR numbers
+        const prNumbers = Array.from(selectedPRs).map(prId => {
+            return parseInt(prId.split('#').pop() || '0');
+        });
+
+        // Call onAssign which will close the modal immediately
+        await onAssign(prNumbers, initialLinkedPRs);
     };
 
     // Initialize selected PRs with already-linked PRs when modal opens
@@ -156,16 +149,22 @@ export function PRAssignmentModal({
         if (isOpen) {
             // Pre-select already-linked PRs
             const initialSelected = new Set<string>();
+            let hasClosedPRs = false;
             availablePRs.forEach(pr => {
                 if (initialLinkedPRs.includes(pr.number)) {
                     const prId = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
                     initialSelected.add(prId);
+                    // Check if this PR is closed or merged
+                    if (pr.state === "closed" || pr.merged) {
+                        hasClosedPRs = true;
+                    }
                 }
             });
             setSelectedPRs(initialSelected);
             setSearchQuery("");
             setDebouncedSearchQuery("");
-            setIsUpdating(false);
+            // Auto-enable showClosed if any linked PRs are closed/merged
+            setShowClosed(hasClosedPRs);
         }
     }, [isOpen, initialLinkedPRs, availablePRs]);
 
@@ -173,24 +172,10 @@ export function PRAssignmentModal({
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            {isUpdating && (
-                <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center z-10">
-                    <div className={cn(
-                        "px-6 py-4 rounded-lg shadow-xl",
-                        theme === "dark" ? "bg-gray-800 text-white" : "bg-white text-gray-900"
-                    )}>
-                        <div className="flex items-center space-x-3">
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                            <span>Updating PR links...</span>
-                        </div>
-                    </div>
-                </div>
-            )}
             <div
                 className={cn(
                     "rounded-lg shadow-xl max-w-4xl w-full mx-4 flex flex-col",
-                    theme === "dark" ? "bg-gray-800" : "bg-white",
-                    isUpdating && "pointer-events-none opacity-75"
+                    theme === "dark" ? "bg-gray-800" : "bg-white"
                 )}
                 style={{ height: "80vh" }}
             >
@@ -339,35 +324,20 @@ export function PRAssignmentModal({
                     <div className="flex space-x-2">
                         <button
                             onClick={onClose}
-                            disabled={isUpdating}
                             className={cn(
                                 "px-4 py-2 rounded text-sm",
                                 theme === "dark"
                                     ? "bg-gray-700 hover:bg-gray-600"
-                                    : "bg-gray-200 hover:bg-gray-300",
-                                isUpdating && "opacity-50 cursor-not-allowed"
+                                    : "bg-gray-200 hover:bg-gray-300"
                             )}
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleAssign}
-                            disabled={isUpdating}
-                            className={cn(
-                                "px-4 py-2 rounded text-sm text-white",
-                                isUpdating
-                                    ? "bg-blue-400 cursor-wait"
-                                    : "bg-blue-600 hover:bg-blue-700"
-                            )}
+                            className="px-4 py-2 rounded text-sm text-white bg-blue-600 hover:bg-blue-700"
                         >
-                            {isUpdating ? (
-                                <span className="flex items-center space-x-2">
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                    <span>Updating...</span>
-                                </span>
-                            ) : (
-                                "Update Links"
-                            )}
+                            Update Links
                         </button>
                     </div>
                 </div>
