@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import type { SortByType } from "../types/prList";
 
 type PRStatusFilter = "open" | "draft" | "merged" | "closed";
+type LabelFilterMode = "OR" | "AND" | "NOT" | "ONLY";
 
 interface UIState {
   sidebarOpen: boolean;
@@ -30,6 +31,9 @@ interface UIState {
     sortBy: SortByType;
     selectedAuthors: string[];
     selectedStatuses: PRStatusFilter[];
+    selectedLabels: string[];
+    labelFilterMode: LabelFilterMode;
+    showNoLabels: boolean;
   };
 
   toggleSidebar: () => void;
@@ -73,6 +77,9 @@ export const useUIStore = create<UIState>()(
         sortBy: "updated",
         selectedAuthors: [],
         selectedStatuses: ["open", "draft"],
+        selectedLabels: [],
+        labelFilterMode: "OR",
+        showNoLabels: false,
       },
 
       toggleSidebar: () =>
@@ -131,6 +138,9 @@ export const useUIStore = create<UIState>()(
             sortBy: "updated",
             selectedAuthors: [],
             selectedStatuses: ["open", "draft"],
+            selectedLabels: [],
+            labelFilterMode: "OR",
+            showNoLabels: false,
           },
         }),
     }),
