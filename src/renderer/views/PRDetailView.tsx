@@ -121,8 +121,10 @@ export default function PRDetailView() {
   }, [owner, repo, number]);
 
   const handleFileSelect = useCallback(async (file: File) => {
-    setSelectedFile(file);
+    // Clear content first to trigger loading state
     setFileContent(null);
+    // Set selected file - this will trigger DiffEditor to show loading state
+    setSelectedFile(file);
     const isImage = isImageFile(file.filename);
 
     if (token && owner && repo && pr) {

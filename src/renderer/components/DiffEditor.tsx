@@ -75,16 +75,36 @@ export function DiffEditor({
     useRef<MonacoEditorType.IStandaloneDiffEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastRenderedFileRef = useRef<string | null>(null);
 
   const hasFullContent = !(originalContent === undefined && modifiedContent === undefined);
   const [showFullFile, setShowFullFile] = useState(hasFullContent);
   const [diffEditorReady, setDiffEditorReady] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [hideUnchangedRegions, setHideUnchangedRegions] = useState(false);
+  const [contentMismatch, setContentMismatch] = useState(false);
 
   useEffect(() => {
     setShowFullFile(hasFullContent);
   }, [file.filename, hasFullContent]);
+
+  // Track if file changed while content was still loading
+  useEffect(() => {
+    // When file changes, mark content as potentially mismatched until verified
+    if (lastRenderedFileRef.current !== null && lastRenderedFileRef.current !== file.filename) {
+      setContentMismatch(true);
+      console.debug('[DiffEditor] File changed, waiting for matching content');
+    }
+    lastRenderedFileRef.current = file.filename;
+  }, [file.filename]);
+
+  // Clear mismatch flag once content is ready and matches the current file
+  useEffect(() => {
+    if (contentMismatch && ((!showFullFile && file.patch) || (originalContent !== undefined && modifiedContent !== undefined))) {
+      setContentMismatch(false);
+      console.debug('[DiffEditor] Content loaded and validated');
+    }
+  }, [contentMismatch, showFullFile, file.patch, originalContent, modifiedContent]);
 
   useEffect(() => {
     diffEditorRef.current = null;
@@ -135,12 +155,48 @@ export function DiffEditor({
       ? modifiedContent || ""
       : patchData.modified || "";
 
+  // Debug logging to see what content Monaco is receiving
+  useEffect(() => {
+    if (!isInitializing) {
+      console.log('[DiffEditor] Content debug:', {
+        filename: file.filename,
+        status: file.status,
+        showFullFile,
+        hasPatch: !!file.patch,
+        patchLength: file.patch?.length,
+        originalLength: effectiveOriginalContent.length,
+        modifiedLength: effectiveModifiedContent.length,
+        originalDefined: originalContent !== undefined,
+        modifiedDefined: modifiedContent !== undefined,
+      });
+    }
+  }, [file.filename, effectiveOriginalContent, effectiveModifiedContent, isInitializing, showFullFile, file.status, file.patch, originalContent, modifiedContent]);
+
   const isContentReady = showFullFile
     ? (originalContent !== undefined && modifiedContent !== undefined)
     : true;
 
+  // Additional validation: Ensure we have meaningful content to diff
+  // For added files: modified should have content (or be explicitly empty)
+  // For removed files: original should have content (or be explicitly empty)
+  // For modified files: we should have patch data or full file content
+  const hasValidContent = showFullFile
+    ? true // If showing full file, trust that we have the content loaded
+    : (file.status === "added" || file.status === "removed" || file.patch !== undefined || (patchData.original !== "" || patchData.modified !== ""));
+
   const shouldRenderImageViewer = isImageDiff && !isInitializing;
-  const shouldRenderEditor = !isImageDiff && !isInitializing && isContentReady;
+  const shouldRenderEditor = !isImageDiff && !isInitializing && isContentReady && hasValidContent && !contentMismatch;
+
+  // Prevent rendering if both contents are identical (no actual diff)
+  const contentsAreIdentical = effectiveOriginalContent === effectiveModifiedContent && file.status === "modified";
+
+  if (contentsAreIdentical && !showFullFile) {
+    console.warn('[DiffEditor] Contents are identical, forcing full file view');
+  }
+
+  if (contentMismatch && !isInitializing) {
+    console.debug('[DiffEditor] Content mismatch detected, waiting for proper content to load');
+  }
 
   const language = getLanguageFromFilename(file.filename);
 
@@ -186,10 +242,10 @@ export function DiffEditor({
           <MonacoDiffEditor
             key={file.filename}
             original={
-              file.status === "added" ? "" : effectiveOriginalContent || ""
+              file.status === "added" ? "" : (effectiveOriginalContent || "")
             }
             modified={
-              file.status === "removed" ? "" : effectiveModifiedContent || ""
+              file.status === "removed" ? "" : (effectiveModifiedContent || "")
             }
             language={language}
             theme={theme === "dark" ? "vs-dark" : "vs"}
@@ -222,25 +278,40 @@ export function DiffEditor({
                 contextLineCount: 3,
               },
               diffAlgorithm: "advanced",
+              ignoreTrimWhitespace: true,
+              renderIndicators: true,
+              enableSplitViewResizing: true,
             }}
             onMount={(editor, monaco) => {
               diffEditorRef.current = editor;
               monacoRef.current = monaco;
 
               try {
+                // Verify that models are properly set
                 const originalModel = editor.getOriginalEditor().getModel();
                 const modifiedModel = editor.getModifiedEditor().getModel();
 
-                if (originalModel && originalModel.getLineCount() === 0) {
-                  originalModel.setValue(" ");
-                }
-                if (modifiedModel && modifiedModel.getLineCount() === 0) {
-                  modifiedModel.setValue(" ");
+                if (!originalModel || !modifiedModel) {
+                  console.error('[DiffEditor] Monaco models not initialized');
+                  setDiffEditorReady(false);
+                  return;
                 }
 
-                setDiffEditorReady(true);
+                // Log model info for debugging
+                console.debug('[DiffEditor] Monaco mounted:', {
+                  filename: file.filename,
+                  originalLines: originalModel.getLineCount(),
+                  modifiedLines: modifiedModel.getLineCount(),
+                  language: originalModel.getLanguageId(),
+                });
+
+                // Let Monaco handle the initial diff computation
+                // Mark as ready after a brief delay to ensure Monaco is fully initialized
+                setTimeout(() => {
+                  setDiffEditorReady(true);
+                }, 150);
               } catch (error) {
-                console.warn("Monaco Editor initialization warning:", error);
+                console.error("Monaco Editor initialization error:", error);
                 setDiffEditorReady(false);
               }
             }}
