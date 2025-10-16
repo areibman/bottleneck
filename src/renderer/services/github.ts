@@ -68,6 +68,9 @@ export interface PullRequest {
   }>;
   // Linked issue
   linkedIssueNumber?: number;
+  // Loading state flags for mutations
+  isTogglingDraft?: boolean;
+  // Future: isUpdatingState?, isUpdatingAssignees?, etc.
 }
 
 export interface Repository {
