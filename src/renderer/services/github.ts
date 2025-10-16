@@ -194,27 +194,44 @@ export class GitHubAPI {
     });
   }
 
-  async getRepositories(page = 1, perPage = 100): Promise<Repository[]> {
-    const { data } = await this.octokit.repos.listForAuthenticatedUser({
-      page,
-      per_page: perPage,
-      sort: "updated",
-    });
+  async getRepositories(): Promise<Repository[]> {
+    const repositories: Repository[] = [];
+    let page = 1;
+    const perPage = 100; // GitHub's max per page
 
-    return data.map((repo) => ({
-      id: repo.id,
-      owner: repo.owner.login,
-      name: repo.name,
-      full_name: repo.full_name,
-      description: repo.description,
-      default_branch: repo.default_branch || "main",
-      private: repo.private,
-      clone_url: repo.clone_url,
-      updated_at: repo.updated_at,
-      pushed_at: repo.pushed_at,
-      stargazers_count: repo.stargazers_count,
-      open_issues_count: repo.open_issues_count,
-    }));
+    while (true) {
+      const { data } = await this.octokit.repos.listForAuthenticatedUser({
+        page,
+        per_page: perPage,
+        sort: "updated",
+        visibility: "all", // Explicitly include both public and private repos
+      });
+
+      if (data.length === 0) break;
+
+      repositories.push(...data.map((repo) => ({
+        id: repo.id,
+        owner: repo.owner.login,
+        name: repo.name,
+        full_name: repo.full_name,
+        description: repo.description,
+        default_branch: repo.default_branch || "main",
+        private: repo.private,
+        clone_url: repo.clone_url,
+        updated_at: repo.updated_at,
+        pushed_at: repo.pushed_at,
+        stargazers_count: repo.stargazers_count,
+        open_issues_count: repo.open_issues_count,
+      })));
+
+      // If we got less than a full page, we're done
+      if (data.length < perPage) break;
+
+      page++;
+    }
+
+    console.log(`Fetched ${repositories.length} repositories (public + private)`);
+    return repositories;
   }
 
   async getPullRequests(
