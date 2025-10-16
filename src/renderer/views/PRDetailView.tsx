@@ -45,7 +45,7 @@ export default function PRDetailView() {
   }>();
   const { token } = useAuthStore();
   const { theme } = useUIStore();
-  const { updatePR } = usePRStore();
+  const { updatePR, pullRequests } = usePRStore();
   const { lastSyncTime, isSyncing } = useSyncStore();
 
   // Use the navigation hook
@@ -92,7 +92,6 @@ export default function PRDetailView() {
   } | null>(null);
   const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
   const [requestChangesFeedback, setRequestChangesFeedback] = useState("");
-  const [isTogglingDraft, setIsTogglingDraft] = useState(false);
 
   useEffect(() => {
     // Load data even without token if in dev mode
@@ -209,12 +208,68 @@ export default function PRDetailView() {
   }, [files, selectedFile, handleFileSelect]);
 
   const loadPRData = async () => {
+    if (!owner || !repo || !number) {
+      setLoading(false);
+      return;
+    }
+
+    const prNumber = parseInt(number);
+    const prKey = `${owner}/${repo}#${prNumber}`;
+
+    // First, try to load from store
+    const { pullRequests } = usePRStore.getState();
+    const storedPR = pullRequests.get(prKey);
+
+    if (storedPR) {
+      console.log(`Loaded PR #${prNumber} from store`);
+      setPR(storedPR);
+
+      // Don't fetch from API if we have data in store
+      // User can force refresh with a manual refresh button if needed
+      setLoading(false);
+
+      // Still need to load files, comments, reviews if not loaded yet
+      // But skip reloading the PR itself to avoid overwriting with stale data
+      if (token && files.length === 0) {
+        try {
+          const api = new GitHubAPI(token);
+          const [
+            filesData,
+            commentsData,
+            reviewsData,
+            reviewCommentsData,
+            reviewThreadsData,
+          ] = await Promise.all([
+            api.getPullRequestFiles(owner, repo, prNumber),
+            api.getPullRequestConversationComments(owner, repo, prNumber),
+            api.getPullRequestReviews(owner, repo, prNumber),
+            api.getPullRequestReviewComments(owner, repo, prNumber),
+            api.getPullRequestReviewThreads(owner, repo, prNumber),
+          ]);
+
+          setFiles(filesData);
+          setComments(commentsData);
+          setReviews(reviewsData);
+          setReviewComments(reviewCommentsData);
+          setReviewThreads(reviewThreadsData);
+
+          // If we don't have navigation state yet, try to fetch sibling PRs
+          if (!navigationState?.siblingPRs) {
+            fetchSiblingPRs(storedPR);
+          }
+        } catch (error) {
+          console.error("Failed to load PR supplementary data:", error);
+        }
+      }
+      return;
+    }
+
+    // Only fetch from API if not in store
     setLoading(true);
 
     try {
       // Use mock data if Electron API is not available
       if (!window.electron || !token) {
-        const prNumber = parseInt(number || "0");
         const mockPR =
           mockPullRequests.find((mock) => mock.number === prNumber) ||
           mockPullRequests[0];
@@ -233,9 +288,8 @@ export default function PRDetailView() {
         if (mockFiles.length > 0) {
           setSelectedFile(mockFiles[0] as any);
         }
-      } else if (token && owner && repo && number) {
+      } else {
         const api = new GitHubAPI(token);
-        const prNumber = parseInt(number);
 
         const [
           prData,
@@ -297,6 +351,18 @@ export default function PRDetailView() {
       loadPRDataRef.current();
     }
   }, [isSyncing, lastSyncTime]);
+
+  // Keep local PR state in sync with store
+  useEffect(() => {
+    if (!pr || !owner || !repo || !number) return;
+
+    const prKey = `${owner}/${repo}#${parseInt(number)}`;
+    const storedPR = pullRequests.get(prKey);
+
+    if (storedPR) {
+      setPR(storedPR);
+    }
+  }, [pullRequests, owner, repo, number, pr]);
 
   const resolveRepoContext = () => {
     const repoOwner = owner || pr?.base.repo.owner.login;
@@ -554,55 +620,54 @@ export default function PRDetailView() {
       return;
     }
 
-    // Store the current draft state before any changes
-    const currentDraftState = pr.draft;
-    const targetDraftState = !currentDraftState;
+    const targetDraftState = !pr.draft;
 
     console.log("Toggling draft status:", {
-      current: currentDraftState,
+      current: pr.draft,
       target: targetDraftState,
       prNumber: pr.number
     });
 
-    setIsTogglingDraft(true);
-
-    // Optimistically update the PR state
-    const updatedPR = {
+    // Step 1: Set loading state immediately in the store
+    updatePR({
       ...pr,
-      draft: targetDraftState,
-    };
-    setPR(updatedPR);
-    updatePR(updatedPR);
+      isTogglingDraft: true,
+    });
 
     try {
       const api = new GitHubAPI(token);
-      const newPR = await api.updatePullRequestDraft(
+
+      // Step 2: Make API call
+      const updatedPR = await api.updatePullRequestDraft(
         owner,
         repo,
         pr.number,
         targetDraftState,
       );
 
-      // Update the PR state with the new data from the server
-      setPR(newPR);
-
-      // Update the PR in the global store so the PR list view reflects the change
-      updatePR(newPR);
+      // Step 3: Update store with confirmed data from GitHub
+      updatePR({
+        ...pr,
+        ...updatedPR,
+        draft: updatedPR.draft,
+        isTogglingDraft: false,
+      });
 
       console.log(
         `Successfully ${targetDraftState ? "converted to draft" : "marked as ready for review"} PR #${pr.number}`,
       );
       console.log("Updated PR draft status:", {
-        oldDraft: currentDraftState,
-        newDraft: newPR.draft,
+        newDraft: updatedPR.draft,
         expectedDraft: targetDraftState
       });
     } catch (error: any) {
       console.error("Failed to toggle draft status:", error);
 
-      // Revert the optimistic update on error
-      setPR(pr);
-      updatePR(pr);
+      // Revert loading state on error
+      updatePR({
+        ...pr,
+        isTogglingDraft: false,
+      });
 
       let errorMessage = "Failed to update pull request draft status.";
 
@@ -616,8 +681,6 @@ export default function PRDetailView() {
       }
 
       alert(errorMessage);
-    } finally {
-      setIsTogglingDraft(false);
     }
   };
 
@@ -720,7 +783,7 @@ export default function PRDetailView() {
         onRequestChanges={handleRequestChanges}
         onMerge={() => setShowMergeConfirm(true)}
         onToggleDraft={handleToggleDraft}
-        isTogglingDraft={isTogglingDraft}
+        isTogglingDraft={pr.isTogglingDraft || false}
       />
 
       {/* Tabs */}

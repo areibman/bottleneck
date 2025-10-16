@@ -623,7 +623,12 @@ export const usePRStore = create<PRState>((set, get) => {
       set((state) => {
         const newPRs = new Map(state.pullRequests);
         const key = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
-        newPRs.set(key, pr);
+
+        // Merge with existing PR to preserve loading states if not explicitly cleared
+        const existing = newPRs.get(key);
+        const merged = existing ? { ...existing, ...pr } : pr;
+
+        newPRs.set(key, merged);
         return { pullRequests: newPRs };
       });
 
@@ -634,9 +639,16 @@ export const usePRStore = create<PRState>((set, get) => {
     bulkUpdatePRs: (prs) => {
       set((state) => {
         const newPRs = new Map(state.pullRequests);
+
         prs.forEach((pr) => {
           const key = `${pr.base.repo.owner.login}/${pr.base.repo.name}#${pr.number}`;
-          newPRs.set(key, pr);
+
+          // Only add PRs that don't exist in the store
+          // This prevents background fetches from overwriting user actions with stale API data
+          if (!newPRs.has(key)) {
+            newPRs.set(key, pr);
+          }
+          // If PR exists, don't overwrite it - store is source of truth
         });
         return { pullRequests: newPRs };
       });
