@@ -1,9 +1,8 @@
 # Bottleneck
 
-Superhuman for Code Review. 
-<img width="1504" height="842" alt="Screenshot 2025-10-01 at 3 17 02 PM" src="https://github.com/user-attachments/assets/3bb4c4db-b420-436a-98b4-45799cfb5492" />
+**Bottleneck** is a code review powertool for AI native teams. It's a native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for parallelized background agents like Claude Code, Cursor, Devin, and Codex.
 
-Bottleneck is a code review powertool for AI native teams. It's a native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for parallelized background agents. Fast GitHub PR and branch management optimized for teams building code with AI agents like Claude Code, Cursor, Devin, and Codex.
+https://github.com/user-attachments/assets/4c71c677-fcf5-4ab8-939c-0b26c579f175
 
 ## Features
 
