@@ -4,6 +4,9 @@
 
 https://github.com/user-attachments/assets/4c71c677-fcf5-4ab8-939c-0b26c579f175
 
+**Demo in action:**
+https://screen.studio/share/o6sCO1uS
+
 ## Features
 
 - ⚡ **Lightning Fast** - Near-instant navigation, diff rendering, and branch checkout
