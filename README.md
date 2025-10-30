@@ -4,6 +4,13 @@
 
 https://github.com/user-attachments/assets/4c71c677-fcf5-4ab8-939c-0b26c579f175
 
+**Download Bottleneck**
+
+| Platform | Installer |
+| --- | --- |
+| macOS | [Apple Silicon (DMG)](https://github.com/areibman/bottleneck/releases/latest/download/Bottleneck-0.1.18-arm64.dmg) · [Intel (DMG)](https://github.com/areibman/bottleneck/releases/latest/download/Bottleneck-0.1.18.dmg) |
+| Windows | [Installer (EXE)](https://github.com/areibman/bottleneck/releases/latest/download/Bottleneck.Setup.0.1.18.exe) |
+
 **Demo in action:**
 https://screen.studio/share/o6sCO1uS
 
