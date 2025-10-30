@@ -1,5 +1,21 @@
 # Bottleneck
 
+<p align="center">
+  <img src="./1024.png" alt="Bottleneck app icon" width="120" />
+</p>
+
+<div align="center">
+
+**Download:**
+
+[macOS · Apple Silicon (DMG)](https://github.com/areibman/bottleneck/releases/download/v0.1.18/Bottleneck-0.1.18-arm64.dmg) · [macOS · Intel (DMG)](https://github.com/areibman/bottleneck/releases/download/v0.1.18/Bottleneck-0.1.18.dmg) · [Windows · Installer (EXE)](https://github.com/areibman/bottleneck/releases/download/v0.1.18/Bottleneck.Setup.0.1.18.exe)
+
+<br />
+
+[Browse all releases →](https://github.com/areibman/bottleneck/releases)
+
+</div>
+
 **Bottleneck** is a code review powertool for AI native teams. It's a native Electron app that reproduces the core GitHub PR experience while being dramatically faster and optimized for parallelized background agents like Claude Code, Cursor, Devin, and Codex.
 
 https://github.com/user-attachments/assets/4c71c677-fcf5-4ab8-939c-0b26c579f175
