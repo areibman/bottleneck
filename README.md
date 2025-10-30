@@ -1,7 +1,7 @@
 # Bottleneck
 
 <p align="center">
-  <img src="./1024.png" alt="Bottleneck app icon" width="120" />
+  <img src="./icons/512x512.png" alt="Bottleneck app icon" width="120" />
 </p>
 
 <div align="center">
