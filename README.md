@@ -8,7 +8,9 @@
 
 **Download:**
 
+<!-- DOWNLOAD_LINKS_START --><!-- Automatically updated by scripts/update-readme-downloads.mjs -->
 [macOS · Apple Silicon (DMG)](https://github.com/areibman/bottleneck/releases/download/v0.1.18/Bottleneck-0.1.18-arm64.dmg) · [macOS · Intel (DMG)](https://github.com/areibman/bottleneck/releases/download/v0.1.18/Bottleneck-0.1.18.dmg) · [Windows · Installer (EXE)](https://github.com/areibman/bottleneck/releases/download/v0.1.18/Bottleneck.Setup.0.1.18.exe)
+<!-- DOWNLOAD_LINKS_END -->
 
 <br />
 

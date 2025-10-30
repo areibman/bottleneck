@@ -17,7 +17,8 @@
     "dist": "npm run build && electron-builder",
     "postinstall": "electron-builder install-app-deps",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "update:downloads": "node scripts/update-readme-downloads.mjs"
   },
   "keywords": [
     "electron",
