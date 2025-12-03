@@ -26,10 +26,15 @@ class TrieNode {
 export class PrefixTrie {
     private root: TrieNode = new TrieNode();
     private agentPrefixes: Set<string>;
+    private agentSuffixes: Set<string>;
     private branchToNormalized: Map<string, string> = new Map();
 
-    constructor(agentPrefixes: string[] = ["codex", "cursor", "claude", "openai", "devin", "gpt"]) {
+    constructor(
+        agentPrefixes: string[] = ["codex", "cursor", "claude", "openai", "devin", "gpt"],
+        agentSuffixes: string[] = ["codex", "opus", "sonnet", "gemini", "haiku", "gpt4", "gpt4o", "turbo"]
+    ) {
         this.agentPrefixes = new Set(agentPrefixes);
+        this.agentSuffixes = new Set(agentSuffixes);
     }
 
     /**
@@ -65,6 +70,7 @@ export class PrefixTrie {
      * 
      * Distinguishes random suffixes (abc123, ffce, axfbof) from real words (requests, size)
      * by analyzing:
+     * - Agent names at the end (codex, opus, gemini, claude, etc.) - these indicate which agent created the branch
      * - Presence of digits (most variable suffixes have them)
      * - Vowel ratio (random strings have fewer vowels)
      * - Unusual consonant patterns (double/triple consonants, rare combinations)
@@ -74,13 +80,21 @@ export class PrefixTrie {
             return false;
         }
 
-        // Digits are strong indicators
+        const lowerToken = token.toLowerCase();
+
+        // Agent names appearing at the end of branch names should be stripped
+        // These indicate which agent created the branch, not part of the feature name
+        // Common patterns: cursor/issue-12-codex, cursor/fix-bug-opus, cursor/feature-gemini3
+        if (this.agentPrefixes.has(lowerToken) || this.agentSuffixes.has(lowerToken)) {
+            return true;
+        }
+
+        // Digits are strong indicators of random/variable suffixes
         if (/\d/.test(token)) {
             return true;
         }
 
-        // Analyze letter patterns
-        const lowerToken = token.toLowerCase();
+        // Analyze letter patterns for random-looking strings
         const vowelCount = (lowerToken.match(/[aeiou]/g) || []).length;
         const vowelRatio = vowelCount / token.length;
 
@@ -114,19 +128,22 @@ export class PrefixTrie {
     }
 
     /**
-     * Finds branches that share at least (n-1) tokens with input
+     * Finds branches that share ALL tokens with input (i.e., branches at the same trie node)
+     * 
+     * This ensures we only group branches that have the same normalized prefix,
+     * not branches that merely share a common ancestor in the trie.
      */
     private findSimilarBranches(tokens: string[]): string[] {
         if (tokens.length === 0) return [];
 
         let current = this.root;
-        const prefixLen = Math.max(1, tokens.length - 1);
 
-        for (let i = 0; i < prefixLen && i < tokens.length; i++) {
-            if (!current.children.has(tokens[i])) {
+        // Navigate to the exact node for these tokens
+        for (const token of tokens) {
+            if (!current.children.has(token)) {
                 return [];
             }
-            current = current.children.get(tokens[i])!;
+            current = current.children.get(token)!;
         }
 
         return current.branches;

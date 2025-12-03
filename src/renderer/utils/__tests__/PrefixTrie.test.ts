@@ -140,4 +140,73 @@ describe('PrefixTrie', () => {
             expect(normalized).toBe('feature/some-feature-name-1234');
         });
     });
+
+    describe('Agent suffix handling', () => {
+        it('should strip known agent suffixes (codex, opus, gemini, etc)', () => {
+            // Test with various agent suffixes
+            const branches = [
+                'cursor/issue-12-codex',
+                'cursor/issue-12-opus',
+                'cursor/issue-12-gemini',
+                'cursor/issue-12-sonnet',
+                'cursor/issue-12-haiku'
+            ];
+
+            const normalized = branches.map(b => trie.findNormalizedPrefix(b));
+
+            // All should normalize to cursor/issue-12
+            expect(new Set(normalized).size).toBe(1);
+            expect(normalized[0]).toBe('cursor/issue-12');
+        });
+
+        it('should NOT group branches with different issue numbers', () => {
+            // Branches with different issue numbers should stay separate
+            const branches = [
+                'cursor/issue-12-gemini3',
+                'cursor/issue-14-codex',
+                'cursor/issue-14-opus',
+                'cursor/issue-12-codex',
+                'cursor/issue-13-codex'
+            ];
+
+            const results: Record<string, string> = {};
+            for (const branch of branches) {
+                results[branch] = trie.findNormalizedPrefix(branch);
+            }
+
+            // Issue 12 branches should group together
+            expect(results['cursor/issue-12-gemini3']).toBe('cursor/issue-12');
+            expect(results['cursor/issue-12-codex']).toBe('cursor/issue-12');
+            
+            // Issue 14 branches should group together
+            expect(results['cursor/issue-14-codex']).toBe('cursor/issue-14');
+            expect(results['cursor/issue-14-opus']).toBe('cursor/issue-14');
+            
+            // Issue 13 branch should be separate
+            expect(results['cursor/issue-13-codex']).toBe('cursor/issue-13');
+
+            // Different issues should NOT be grouped together
+            expect(results['cursor/issue-12-gemini3']).not.toBe(results['cursor/issue-14-codex']);
+            expect(results['cursor/issue-13-codex']).not.toBe(results['cursor/issue-12-codex']);
+
+            // Should have exactly 3 unique groups
+            expect(trie.getAllPrefixes().length).toBe(3);
+        });
+
+        it('should handle insertion order correctly', () => {
+            // Test that order doesn't matter - issue-14 first, then issue-12
+            const trie1 = new PrefixTrie();
+            trie1.findNormalizedPrefix('cursor/issue-14-codex');
+            const result1 = trie1.findNormalizedPrefix('cursor/issue-12-gemini3');
+
+            // Test with opposite order - issue-12 first, then issue-14
+            const trie2 = new PrefixTrie();
+            trie2.findNormalizedPrefix('cursor/issue-12-gemini3');
+            const result2 = trie2.findNormalizedPrefix('cursor/issue-14-codex');
+
+            // Both should maintain separate groups regardless of order
+            expect(result1).toBe('cursor/issue-12');
+            expect(result2).toBe('cursor/issue-14');
+        });
+    });
 });
