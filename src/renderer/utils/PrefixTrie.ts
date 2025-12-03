@@ -26,10 +26,19 @@ class TrieNode {
 export class PrefixTrie {
     private root: TrieNode = new TrieNode();
     private agentPrefixes: Set<string>;
+    private agentSuffixes: Set<string>;
     private branchToNormalized: Map<string, string> = new Map();
 
-    constructor(agentPrefixes: string[] = ["codex", "cursor", "claude", "openai", "devin", "gpt"]) {
+    constructor(
+        agentPrefixes: string[] = ["codex", "cursor", "claude", "openai", "devin", "gpt"],
+        agentSuffixes: string[] = [
+            // Agent/model names commonly used as branch suffixes
+            "codex", "cursor", "claude", "openai", "devin", "gpt",
+            "opus", "sonnet", "haiku", "gemini", "turbo", "anthropic"
+        ]
+    ) {
         this.agentPrefixes = new Set(agentPrefixes);
+        this.agentSuffixes = new Set(agentSuffixes);
     }
 
     /**
@@ -65,6 +74,7 @@ export class PrefixTrie {
      * 
      * Distinguishes random suffixes (abc123, ffce, axfbof) from real words (requests, size)
      * by analyzing:
+     * - Agent names as suffixes (codex, opus, gemini, etc.)
      * - Presence of digits (most variable suffixes have them)
      * - Vowel ratio (random strings have fewer vowels)
      * - Unusual consonant patterns (double/triple consonants, rare combinations)
@@ -74,13 +84,20 @@ export class PrefixTrie {
             return false;
         }
 
+        const lowerToken = token.toLowerCase();
+
+        // Agent names used as suffixes should be treated as variable
+        // This handles patterns like cursor/issue-12-codex, cursor/issue-14-opus
+        if (this.agentSuffixes.has(lowerToken)) {
+            return true;
+        }
+
         // Digits are strong indicators
         if (/\d/.test(token)) {
             return true;
         }
 
         // Analyze letter patterns
-        const lowerToken = token.toLowerCase();
         const vowelCount = (lowerToken.match(/[aeiou]/g) || []).length;
         const vowelRatio = vowelCount / token.length;
 
@@ -114,13 +131,18 @@ export class PrefixTrie {
     }
 
     /**
-     * Finds branches that share at least (n-1) tokens with input
+     * Finds branches that share the same normalized prefix
+     * 
+     * @param tokens - The normalized tokens (with variable suffix already stripped if applicable)
+     * @param suffixWasStripped - Whether a variable suffix was already stripped from the original tokens
      */
-    private findSimilarBranches(tokens: string[]): string[] {
+    private findSimilarBranches(tokens: string[], suffixWasStripped: boolean): string[] {
         if (tokens.length === 0) return [];
 
         let current = this.root;
-        const prefixLen = Math.max(1, tokens.length - 1);
+        // If suffix was already stripped, use full token length
+        // If suffix was NOT stripped, search at (n-1) to find branches with same prefix but different suffix
+        const prefixLen = suffixWasStripped ? tokens.length : Math.max(1, tokens.length - 1);
 
         for (let i = 0; i < prefixLen && i < tokens.length; i++) {
             if (!current.children.has(tokens[i])) {
@@ -174,7 +196,7 @@ export class PrefixTrie {
         }
 
         // Apply LCP if similar branches exist
-        const similarBranches = this.findSimilarBranches(normalizedTokens);
+        const similarBranches = this.findSimilarBranches(normalizedTokens, hasVariableSuffix);
 
         if (similarBranches.length > 1) {
             const allTokens = similarBranches.map(b => this.tokenize(b));

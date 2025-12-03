@@ -140,4 +140,48 @@ describe('PrefixTrie', () => {
             expect(normalized).toBe('feature/some-feature-name-1234');
         });
     });
+
+    describe('Agent name suffixes', () => {
+        it('should group branches by issue number when suffix is agent name', () => {
+            const branches = [
+                'cursor/issue-12-gemini3',
+                'cursor/issue-14-codex',
+                'cursor/issue-14-opus',
+                'cursor/issue-12-codex',
+                'cursor/issue-13-codex'
+            ];
+
+            const normalized = branches.map(b => trie.findNormalizedPrefix(b));
+
+            // All issue-12 branches should group together
+            expect(normalized[0]).toBe('cursor/issue-12');
+            expect(normalized[3]).toBe('cursor/issue-12');
+
+            // All issue-14 branches should group together
+            expect(normalized[1]).toBe('cursor/issue-14');
+            expect(normalized[2]).toBe('cursor/issue-14');
+
+            // issue-13 should be separate
+            expect(normalized[4]).toBe('cursor/issue-13');
+
+            // Should have 3 unique prefixes
+            expect(new Set(normalized).size).toBe(3);
+        });
+
+        it('should recognize common agent names as variable suffixes', () => {
+            const branches = [
+                'cursor/feature-opus',
+                'cursor/feature-sonnet',
+                'cursor/feature-haiku',
+                'cursor/feature-gemini',
+                'cursor/feature-turbo'
+            ];
+
+            const normalized = branches.map(b => trie.findNormalizedPrefix(b));
+
+            // All should normalize to cursor/feature
+            expect(new Set(normalized).size).toBe(1);
+            expect(normalized[0]).toBe('cursor/feature');
+        });
+    });
 });
