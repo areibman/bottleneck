@@ -140,4 +140,71 @@ describe('PrefixTrie', () => {
             expect(normalized).toBe('feature/some-feature-name-1234');
         });
     });
+
+    describe('Issue number branch grouping', () => {
+        it('should NOT group branches with different issue numbers together', () => {
+            // These branches have different issue numbers and should stay separate
+            const branches = [
+                'cursor/issue-12-gemini3',
+                'cursor/issue-14-codex',
+                'cursor/issue-14-opus',
+                'cursor/issue-12-codex',
+                'cursor/issue-13-codex'
+            ];
+
+            const normalized = branches.map(b => trie.findNormalizedPrefix(b));
+
+            // CRITICAL: Issue 12, 14, and 13 should be in DIFFERENT groups
+            // Check that no normalized prefix contains a different issue number
+            expect(normalized[0]).toContain('issue-12'); // issue-12-gemini3
+            expect(normalized[0]).not.toContain('issue-14');
+            expect(normalized[0]).not.toContain('issue-13');
+
+            expect(normalized[1]).toContain('issue-14'); // issue-14-codex
+            expect(normalized[1]).not.toContain('issue-12');
+            expect(normalized[1]).not.toContain('issue-13');
+
+            expect(normalized[3]).toContain('issue-12'); // issue-12-codex
+            expect(normalized[3]).not.toContain('issue-14');
+            expect(normalized[3]).not.toContain('issue-13');
+
+            expect(normalized[4]).toContain('issue-13'); // issue-13-codex
+            expect(normalized[4]).not.toContain('issue-12');
+            expect(normalized[4]).not.toContain('issue-14');
+
+            // Verify no universal grouping - should have at least 3 different prefixes
+            // (one for each issue number)
+            const uniquePrefixes = new Set(normalized);
+            expect(uniquePrefixes.size).toBeGreaterThanOrEqual(3);
+        });
+
+        it('should NOT group branches when insertion order varies', () => {
+            // Insert in different order to test robustness
+            const branch1 = trie.findNormalizedPrefix('cursor/issue-14-codex');
+            const branch2 = trie.findNormalizedPrefix('cursor/issue-12-gemini3'); // Has variable suffix
+            const branch3 = trie.findNormalizedPrefix('cursor/issue-14-opus');
+            const branch4 = trie.findNormalizedPrefix('cursor/issue-12-codex');
+
+            // Issue 12 and issue 14 should be DIFFERENT - this is the main bug fix
+            expect(branch1).not.toBe(branch2);
+            expect(branch3).not.toBe(branch4);
+
+            // Each branch should contain its own issue number
+            expect(branch1).toContain('issue-14');
+            expect(branch2).toContain('issue-12');
+            expect(branch3).toContain('issue-14');
+            expect(branch4).toContain('issue-12');
+
+            // After all insertions, re-query to check final cache state
+            // Issue 12 branches should have the same normalized prefix
+            const requery12a = trie.findNormalizedPrefix('cursor/issue-12-gemini3');
+            const requery12b = trie.findNormalizedPrefix('cursor/issue-12-codex');
+            expect(requery12a).toBe(requery12b);
+
+            // Issue 14 branches should have the same normalized prefix
+            const requery14a = trie.findNormalizedPrefix('cursor/issue-14-codex');
+            const requery14b = trie.findNormalizedPrefix('cursor/issue-14-opus');
+            expect(requery14a).toBe(requery14b);
+        });
+    });
 });

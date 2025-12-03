@@ -85,8 +85,9 @@ export class PrefixTrie {
         const vowelRatio = vowelCount / token.length;
 
         // Unusual consonant patterns
+        // Common doubles in English: ll, ss, tt, ff, mm, nn, pp, rr, dd, bb, gg, cc, zz
         const hasUnusualDoubles = /([bcdfghjklmnpqrstvwxyz])\1/.test(lowerToken) &&
-            !/ll|ss|tt|ff|mm|nn|pp/.test(lowerToken);
+            !/ll|ss|tt|ff|mm|nn|pp|rr|dd|bb|gg|cc|zz/.test(lowerToken);
         const hasTripleConsonants = /[bcdfghjklmnpqrstvwxyz]{3,}/.test(lowerToken);
         const hasUnusualCombos = /[xzq][bcdfghjklmnpqrstvwxyz]|[bcdfghjklmnpqrstvwxyz][xzq]/.test(lowerToken);
 
@@ -114,22 +115,55 @@ export class PrefixTrie {
     }
 
     /**
-     * Finds branches that share at least (n-1) tokens with input
+     * Finds branches that share the exact same normalized prefix path,
+     * allowing for variations in the final token only.
+     * 
+     * For tokens ['cursor', 'issue', '12', 'codex'], this finds:
+     * - Branches at the parent node cursor/issue/12 (shorter prefixes)
+     * - Branches at the terminal node cursor/issue/12/codex
+     * - Branches at siblings of terminal (e.g., cursor/issue/12/opus)
+     * 
+     * This ensures we group branches that share all but the last token,
+     * while not grouping entirely different subtrees (e.g., issue-12 vs issue-14).
      */
     private findSimilarBranches(tokens: string[]): string[] {
         if (tokens.length === 0) return [];
 
         let current = this.root;
-        const prefixLen = Math.max(1, tokens.length - 1);
+        let parent: TrieNode | null = null;
 
-        for (let i = 0; i < prefixLen && i < tokens.length; i++) {
-            if (!current.children.has(tokens[i])) {
+        // Traverse to the terminal node, keeping track of parent
+        for (const token of tokens) {
+            if (!current.children.has(token)) {
                 return [];
             }
-            current = current.children.get(tokens[i])!;
+            parent = current;
+            current = current.children.get(token)!;
         }
 
-        return current.branches;
+        // Collect branches from:
+        // 1. Parent node - branches that are shorter prefixes (e.g., cursor/issue-12 vs cursor/issue-12-codex)
+        // 2. Siblings at parent level - branches with different last token
+        // 3. This terminal node - branches that end exactly here
+        // 4. Immediate children - branches with one more token
+        const branches: string[] = [];
+        
+        // Add branches from parent (shorter prefixes)
+        if (parent && tokens.length > 2) {
+            branches.push(...parent.branches);
+            // Add branches from all siblings (children of parent)
+            for (const [, siblingNode] of parent.children) {
+                branches.push(...siblingNode.branches);
+            }
+        } else {
+            // For short paths, just use current node and children
+            branches.push(...current.branches);
+            for (const [, childNode] of current.children) {
+                branches.push(...childNode.branches);
+            }
+        }
+
+        return branches;
     }
 
     /**
@@ -161,16 +195,17 @@ export class PrefixTrie {
         const hasVariableSuffix = tokens.length > 2 && this.isPotentiallyVariable(tokens[tokens.length - 1]);
         const normalizedTokens = hasVariableSuffix ? tokens.slice(0, -1) : tokens;
 
-        // Insert into trie
+        // Insert into trie - only store branch at terminal node
         let current = this.root;
         for (const token of normalizedTokens) {
             if (!current.children.has(token)) {
                 current.children.set(token, new TrieNode());
             }
             current = current.children.get(token)!;
-            if (!current.branches.includes(branchName)) {
-                current.branches.push(branchName);
-            }
+        }
+        // Store branch only at the terminal node to avoid incorrect grouping
+        if (!current.branches.includes(branchName)) {
+            current.branches.push(branchName);
         }
 
         // Apply LCP if similar branches exist
