@@ -50,7 +50,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run dist
+          npm run build && npx electron-builder --publish never
           
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -82,7 +82,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run dist
+          npm run build && npx electron-builder --publish never
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
