@@ -50,8 +50,89 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run dist
+          npm run build
+          npx electron-builder --publish never
           
+      - name: Verify latest-mac.yml exists
+        run: |
+          if [ ! -f "release/latest-mac.yml" ]; then
+            echo "⚠️ latest-mac.yml not found, generating from build artifacts..."
+            # Get version from package.json
+            VERSION=$(node -p "require('./package.json').version")
+            
+            # Find the DMG and ZIP files
+            DMG_ARM64=$(ls release/*-arm64.dmg 2>/dev/null | head -1 || true)
+            DMG_X64=$(ls release/*-x64.dmg 2>/dev/null | head -1 || true)
+            ZIP_ARM64=$(ls release/*-arm64-mac.zip 2>/dev/null | head -1 || true)
+            ZIP_X64=$(ls release/*-x64-mac.zip 2>/dev/null | head -1 || true)
+            
+            # Generate latest-mac.yml
+            cat > release/latest-mac.yml << EOF
+          version: ${VERSION}
+          files:
+          EOF
+            
+            # Add arm64 DMG if exists
+            if [ -n "$DMG_ARM64" ] && [ -f "$DMG_ARM64" ]; then
+              DMG_ARM64_NAME=$(basename "$DMG_ARM64")
+              DMG_ARM64_SIZE=$(stat -f%z "$DMG_ARM64" 2>/dev/null || stat -c%s "$DMG_ARM64")
+              DMG_ARM64_SHA512=$(shasum -a 512 "$DMG_ARM64" | cut -d' ' -f1 | xxd -r -p | base64)
+              cat >> release/latest-mac.yml << EOF
+            - url: ${DMG_ARM64_NAME}
+              sha512: ${DMG_ARM64_SHA512}
+              size: ${DMG_ARM64_SIZE}
+          EOF
+            fi
+            
+            # Add x64 DMG if exists
+            if [ -n "$DMG_X64" ] && [ -f "$DMG_X64" ]; then
+              DMG_X64_NAME=$(basename "$DMG_X64")
+              DMG_X64_SIZE=$(stat -f%z "$DMG_X64" 2>/dev/null || stat -c%s "$DMG_X64")
+              DMG_X64_SHA512=$(shasum -a 512 "$DMG_X64" | cut -d' ' -f1 | xxd -r -p | base64)
+              cat >> release/latest-mac.yml << EOF
+            - url: ${DMG_X64_NAME}
+              sha512: ${DMG_X64_SHA512}
+              size: ${DMG_X64_SIZE}
+          EOF
+            fi
+            
+            # Add arm64 ZIP if exists
+            if [ -n "$ZIP_ARM64" ] && [ -f "$ZIP_ARM64" ]; then
+              ZIP_ARM64_NAME=$(basename "$ZIP_ARM64")
+              ZIP_ARM64_SIZE=$(stat -f%z "$ZIP_ARM64" 2>/dev/null || stat -c%s "$ZIP_ARM64")
+              ZIP_ARM64_SHA512=$(shasum -a 512 "$ZIP_ARM64" | cut -d' ' -f1 | xxd -r -p | base64)
+              cat >> release/latest-mac.yml << EOF
+            - url: ${ZIP_ARM64_NAME}
+              sha512: ${ZIP_ARM64_SHA512}
+              size: ${ZIP_ARM64_SIZE}
+          EOF
+            fi
+            
+            # Add x64 ZIP if exists
+            if [ -n "$ZIP_X64" ] && [ -f "$ZIP_X64" ]; then
+              ZIP_X64_NAME=$(basename "$ZIP_X64")
+              ZIP_X64_SIZE=$(stat -f%z "$ZIP_X64" 2>/dev/null || stat -c%s "$ZIP_X64")
+              ZIP_X64_SHA512=$(shasum -a 512 "$ZIP_X64" | cut -d' ' -f1 | xxd -r -p | base64)
+              cat >> release/latest-mac.yml << EOF
+            - url: ${ZIP_X64_NAME}
+              sha512: ${ZIP_X64_SHA512}
+              size: ${ZIP_X64_SIZE}
+          EOF
+            fi
+            
+            # Add path and releaseDate
+            cat >> release/latest-mac.yml << EOF
+          path: ${DMG_ARM64_NAME:-${DMG_X64_NAME:-Bottleneck.dmg}}
+          releaseDate: '$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")'
+          EOF
+            
+            echo "✅ Generated latest-mac.yml:"
+            cat release/latest-mac.yml
+          else
+            echo "✅ latest-mac.yml exists:"
+            cat release/latest-mac.yml
+          fi
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -82,7 +163,52 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run dist
+          npm run build
+          npx electron-builder --publish never
+
+      - name: Verify latest.yml exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path "release/latest.yml")) {
+            Write-Host "⚠️ latest.yml not found, generating from build artifacts..."
+            $version = (Get-Content package.json | ConvertFrom-Json).version
+            $exe = Get-ChildItem -Path release -Filter "*.exe" | Select-Object -First 1
+            
+            if ($exe) {
+              $exeName = $exe.Name
+              $exeSize = $exe.Length
+              $exeHash = (Get-FileHash -Path $exe.FullName -Algorithm SHA512).Hash
+              $exeHashBase64 = [Convert]::ToBase64String([byte[]]::new($exeHash.Length / 2))
+              
+              # Convert hex to bytes then to base64
+              $bytes = [byte[]]::new($exeHash.Length / 2)
+              for ($i = 0; $i -lt $exeHash.Length; $i += 2) {
+                $bytes[$i / 2] = [convert]::ToByte($exeHash.Substring($i, 2), 16)
+              }
+              $exeHashBase64 = [Convert]::ToBase64String($bytes)
+              
+              $releaseDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.000Z")
+              
+              $content = @"
+          version: $version
+          files:
+            - url: $exeName
+              sha512: $exeHashBase64
+              size: $exeSize
+          path: $exeName
+          releaseDate: '$releaseDate'
+          "@
+              $content | Out-File -FilePath "release/latest.yml" -Encoding utf8
+              Write-Host "✅ Generated latest.yml:"
+              Get-Content "release/latest.yml"
+            } else {
+              Write-Host "❌ No exe file found in release directory"
+              exit 1
+            }
+          } else {
+            Write-Host "✅ latest.yml exists:"
+            Get-Content "release/latest.yml"
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
