@@ -262,8 +262,28 @@ app.whenReady().then(async () => {
 
       autoUpdater.on('error', (err) => {
         console.error('Update error:', err);
+        
+        // Provide more user-friendly error messages for common issues
+        let userMessage = err.message;
+        let isRecoverable = false;
+        
+        if (err.message.includes('404') || err.message.includes('latest-mac.yml') || err.message.includes('latest.yml')) {
+          // This typically happens when a release doesn't have the auto-update manifest files
+          userMessage = 'Update manifest not found in the latest release. The release may not have been built correctly. Please try again later or download the latest version manually from GitHub.';
+          isRecoverable = true;
+          console.warn('[Updater] Auto-update manifest (latest-mac.yml or latest.yml) not found in release. This is a release build issue.');
+        } else if (err.message.includes('net::ERR') || err.message.includes('ENOTFOUND') || err.message.includes('ETIMEDOUT')) {
+          userMessage = 'Network error while checking for updates. Please check your internet connection and try again.';
+          isRecoverable = true;
+        } else if (err.message.includes('authentication') || err.message.includes('401') || err.message.includes('403')) {
+          userMessage = 'Authentication error while checking for updates. This may be a temporary issue.';
+          isRecoverable = true;
+        }
+        
         mainWindow?.webContents.send('updater:error', {
-          message: err.message
+          message: userMessage,
+          originalError: err.message,
+          isRecoverable
         });
       });
     }

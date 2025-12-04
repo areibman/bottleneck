@@ -543,15 +543,30 @@ export default function SettingsView() {
                             )}
 
                             {updateStatus === 'error' && (
-                              <>
-                                <XCircle className="w-4 h-4 text-red-500" />
-                                <span className={cn(
-                                  "text-sm",
-                                  theme === "dark" ? "text-red-400" : "text-red-600"
-                                )}>
-                                  {errorMessage || "Update check failed"}
-                                </span>
-                              </>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center space-x-2">
+                                  <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                  <span className={cn(
+                                    "text-sm",
+                                    theme === "dark" ? "text-red-400" : "text-red-600"
+                                  )}>
+                                    {errorMessage || "Update check failed"}
+                                  </span>
+                                </div>
+                                {(errorMessage?.includes('manifest') || errorMessage?.includes('404')) && (
+                                  <a
+                                    href="https://github.com/areibman/bottleneck/releases/latest"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={cn(
+                                      "text-xs ml-6 underline hover:no-underline",
+                                      theme === "dark" ? "text-blue-400" : "text-blue-600"
+                                    )}
+                                  >
+                                    Download latest release from GitHub →
+                                  </a>
+                                )}
+                              </div>
                             )}
                           </div>
 

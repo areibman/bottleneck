@@ -51,6 +51,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run dist
+
+      - name: List release artifacts
+        run: |
+          echo "=== Contents of release folder ==="
+          ls -la release/
+          echo "=== YML files ==="
+          ls -la release/*.yml || echo "No yml files found"
+
+      - name: Verify latest-mac.yml exists
+        run: |
+          if [ ! -f release/latest-mac.yml ]; then
+            echo "ERROR: latest-mac.yml was not generated!"
+            echo "This file is required for auto-updates on macOS."
+            exit 1
+          fi
+          echo "✅ latest-mac.yml found"
+          cat release/latest-mac.yml
           
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -60,7 +77,7 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.blockmap
-            release/latest-mac.yml
+            release/latest-mac*.yml
 
   release-windows:
     runs-on: windows-latest
@@ -83,6 +100,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run dist
+
+      - name: List release artifacts
+        run: |
+          echo "=== Contents of release folder ==="
+          dir release
+          echo "=== YML files ==="
+          dir release\*.yml
+
+      - name: Verify latest.yml exists
+        run: |
+          if (!(Test-Path "release/latest.yml")) {
+            Write-Error "ERROR: latest.yml was not generated!"
+            exit 1
+          }
+          Write-Host "✅ latest.yml found"
+          Get-Content release/latest.yml
+        shell: pwsh
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -110,6 +144,25 @@ jobs:
           name: windows-artifacts
           path: release
 
+      - name: List all downloaded artifacts
+        run: |
+          echo "=== All release artifacts ==="
+          ls -la release/
+          echo "=== YML files ==="
+          ls -la release/*.yml || echo "No yml files found"
+
+      - name: Verify required yml files exist
+        run: |
+          if [ ! -f release/latest-mac.yml ]; then
+            echo "ERROR: latest-mac.yml is missing from artifacts!"
+            exit 1
+          fi
+          if [ ! -f release/latest.yml ]; then
+            echo "ERROR: latest.yml is missing from artifacts!"
+            exit 1
+          fi
+          echo "✅ All required yml files present"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -118,7 +171,7 @@ jobs:
             release/*.zip
             release/*.exe
             release/*.blockmap
-            release/latest-mac.yml
+            release/latest-mac*.yml
             release/latest.yml
           draft: false
           prerelease: false
