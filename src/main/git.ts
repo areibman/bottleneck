@@ -27,8 +27,19 @@ export interface DiffResult {
 }
 
 export class GitOperations {
+  private gitInstances: Map<string, SimpleGit> = new Map();
+
   private getGit(repoPath: string): SimpleGit {
-    return simpleGit(repoPath);
+    // Reuse git instances to prevent resource leaks
+    if (!this.gitInstances.has(repoPath)) {
+      this.gitInstances.set(repoPath, simpleGit(repoPath));
+    }
+    return this.gitInstances.get(repoPath)!;
+  }
+
+  // Add cleanup method
+  cleanup(): void {
+    this.gitInstances.clear();
   }
 
   private getReposPath(): string {
