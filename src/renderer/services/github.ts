@@ -287,9 +287,14 @@ export class GitHubAPI {
     repo: string,
     state: "open" | "closed" | "all" = "open",
   ): Promise<PullRequest[]> {
-    // Use lightweight GraphQL query for better performance
-    // Only fetch essential fields, not nested reviews/comments
-    return this.getPullRequestsGraphQLLight(owner, repo, state);
+    try {
+      // Use lightweight GraphQL query for better performance
+      // Only fetch essential fields, not nested reviews/comments
+      return await this.getPullRequestsGraphQLLight(owner, repo, state);
+    } catch (error) {
+      console.error(`Error fetching pull requests for ${owner}/${repo}:`, error);
+      throw error;
+    }
   }
 
   // Lightweight GraphQL query - only essential fields for list view
