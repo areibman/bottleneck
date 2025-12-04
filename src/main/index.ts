@@ -262,9 +262,28 @@ app.whenReady().then(async () => {
 
       autoUpdater.on('error', (err) => {
         console.error('Update error:', err);
-        mainWindow?.webContents.send('updater:error', {
-          message: err.message
-        });
+        
+        // Check if this is a missing update manifest error (404)
+        const errorMessage = err.message || '';
+        const is404Error = errorMessage.includes('404') || 
+                          errorMessage.includes('HttpError') ||
+                          errorMessage.includes('Cannot find latest');
+        
+        if (is404Error) {
+          // This is likely a missing latest-mac.yml or latest.yml file
+          // Don't show an error to the user - just log it and treat as "no update available"
+          console.log('[Updater] Update manifest not found (404) - treating as no update available');
+          console.log('[Updater] This can happen if the release is missing the update metadata files');
+          mainWindow?.webContents.send('updater:update-not-available', {
+            version: app.getVersion(),
+            reason: 'manifest-not-found'
+          });
+        } else {
+          // For other errors, send the error to the renderer
+          mainWindow?.webContents.send('updater:error', {
+            message: err.message
+          });
+        }
       });
     }
 
@@ -502,7 +521,24 @@ ipcMain.handle("updater:check-for-updates", async () => {
       } : null
     };
   } catch (error) {
-    return { success: false, error: (error as Error).message };
+    const errorMessage = (error as Error).message || '';
+    
+    // Check if this is a 404 error (missing update manifest)
+    const is404Error = errorMessage.includes('404') || 
+                       errorMessage.includes('HttpError') ||
+                       errorMessage.includes('Cannot find latest');
+    
+    if (is404Error) {
+      // Treat missing update manifest as "no update available" rather than an error
+      console.log('[Updater] Update manifest not found - treating as no update available');
+      return {
+        success: true,
+        updateInfo: null,
+        noManifest: true
+      };
+    }
+    
+    return { success: false, error: errorMessage };
   } finally {
     isUpdateCheckInProgress = false;
   }
